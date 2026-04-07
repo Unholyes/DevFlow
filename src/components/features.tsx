@@ -43,13 +43,13 @@ const features = [
 
 export function Features() {
   return (
-    <section className="py-24 bg-gray-50 dark:bg-gray-900">
+    <section className="py-24 bg-white dark:bg-slate-50">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-slate-900 mb-4">
             Everything you need to manage development projects
           </h2>
-          <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+          <p className="text-lg text-slate-600 dark:text-slate-600 max-w-2xl mx-auto">
             DevFlow provides comprehensive tools for modern development teams to plan, track, and deliver projects efficiently.
           </p>
         </div>
@@ -61,12 +61,12 @@ export function Features() {
                 <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center mb-4">
                   <feature.Icon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                 </div>
-                <CardTitle className="text-xl font-semibold text-gray-900 dark:text-white">
+                <CardTitle className="text-xl font-semibold text-slate-900 dark:text-slate-900">
                   {feature.name}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <CardDescription className="text-gray-600 dark:text-gray-300 leading-relaxed">
+                <CardDescription className="text-slate-600 dark:text-slate-600 leading-relaxed">
                   {feature.description}
                 </CardDescription>
               </CardContent>

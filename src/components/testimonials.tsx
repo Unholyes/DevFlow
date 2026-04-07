@@ -33,13 +33,13 @@ const testimonials = [
 
 export function Testimonials() {
   return (
-    <section className="py-24 bg-white dark:bg-gray-950">
+    <section className="py-24 bg-white dark:bg-slate-50">
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-slate-900 mb-4">
             Loved by development teams worldwide
           </h2>
-          <p className="text-lg text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+          <p className="text-lg text-slate-600 dark:text-slate-600 max-w-2xl mx-auto">
             See what teams are saying about DevFlow and how it&apos;s transforming their development workflows.
           </p>
         </div>
@@ -53,14 +53,14 @@ export function Testimonials() {
                     {testimonial.avatar}
                   </div>
                   <div className="flex-1">
-                    <p className="text-gray-700 dark:text-gray-300 mb-4 leading-relaxed">
+                    <p className="text-slate-700 dark:text-slate-700 mb-4 leading-relaxed">
                       &ldquo;{testimonial.content}&rdquo;
                     </p>
                     <div>
-                      <p className="font-semibold text-gray-900 dark:text-white">
+                      <p className="font-semibold text-slate-900 dark:text-slate-900">
                         {testimonial.name}
                       </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                      <p className="text-sm text-slate-600 dark:text-slate-600">
                         {testimonial.role} at {testimonial.company}
                       </p>
                     </div>
