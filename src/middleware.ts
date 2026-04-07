@@ -4,6 +4,12 @@ import type { NextRequest } from 'next/server'
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
+
+  // Skip middleware for landing page
+  if (req.nextUrl.pathname === '/') {
+    return res
+  }
+
   const supabase = createMiddlewareClient({ req, res })
 
   // Refresh session if expired - required for Server Components
