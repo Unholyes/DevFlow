@@ -8,7 +8,7 @@ import { Footer } from "@/components/footer"
 
 export default function Home() {
   return (
-    <div>
+    <div className="pt-16">
       <Header />
       <Hero />
       <Features />
