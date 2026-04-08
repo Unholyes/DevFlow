@@ -33,7 +33,7 @@ const testimonials = [
 
 export function Testimonials() {
   return (
-    <section className="py-24 bg-white dark:bg-slate-50">
+    <section className="py-24 bg-white dark:bg-slate-50" style={{paddingTop: '96px', paddingBottom: '96px'}}>
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-slate-900 mb-4">

@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button"
 
 export function CTA() {
   return (
-    <section className="py-24 bg-slate-200 dark:bg-slate-300">
+    <section className="py-24 bg-slate-200 dark:bg-slate-300" style={{paddingTop: '96px', paddingBottom: '96px'}}>
       <div className="container mx-auto px-4 text-center">
         <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-slate-900 mb-4">
           Ready to transform your development workflow?

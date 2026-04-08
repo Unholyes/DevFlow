@@ -1,77 +1,105 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Users,
-  Workflow,
-  BarChart3,
-  Shield,
-  CheckCircle,
-  Calendar
-} from "lucide-react"
 
 const features = [
   {
     name: "Multi-Tenant Architecture",
     description: "Secure, isolated workspaces for different organizations with complete data separation.",
-    Icon: Shield,
   },
   {
     name: "SDLC Methodologies",
     description: "Support for Scrum, Kanban, Waterfall, and DevOps with configurable workflows.",
-    Icon: Workflow,
   },
   {
     name: "Team Collaboration",
     description: "Real-time collaboration tools for distributed development teams.",
-    Icon: Users,
   },
   {
     name: "Project Tracking",
     description: "Comprehensive dashboards with burndown charts, progress tracking, and analytics.",
-    Icon: BarChart3,
-  },
-  {
-    name: "Task Management",
-    description: "Advanced task management with priorities, dependencies, and automated workflows.",
-    Icon: CheckCircle,
-  },
-  {
-    name: "Calendar Integration",
-    description: "Integrated calendar with sprint planning, deadlines, and milestone tracking.",
-    Icon: Calendar,
   },
 ]
 
 export function Features() {
   return (
-    <section className="py-24 bg-white dark:bg-slate-50">
+    <section className="py-24 bg-gray-100" style={{paddingTop: '96px', paddingBottom: '96px'}}>
       <div className="container mx-auto px-4">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-slate-900 mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-black tracking-tight mb-4">
             Everything you need to manage development projects
           </h2>
-          <p className="text-lg text-slate-600 dark:text-slate-600 max-w-2xl mx-auto">
+          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
             DevFlow provides comprehensive tools for modern development teams to plan, track, and deliver projects efficiently.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
-          {features.map((feature, idx) => (
-            <Card key={idx} className="border-0 shadow-sm hover:shadow-md transition-shadow duration-200">
-              <CardHeader className="pb-4">
-                <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center mb-4">
-                  <feature.Icon className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-                </div>
-                <CardTitle className="text-xl font-semibold text-slate-900 dark:text-slate-900">
-                  {feature.name}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+           {/* Top left: Card 1 */}
+           <Card className="bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-blue-50/30 transition-all duration-200 flex flex-col p-6 group">
+             <CardHeader className="pb-4">
+                <CardTitle className="text-xl font-semibold text-blue-600">
+                  {features[0].name}
                 </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <CardDescription className="text-slate-600 dark:text-slate-600 leading-relaxed">
-                  {feature.description}
+                <CardDescription className="text-gray-800 leading-relaxed">
+                  {features[0].description}
                 </CardDescription>
+              </CardHeader>
+              <CardContent className="flex-grow flex items-end justify-center pb-2 overflow-hidden">
+                <div className="w-full h-32 bg-white rounded-xl flex items-center justify-center text-gray-400 border shadow-lg transform translate-y-8 group-hover:translate-y-2 transition-transform duration-300 ease-out">
+                  UI Screenshot
+                </div>
               </CardContent>
-            </Card>
-          ))}
+           </Card>
+
+           {/* Top middle: Card 2 */}
+           <Card className="bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-green-50/30 transition-all duration-200 flex flex-col p-6 group">
+             <CardHeader className="pb-4">
+                <CardTitle className="text-xl font-semibold text-blue-600">
+                  {features[1].name}
+                </CardTitle>
+                <CardDescription className="text-gray-800 leading-relaxed">
+                  {features[1].description}
+                </CardDescription>
+              </CardHeader>
+                <CardContent className="flex-grow flex items-end justify-center pb-2 overflow-hidden">
+                  <div className="w-full h-32 bg-white rounded-xl flex items-center justify-center text-gray-400 border shadow-lg transform translate-y-8 group-hover:translate-y-2 transition-transform duration-300 ease-out">
+                    UI Screenshot
+                  </div>
+                </CardContent>
+           </Card>
+
+           {/* Right: Tall card spanning 2 rows */}
+           <Card className="row-span-2 bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-yellow-50/30 transition-all duration-200 flex flex-col p-6 group">
+             <CardHeader className="pb-4">
+               <CardTitle className="text-xl font-semibold text-blue-600">
+                 {features[3].name}
+               </CardTitle>
+               <CardDescription className="text-gray-800 leading-relaxed">
+                 {features[3].description}
+               </CardDescription>
+             </CardHeader>
+                <CardContent className="flex-grow flex items-end justify-end pr-4 overflow-hidden">
+                  <div className="w-48 h-32 bg-white rounded-xl flex items-center justify-center text-gray-400 border shadow-lg transform translate-x-12 group-hover:translate-x-4 transition-transform duration-300 ease-out" style={{ height: '452px' }}>
+                    UI Screenshot
+                  </div>
+                </CardContent>
+           </Card>
+
+            {/* Bottom left: Card 3 spanning 2 columns */}
+            <Card className="md:col-span-2 md:h-80 bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-red-50/30 transition-all duration-200 flex flex-col p-6 group">
+             <CardHeader className="pb-4">
+                <CardTitle className="text-xl font-semibold text-blue-600">
+                  {features[2].name}
+                </CardTitle>
+                <CardDescription className="text-gray-800 leading-relaxed">
+                  {features[2].description}
+                </CardDescription>
+              </CardHeader>
+                <CardContent className="flex-grow flex items-end justify-center pb-2 overflow-hidden">
+                  <div className="w-64 h-40 bg-white rounded-xl flex items-center justify-center text-gray-400 border shadow-lg transform translate-y-8 group-hover:translate-y-2 transition-transform duration-300 ease-out">
+                    UI Screenshot
+                  </div>
+                </CardContent>
+           </Card>
         </div>
       </div>
     </section>
