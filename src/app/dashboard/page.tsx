@@ -1,6 +1,10 @@
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { ProjectCards } from '@/components/dashboard/project-cards'
+import { TaskBoard } from '@/components/dashboard/task-board'
+import { ActivityFeed } from '@/components/dashboard/activity-feed'
+import { DashboardStats } from '@/components/dashboard/dashboard-stats'
 
 export default async function Dashboard() {
   const supabase = createServerComponentClient({ cookies })
@@ -33,101 +37,114 @@ export default async function Dashboard() {
     `)
     .eq('user_id', session.user.id)
 
+  // Mock dashboard data for now - in production this would come from the database
+  const mockStats = {
+    totalProjects: 5,
+    totalTasks: 24,
+    completedTasks: 12,
+    activeSprints: 2,
+    overdueTasks: 3,
+    teamMembers: 8,
+  }
+
+  const mockProjects = [
+    {
+      id: '1',
+      name: 'E-commerce Platform',
+      description: 'Building a modern e-commerce platform with React and Node.js',
+      sdlcMethodology: 'scrum' as const,
+      status: 'active' as const,
+      progress: 65,
+      tasksCount: 8,
+      completedTasks: 5,
+      dueDate: new Date('2024-02-15'),
+    },
+    {
+      id: '2',
+      name: 'Mobile App Redesign',
+      description: 'Redesigning the mobile app with new UI/UX patterns',
+      sdlcMethodology: 'kanban' as const,
+      status: 'active' as const,
+      progress: 30,
+      tasksCount: 12,
+      completedTasks: 4,
+      dueDate: new Date('2024-03-01'),
+    },
+    {
+      id: '3',
+      name: 'API Migration',
+      description: 'Migrating legacy APIs to microservices architecture',
+      sdlcMethodology: 'devops' as const,
+      status: 'active' as const,
+      progress: 80,
+      tasksCount: 6,
+      completedTasks: 5,
+      dueDate: new Date('2024-01-30'),
+    },
+  ]
+
+  const mockTasks = [
+    { id: '1', title: 'Implement user authentication', status: 'done' as const, priority: 'high' as const, assignee: 'John Doe' },
+    { id: '2', title: 'Design database schema', status: 'in_progress' as const, priority: 'medium' as const, assignee: 'Jane Smith' },
+    { id: '3', title: 'Create API endpoints', status: 'todo' as const, priority: 'high' as const, assignee: 'Bob Johnson' },
+    { id: '4', title: 'Write unit tests', status: 'blocked' as const, priority: 'medium' as const, assignee: 'Alice Brown' },
+    { id: '5', title: 'Deploy to staging', status: 'in_review' as const, priority: 'low' as const, assignee: 'Charlie Wilson' },
+  ]
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="bg-white overflow-hidden shadow rounded-lg mb-6">
-          <div className="px-4 py-5 sm:p-6">
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="mt-2 text-gray-600">
-              Welcome to DevFlow! Your multi-tenant project management platform.
-            </p>
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <p className="text-sm font-medium text-gray-500">Email</p>
-                <p className="text-sm text-gray-900">{session.user.email}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500">Role</p>
-                <p className="text-sm text-gray-900">{profile?.role || 'Unknown'}</p>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-gray-500">User ID</p>
-                <p className="text-sm text-gray-900 font-mono">{session.user.id}</p>
-              </div>
-            </div>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
+          <p className="mt-2 text-gray-600">
+            Welcome back! Here's an overview of your projects and tasks.
+          </p>
+        </div>
+
+        {/* Stats Cards */}
+        <DashboardStats stats={mockStats} />
+
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
+          {/* Left Column - Projects and Activity */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Projects Overview */}
+            <ProjectCards projects={mockProjects} />
+
+            {/* Task Board */}
+            <TaskBoard tasks={mockTasks} />
           </div>
-        </div>
 
-        {/* Organizations */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Owned Organizations */}
-          {organizations && organizations.length > 0 && (
+          {/* Right Column - Activity and Quick Actions */}
+          <div className="space-y-8">
+            {/* Activity Feed */}
+            <ActivityFeed />
+
+            {/* Quick Actions */}
             <div className="bg-white overflow-hidden shadow rounded-lg">
               <div className="px-4 py-5 sm:p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Your Organizations</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
                 <div className="space-y-3">
-                  {organizations.map((org) => (
-                    <div key={org.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{org.name}</p>
-                        <p className="text-xs text-gray-500">Owner</p>
-                      </div>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        Active
-                      </span>
-                    </div>
-                  ))}
+                  {profile?.role === 'tenant_admin' && (
+                    <button className="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                      Invite Team Member
+                    </button>
+                  )}
+                  <button className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                    Create Project
+                  </button>
+                  <button className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                    Add Task
+                  </button>
+                  <button
+                    onClick={() => supabase.auth.signOut()}
+                    className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                  >
+                    Sign Out
+                  </button>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Organization Memberships */}
-          {memberships && memberships.length > 0 && (
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="px-4 py-5 sm:p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Your Team Memberships</h3>
-                <div className="space-y-3">
-                  {memberships.map((membership) => (
-                    <div key={membership.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-md">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
-                          {membership.organizations?.name || 'Unknown Organization'}
-                        </p>
-                        <p className="text-xs text-gray-500">Member • {membership.role}</p>
-                      </div>
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {membership.role}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Quick Actions */}
-        <div className="mt-6 bg-white overflow-hidden shadow rounded-lg">
-          <div className="px-4 py-5 sm:p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {profile?.role === 'tenant_admin' && (
-                <button className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
-                  Invite Team Member
-                </button>
-              )}
-              <button className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
-                Create Project
-              </button>
-              <button
-                onClick={() => supabase.auth.signOut()}
-                className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-              >
-                Sign Out
-              </button>
             </div>
           </div>
         </div>
