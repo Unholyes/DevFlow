@@ -29,7 +29,7 @@ const mockProjects = [
 const navigation = [
   { name: 'Dashboard', href: '/dashboard-demo', icon: Home },
   { name: 'Tasks', href: '/tasks', icon: CheckSquare },
-  { name: 'Calendar', href: '/calendar', icon: Calendar },
+  { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
   { name: 'Team', href: '/dashboard/team', icon: Users },
   { name: 'Reports & Analytics', href: '/dashboard/reports', icon: BarChart3 },
 ]
