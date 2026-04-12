@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
@@ -44,7 +45,8 @@ export function ProjectCards({ projects }: ProjectCardsProps) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project) => (
-            <Card key={project.id} className="hover:shadow-md transition-shadow cursor-pointer">
+            <Link key={project.id} href={`/dashboard/projects/${project.id}`}>
+              <Card className="hover:shadow-md transition-shadow cursor-pointer">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <CardTitle className="text-base font-medium text-gray-900 line-clamp-2">
@@ -92,6 +94,7 @@ export function ProjectCards({ projects }: ProjectCardsProps) {
                 </div>
               </CardContent>
             </Card>
+            </Link>
           ))}
         </div>
       </div>
