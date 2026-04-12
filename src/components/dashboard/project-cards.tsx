@@ -17,6 +17,7 @@ interface ProjectCardsProps {
     completedTasks: number
     dueDate: Date
   }>
+  showViewAll?: boolean
 }
 
 const sdlcColors = {
@@ -32,15 +33,17 @@ const statusColors = {
   completed: 'bg-blue-100 text-blue-800',
 }
 
-export function ProjectCards({ projects }: ProjectCardsProps) {
+export function ProjectCards({ projects, showViewAll = true }: ProjectCardsProps) {
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg">
       <div className="px-4 py-5 sm:p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-medium text-gray-900">Active Projects</h3>
-          <button className="text-sm text-blue-600 hover:text-blue-500">
-            View all projects
-          </button>
+          {showViewAll && (
+            <Link href="/dashboard/projects" className="text-sm text-blue-600 hover:text-blue-500">
+              View all projects
+            </Link>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

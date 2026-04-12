@@ -22,6 +22,9 @@ const mockProjects = [
   { id: '1', name: 'E-commerce Platform' },
   { id: '2', name: 'Mobile App Redesign' },
   { id: '3', name: 'API Migration' },
+  { id: '4', name: 'Data Analytics Dashboard' },
+  { id: '5', name: 'Customer Portal' },
+  { id: '6', name: 'Legacy System Upgrade' },
 ]
 
 const navigation = [
@@ -79,7 +82,7 @@ export function DashboardSidebar() {
           </button>
           {isProjectsOpen && (
             <div className="mt-2 space-y-1">
-              {mockProjects.map((project) => {
+              {mockProjects.slice(0, 5).map((project) => {
                 const projectHref = `/dashboard/projects/${project.id}`
                 const isActive = pathname === projectHref
                 return (
@@ -98,6 +101,13 @@ export function DashboardSidebar() {
                   </Link>
                 )
               })}
+              <Link
+                href="/dashboard/projects"
+                className="flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors ml-3"
+              >
+                <FolderOpen className="mr-3 h-4 w-4" />
+                <span>View all projects</span>
+              </Link>
             </div>
           )}
         </div>

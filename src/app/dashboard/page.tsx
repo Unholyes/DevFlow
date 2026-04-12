@@ -39,9 +39,9 @@ export default async function Dashboard() {
 
   // Mock dashboard data for now - in production this would come from the database
   const mockStats = {
-    totalProjects: 5,
-    totalTasks: 24,
-    completedTasks: 12,
+    totalProjects: 6,
+    totalTasks: 71,
+    completedTasks: 43,
     activeSprints: 2,
     overdueTasks: 3,
     teamMembers: 8,
