@@ -4,14 +4,13 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  BarChart3,
   Calendar,
   CheckSquare,
   Home,
   Settings,
   Users,
   FolderOpen,
-  TrendingUp,
+  BarChart3,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react'
@@ -32,8 +31,7 @@ const navigation = [
   { name: 'Tasks', href: '/tasks', icon: CheckSquare },
   { name: 'Calendar', href: '/calendar', icon: Calendar },
   { name: 'Team', href: '/team', icon: Users },
-  { name: 'Reports', href: '/reports', icon: TrendingUp },
-  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Reports & Analytics', href: '/dashboard/reports', icon: BarChart3 },
 ]
 
 const bottomNavigation = [
@@ -49,7 +47,9 @@ export function DashboardSidebar() {
       {/* Navigation */}
       <nav className="flex-2 px-4 py-6 space-y-2">
         {navigation.map((item) => {
-          const isActive = pathname === item.href
+          const isActive =
+            pathname === item.href ||
+            (item.href !== '/dashboard-demo' && pathname.startsWith(item.href))
           return (
             <Link
               key={item.name}
