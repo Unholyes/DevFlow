@@ -5,6 +5,7 @@ import { ProjectCards } from '@/components/dashboard/project-cards'
 import { TaskBoard } from '@/components/dashboard/task-board'
 import { ActivityFeed } from '@/components/dashboard/activity-feed'
 import { DashboardStats } from '@/components/dashboard/dashboard-stats'
+import { DashboardSignOutButton } from '@/components/dashboard/dashboard-sign-out-button'
 
 export default async function Dashboard() {
   const supabase = createServerComponentClient({ cookies })
@@ -137,12 +138,7 @@ export default async function Dashboard() {
                   <button className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
                     Add Task
                   </button>
-                  <button
-                    onClick={() => supabase.auth.signOut()}
-                    className="w-full inline-flex items-center justify-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-                  >
-                    Sign Out
-                  </button>
+                  <DashboardSignOutButton />
                 </div>
               </div>
             </div>

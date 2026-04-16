@@ -1,6 +1,9 @@
 -- DevFlow Multi-Tenant Database Schema
 -- Run this SQL in your Supabase SQL Editor
 
+-- Needed for gen_random_uuid() / gen_random_bytes()
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- =========================================
 -- PROFILES TABLE (extends auth.users)
 -- =========================================
@@ -40,16 +43,6 @@ CREATE TABLE IF NOT EXISTS public.organizations (
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
 
 -- Organizations policies
-CREATE POLICY "Users can view organizations they belong to" ON public.organizations
-  FOR SELECT USING (
-    auth.uid() = owner_id OR
-    EXISTS (
-      SELECT 1 FROM public.organization_members
-      WHERE organization_id = organizations.id
-      AND user_id = auth.uid()
-    )
-  );
-
 CREATE POLICY "Only authenticated users can create organizations" ON public.organizations
   FOR INSERT WITH CHECK (auth.role() = 'authenticated');
 
@@ -71,6 +64,18 @@ CREATE TABLE IF NOT EXISTS public.organization_members (
 
 -- Enable RLS
 ALTER TABLE public.organization_members ENABLE ROW LEVEL SECURITY;
+
+-- Organizations policy depends on organization_members existing,
+-- so create it only after the table is defined.
+CREATE POLICY "Users can view organizations they belong to" ON public.organizations
+  FOR SELECT USING (
+    auth.uid() = owner_id OR
+    EXISTS (
+      SELECT 1 FROM public.organization_members
+      WHERE organization_id = organizations.id
+      AND user_id = auth.uid()
+    )
+  );
 
 -- Organization members policies
 CREATE POLICY "Users can view members of organizations they belong to" ON public.organization_members
@@ -241,3 +246,936 @@ BEGIN
   RETURN json_build_object('success', true, 'organization_id', invitation_record.organization_id);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =========================================
+-- DEVFLOW SDLC / PROJECT / TASK SCHEMA
+-- =========================================
+
+-- NOTE: This file is intended to be run in Supabase SQL Editor.
+-- It extends the existing tenant/auth schema with SDLC workflow entities.
+
+-- -----------------------------------------
+-- ENUMS
+-- -----------------------------------------
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public'
+      AND t.typname = 'task_priority'
+  ) THEN
+    CREATE TYPE public.task_priority AS ENUM ('low', 'medium', 'high', 'critical');
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public'
+      AND t.typname = 'sdlc_methodology_enum'
+  ) THEN
+    CREATE TYPE public.sdlc_methodology_enum AS ENUM ('scrum', 'kanban', 'waterfall', 'devops');
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public'
+      AND t.typname = 'project_status_enum'
+  ) THEN
+    CREATE TYPE public.project_status_enum AS ENUM ('active', 'archived');
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public'
+      AND t.typname = 'phase_status_enum'
+  ) THEN
+    CREATE TYPE public.phase_status_enum AS ENUM ('active', 'completed', 'archived');
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_type t
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public'
+      AND t.typname = 'sprint_status_enum'
+  ) THEN
+    CREATE TYPE public.sprint_status_enum AS ENUM ('planned', 'active', 'closed');
+  END IF;
+END $$;
+
+-- -----------------------------------------
+-- GENERIC UPDATED_AT TRIGGER
+-- -----------------------------------------
+
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- -----------------------------------------
+-- PROJECTS
+-- -----------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.projects (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT,
+  status public.project_status_enum NOT NULL DEFAULT 'active',
+  progress_percent INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.projects ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Projects: select members/owner" ON public.projects
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = projects.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = projects.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Projects: insert members/owner" ON public.projects
+  FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = projects.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = projects.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Projects: update members/owner" ON public.projects
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = projects.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = projects.organization_id
+        AND om.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = projects.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = projects.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Projects: delete members/owner" ON public.projects
+  FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = projects.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = projects.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+DROP TRIGGER IF EXISTS trg_projects_set_updated_at ON public.projects;
+CREATE TRIGGER trg_projects_set_updated_at
+BEFORE UPDATE ON public.projects
+FOR EACH ROW
+EXECUTE FUNCTION public.set_updated_at();
+
+-- -----------------------------------------
+-- PROJECT MEMBERS (RBAC inside project)
+-- -----------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.project_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'developer' CHECK (role IN ('tenant_admin', 'developer')),
+  joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (project_id, user_id)
+);
+
+ALTER TABLE public.project_members ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Project members: select members/owner" ON public.project_members
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = project_members.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = project_members.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Project members: insert members/owner" ON public.project_members
+  FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = project_members.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = project_members.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Project members: update members/owner" ON public.project_members
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = project_members.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = project_members.organization_id
+        AND om.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = project_members.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = project_members.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Project members: delete members/owner" ON public.project_members
+  FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = project_members.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = project_members.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+-- -----------------------------------------
+-- SDLC PHASES (hybrid methodologies inside one project)
+-- -----------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.sdlc_phases (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  methodology public.sdlc_methodology_enum NOT NULL,
+  order_index INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  status public.phase_status_enum NOT NULL DEFAULT 'active',
+  completed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (project_id, order_index)
+);
+
+ALTER TABLE public.sdlc_phases ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "SDLC phases: select members/owner" ON public.sdlc_phases
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = sdlc_phases.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = sdlc_phases.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "SDLC phases: insert members/owner" ON public.sdlc_phases
+  FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = sdlc_phases.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = sdlc_phases.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "SDLC phases: update members/owner" ON public.sdlc_phases
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = sdlc_phases.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = sdlc_phases.organization_id
+        AND om.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = sdlc_phases.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = sdlc_phases.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "SDLC phases: delete members/owner" ON public.sdlc_phases
+  FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = sdlc_phases.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = sdlc_phases.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+DROP TRIGGER IF EXISTS trg_sdlc_phases_set_updated_at ON public.sdlc_phases;
+CREATE TRIGGER trg_sdlc_phases_set_updated_at
+BEFORE UPDATE ON public.sdlc_phases
+FOR EACH ROW
+EXECUTE FUNCTION public.set_updated_at();
+
+-- -----------------------------------------
+-- WORKFLOW STAGES (task columns / scrum states)
+-- -----------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.workflow_stages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  phase_id UUID NOT NULL REFERENCES public.sdlc_phases(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  stage_order INTEGER NOT NULL,
+  is_done BOOLEAN NOT NULL DEFAULT false,
+  -- For Scrum: mark one stage in the phase as backlog (used when a sprint closes)
+  is_backlog BOOLEAN NOT NULL DEFAULT false,
+  -- For Kanban: optional WIP limit per stage/column
+  wip_limit INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (phase_id, stage_order)
+);
+
+ALTER TABLE public.workflow_stages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Workflow stages: select members/owner" ON public.workflow_stages
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = workflow_stages.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = workflow_stages.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Workflow stages: insert members/owner" ON public.workflow_stages
+  FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = workflow_stages.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = workflow_stages.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Workflow stages: update members/owner" ON public.workflow_stages
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = workflow_stages.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = workflow_stages.organization_id
+        AND om.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = workflow_stages.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = workflow_stages.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Workflow stages: delete members/owner" ON public.workflow_stages
+  FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = workflow_stages.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = workflow_stages.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+DROP TRIGGER IF EXISTS trg_workflow_stages_set_updated_at ON public.workflow_stages;
+CREATE TRIGGER trg_workflow_stages_set_updated_at
+BEFORE UPDATE ON public.workflow_stages
+FOR EACH ROW
+EXECUTE FUNCTION public.set_updated_at();
+
+-- -----------------------------------------
+-- SPRINTS (Scrum time-boxed cycles)
+-- -----------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.sprints (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  phase_id UUID NOT NULL REFERENCES public.sdlc_phases(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  status public.sprint_status_enum NOT NULL DEFAULT 'planned',
+  story_points_total INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.sprints ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Sprints: select members/owner" ON public.sprints
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = sprints.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = sprints.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Sprints: insert members/owner" ON public.sprints
+  FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = sprints.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = sprints.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Sprints: update members/owner" ON public.sprints
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = sprints.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = sprints.organization_id
+        AND om.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = sprints.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = sprints.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Sprints: delete members/owner" ON public.sprints
+  FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = sprints.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = sprints.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+DROP TRIGGER IF EXISTS trg_sprints_set_updated_at ON public.sprints;
+CREATE TRIGGER trg_sprints_set_updated_at
+BEFORE UPDATE ON public.sprints
+FOR EACH ROW
+EXECUTE FUNCTION public.set_updated_at();
+
+-- -----------------------------------------
+-- TASKS
+-- -----------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.tasks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
+  workflow_stage_id UUID NOT NULL REFERENCES public.workflow_stages(id) ON DELETE RESTRICT,
+
+  -- Scrum association (optional)
+  sprint_id UUID REFERENCES public.sprints(id) ON DELETE SET NULL,
+
+  title TEXT NOT NULL,
+  description TEXT,
+  priority public.task_priority NOT NULL DEFAULT 'medium',
+  due_date DATE,
+  assignee_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_by_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+
+  blocked BOOLEAN NOT NULL DEFAULT false,
+  blocked_reason TEXT,
+
+  -- A task is considered complete when this is set (used for WIP checks)
+  completed_at TIMESTAMPTZ,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Tasks: select members/owner" ON public.tasks
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = tasks.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = tasks.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Tasks: insert members/owner" ON public.tasks
+  FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = tasks.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = tasks.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Tasks: update members/owner" ON public.tasks
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = tasks.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = tasks.organization_id
+        AND om.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = tasks.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = tasks.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Tasks: delete members/owner" ON public.tasks
+  FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = tasks.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = tasks.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+DROP TRIGGER IF EXISTS trg_tasks_set_updated_at ON public.tasks;
+CREATE TRIGGER trg_tasks_set_updated_at
+BEFORE UPDATE ON public.tasks
+FOR EACH ROW
+EXECUTE FUNCTION public.set_updated_at();
+
+-- -----------------------------------------
+-- TASK COMMENTS
+-- -----------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.task_comments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  task_id UUID NOT NULL REFERENCES public.tasks(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.task_comments ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Task comments: select members/owner" ON public.task_comments
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = task_comments.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = task_comments.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Task comments: insert members/owner" ON public.task_comments
+  FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = task_comments.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = task_comments.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Task comments: delete members/owner" ON public.task_comments
+  FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = task_comments.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = task_comments.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+-- -----------------------------------------
+-- AUDIT LOG (basic)
+-- -----------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.audit_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  actor_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  entity_type TEXT,
+  entity_id UUID,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Audit log: select members/owner" ON public.audit_log
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = audit_log.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = audit_log.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Audit log: insert members/owner" ON public.audit_log
+  FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = audit_log.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = audit_log.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+-- -----------------------------------------
+-- TRIGGERS: Kanban WIP + Scrum sprint auto-backlog
+-- -----------------------------------------
+
+CREATE OR REPLACE FUNCTION public.enforce_kanban_wip_limit()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_wip_limit INTEGER;
+  v_methodology public.sdlc_methodology_enum;
+  v_open_tasks_count INTEGER;
+BEGIN
+  -- If workflow_stage_id didn't change, don't waste work.
+  IF TG_OP = 'UPDATE' AND NEW.workflow_stage_id = OLD.workflow_stage_id THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT ws.wip_limit, sp.methodology
+    INTO v_wip_limit, v_methodology
+  FROM public.workflow_stages ws
+  JOIN public.sdlc_phases sp ON sp.id = ws.phase_id
+  WHERE ws.id = NEW.workflow_stage_id;
+
+  -- Only enforce WIP for Kanban stages with an explicit limit.
+  IF v_methodology = 'kanban' AND v_wip_limit IS NOT NULL THEN
+    IF TG_OP = 'INSERT' THEN
+      SELECT COUNT(*)
+        INTO v_open_tasks_count
+      FROM public.tasks t
+      WHERE t.workflow_stage_id = NEW.workflow_stage_id
+        AND t.completed_at IS NULL;
+    ELSE
+      -- UPDATE case: exclude the row being moved from its previous stage.
+      SELECT COUNT(*)
+        INTO v_open_tasks_count
+      FROM public.tasks t
+      WHERE t.workflow_stage_id = NEW.workflow_stage_id
+        AND t.completed_at IS NULL
+        AND t.id <> OLD.id;
+    END IF;
+
+    IF v_open_tasks_count >= v_wip_limit THEN
+      RAISE EXCEPTION 'Kanban WIP limit exceeded (stage_id=%, limit=%)', NEW.workflow_stage_id, v_wip_limit;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_tasks_enforce_kanban_wip ON public.tasks;
+CREATE TRIGGER trg_tasks_enforce_kanban_wip
+BEFORE INSERT OR UPDATE ON public.tasks
+FOR EACH ROW
+EXECUTE FUNCTION public.enforce_kanban_wip_limit();
+
+CREATE OR REPLACE FUNCTION public.scrum_sprint_on_close_return_unfinished()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_backlog_stage_id UUID;
+BEGIN
+  -- Only act when sprint transitions into closed state.
+  IF TG_OP = 'UPDATE' AND OLD.status = 'active' AND NEW.status = 'closed' THEN
+    SELECT ws.id
+      INTO v_backlog_stage_id
+    FROM public.workflow_stages ws
+    WHERE ws.phase_id = NEW.phase_id
+      AND ws.is_backlog = true
+    ORDER BY ws.stage_order ASC
+    LIMIT 1;
+
+    IF v_backlog_stage_id IS NOT NULL THEN
+      -- Return unfinished tasks to the backlog.
+      UPDATE public.tasks
+      SET
+        sprint_id = NULL,
+        workflow_stage_id = v_backlog_stage_id
+      WHERE sprint_id = NEW.id
+        AND completed_at IS NULL;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_sprints_on_close_return_unfinished ON public.sprints;
+CREATE TRIGGER trg_sprints_on_close_return_unfinished
+AFTER UPDATE ON public.sprints
+FOR EACH ROW
+EXECUTE FUNCTION public.scrum_sprint_on_close_return_unfinished();
