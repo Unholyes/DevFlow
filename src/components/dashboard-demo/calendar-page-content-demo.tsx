@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from 'react'
 import {
+  addDays,
   addMonths,
+  addWeeks,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
@@ -40,6 +42,82 @@ export type Deadline = {
   type: DeadlineType
 }
 
+function buildMockDeadlines(): Deadline[] {
+  const base = startOfDay(new Date())
+  return [
+    {
+      id: '1',
+      date: addDays(base, 0),
+      title: 'Sprint 12 review & retro',
+      project: 'E-commerce Platform',
+      type: 'sprint',
+    },
+    {
+      id: '2',
+      date: addDays(base, 1),
+      title: 'Deploy payment API to staging',
+      project: 'E-commerce Platform',
+      type: 'task',
+    },
+    {
+      id: '3',
+      date: addDays(base, 3),
+      title: 'Design sign-off — checkout flow',
+      project: 'Mobile App Redesign',
+      type: 'milestone',
+    },
+    {
+      id: '4',
+      date: addDays(base, 5),
+      title: 'Sprint 5 ends',
+      project: 'API Migration',
+      type: 'sprint',
+    },
+    {
+      id: '5',
+      date: addDays(base, 5),
+      title: 'Load testing deadline',
+      project: 'API Migration',
+      type: 'task',
+    },
+    {
+      id: '6',
+      date: addDays(base, 8),
+      title: 'Q2 release milestone',
+      project: 'Customer Portal',
+      type: 'milestone',
+    },
+    {
+      id: '7',
+      date: addDays(base, 12),
+      title: 'Security audit remediation',
+      project: 'Legacy System Upgrade',
+      type: 'task',
+    },
+    {
+      id: '8',
+      date: addWeeks(base, 2),
+      title: 'Sprint planning — backlog groomed',
+      project: 'Data Analytics Dashboard',
+      type: 'sprint',
+    },
+    {
+      id: '9',
+      date: addWeeks(base, 3),
+      title: 'Beta launch date',
+      project: 'Mobile App Redesign',
+      type: 'milestone',
+    },
+    {
+      id: '10',
+      date: addWeeks(base, 5),
+      title: 'Documentation freeze',
+      project: 'E-commerce Platform',
+      type: 'task',
+    },
+  ]
+}
+
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 const typeIcons: Record<DeadlineType, typeof Flag> = {
@@ -66,9 +144,8 @@ function deadlinesForDay(day: Date, all: Deadline[]) {
 
 export function CalendarPageContent() {
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()))
-  
-  // Deadlines initialized as an empty array - ready for your API/Supabase fetch
-  const [deadlines, setDeadlines] = useState<Deadline[]>([])
+
+  const deadlines = useMemo(() => buildMockDeadlines(), [])
 
   const calendarDays = useMemo(() => {
     const monthStart = startOfMonth(visibleMonth)
@@ -92,7 +169,8 @@ export function CalendarPageContent() {
       <div>
         <h1 className="text-3xl font-bold tracking-tight text-gray-900">Calendar</h1>
         <p className="mt-2 text-gray-600 max-w-2xl">
-          Manage your schedule and track upcoming deadlines across all active projects.
+          Task due dates, sprint boundaries, and milestones across your workspace. Connect Supabase
+          later to sync real schedules.
         </p>
       </div>
 

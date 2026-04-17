@@ -16,20 +16,22 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type Project = {
-  id: string
-  name: string
-}
-
 // Mock projects for demo
-const mockProjects: Project[] = []
+const mockProjects = [
+  { id: '1', name: 'E-commerce Platform' },
+  { id: '2', name: 'Mobile App Redesign' },
+  { id: '3', name: 'API Migration' },
+  { id: '4', name: 'Data Analytics Dashboard' },
+  { id: '5', name: 'Customer Portal' },
+  { id: '6', name: 'Legacy System Upgrade' },
+]
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: Home },
-  { name: 'Tasks', href: '/dashboard/tasks', icon: CheckSquare },
-  { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
-  { name: 'Team', href: '/dashboard/team', icon: Users },
-  { name: 'Reports & Analytics', href: '/dashboard/reports', icon: BarChart3 },
+  { name: 'Dashboard', href: '/dashboard-demo', icon: Home },
+  { name: 'Tasks', href: '/dashboard-demo/tasks', icon: CheckSquare },
+  { name: 'Calendar', href: '/dashboard-demo/calendar', icon: Calendar },
+  { name: 'Team', href: '/dashboard-demo/team', icon: Users },
+  { name: 'Reports & Analytics', href: '/dashboard-demo/reports', icon: BarChart3 },
 ]
 
 const bottomNavigation = [
@@ -79,7 +81,7 @@ export function DashboardSidebar() {
           {isProjectsOpen && (
             <div className="mt-2 space-y-1">
               {mockProjects.slice(0, 5).map((project) => {
-                const projectHref = `/dashboard/projects/${project.id}`
+                const projectHref = `/dashboard-demo/projects/${project.id}`
                 const isActive = pathname === projectHref
                 return (
                   <Link
@@ -98,7 +100,7 @@ export function DashboardSidebar() {
                 )
               })}
               <Link
-                href="/dashboard/projects"
+                href="/dashboard-demo/projects"
                 className="flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors ml-3"
               >
                 <FolderOpen className="mr-3 h-4 w-4" />

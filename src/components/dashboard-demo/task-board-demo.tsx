@@ -1,6 +1,4 @@
-'use client'
-
-import { Card } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Task } from '@/types'
 import { User, AlertCircle, Clock, CheckCircle } from 'lucide-react'
@@ -16,11 +14,31 @@ interface TaskBoardProps {
 }
 
 const statusConfig = {
-  todo: { label: 'To Do', color: 'bg-gray-100 text-gray-800', icon: Clock },
-  in_progress: { label: 'In Progress', color: 'bg-blue-100 text-blue-800', icon: User },
-  in_review: { label: 'In Review', color: 'bg-yellow-100 text-yellow-800', icon: AlertCircle },
-  done: { label: 'Done', color: 'bg-green-100 text-green-800', icon: CheckCircle },
-  blocked: { label: 'Blocked', color: 'bg-red-100 text-red-800', icon: AlertCircle },
+  todo: {
+    label: 'To Do',
+    color: 'bg-gray-100 text-gray-800',
+    icon: Clock,
+  },
+  in_progress: {
+    label: 'In Progress',
+    color: 'bg-blue-100 text-blue-800',
+    icon: User,
+  },
+  in_review: {
+    label: 'In Review',
+    color: 'bg-yellow-100 text-yellow-800',
+    icon: AlertCircle,
+  },
+  done: {
+    label: 'Done',
+    color: 'bg-green-100 text-green-800',
+    icon: CheckCircle,
+  },
+  blocked: {
+    label: 'Blocked',
+    color: 'bg-red-100 text-red-800',
+    icon: AlertCircle,
+  },
 }
 
 const priorityColors = {
@@ -31,19 +49,20 @@ const priorityColors = {
 }
 
 export function TaskBoard({ tasks }: TaskBoardProps) {
-  // Group tasks by status dynamically
   const tasksByStatus = tasks.reduce((acc, task) => {
-    if (!acc[task.status]) acc[task.status] = []
+    if (!acc[task.status]) {
+      acc[task.status] = []
+    }
     acc[task.status].push(task)
     return acc
   }, {} as Record<string, typeof tasks>)
 
   return (
-    <div className="bg-white overflow-hidden shadow rounded-lg border border-gray-200">
+    <div className="bg-white overflow-hidden shadow rounded-lg">
       <div className="px-4 py-5 sm:p-6">
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-lg font-medium text-gray-900">Task Board</h3>
-          <button className="text-sm text-blue-600 hover:text-blue-500 font-medium">
+          <button className="text-sm text-blue-600 hover:text-blue-500">
             View full board
           </button>
         </div>
@@ -55,26 +74,31 @@ export function TaskBoard({ tasks }: TaskBoardProps) {
 
             return (
               <div key={status} className="space-y-3">
-                <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
-                  <Icon className="h-4 w-4 text-gray-500" />
-                  <h4 className="text-sm font-semibold text-gray-700">{config.label}</h4>
-                  <span className="ml-auto text-xs font-bold text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">
+                <div className="flex items-center gap-2">
+                  <Icon className="h-4 w-4 text-gray-600" />
+                  <h4 className="text-sm font-medium text-gray-900">
+                    {config.label}
+                  </h4>
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
                     {tasksInStatus.length}
                   </span>
                 </div>
 
                 <div className="space-y-2">
                   {tasksInStatus.map((task) => (
-                    <Card key={task.id} className="p-3 hover:shadow-md transition-shadow cursor-pointer border-gray-200">
+                    <Card key={task.id} className="p-3 hover:shadow-sm transition-shadow cursor-pointer">
                       <div className="space-y-2">
-                        <h5 className="text-sm font-medium text-gray-900 line-clamp-2 leading-snug">
+                        <h5 className="text-sm font-medium text-gray-900 line-clamp-2">
                           {task.title}
                         </h5>
-                        <div className="flex items-center justify-between gap-2">
-                          <Badge variant="secondary" className={`${priorityColors[task.priority]} text-[10px] px-1.5 py-0 capitalize font-medium`}>
+                        <div className="flex items-center justify-between">
+                          <Badge
+                            variant="secondary"
+                            className={`${priorityColors[task.priority]} text-xs`}
+                          >
                             {task.priority}
                           </Badge>
-                          <span className="text-[11px] text-gray-500 truncate italic">
+                          <span className="text-xs text-gray-600 truncate ml-2">
                             {task.assignee}
                           </span>
                         </div>
@@ -83,7 +107,7 @@ export function TaskBoard({ tasks }: TaskBoardProps) {
                   ))}
 
                   {tasksInStatus.length === 0 && (
-                    <div className="text-center py-6 border-2 border-dashed border-gray-50 rounded-lg text-gray-400 text-xs">
+                    <div className="text-center py-4 text-gray-400 text-sm">
                       No tasks
                     </div>
                   )}
