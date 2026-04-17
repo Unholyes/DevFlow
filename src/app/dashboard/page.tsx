@@ -65,11 +65,6 @@ export default function Dashboard() {
         <p className="mt-2 text-gray-600">
           Welcome back! Here's an overview of your projects and tasks.
         </p>
-        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-sm text-blue-800">
-            <strong>Mock Mode:</strong> This dashboard view is currently using mock data.
-          </p>
-        </div>
       </div>
 
       <DashboardStats stats={mockStats} />
