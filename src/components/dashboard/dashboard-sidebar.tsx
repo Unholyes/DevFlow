@@ -16,15 +16,13 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+type Project = {
+  id: string
+  name: string
+}
+
 // Mock projects for demo
-const mockProjects = [
-  { id: '1', name: 'E-commerce Platform' },
-  { id: '2', name: 'Mobile App Redesign' },
-  { id: '3', name: 'API Migration' },
-  { id: '4', name: 'Data Analytics Dashboard' },
-  { id: '5', name: 'Customer Portal' },
-  { id: '6', name: 'Legacy System Upgrade' },
-]
+const mockProjects: Project[] = []
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
