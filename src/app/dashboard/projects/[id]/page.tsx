@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { notFound } from 'next/navigation';
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout';
@@ -40,14 +41,12 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
   const project = mockProjects.find(p => p.id === params.id);
   const tasks = mockTasksByProject[params.id as keyof typeof mockTasksByProject] || [];
 
-  // Tracks which phase is clicked
-  const [activePhaseId, setActivePhaseId] = useState('p3'); 
+const router = useRouter();
 
   if (!project) {
     notFound();
   }
 
-  const activePhase = project.phases?.find(p => p.id === activePhaseId);
 
   return (
     <DashboardLayout>
@@ -83,8 +82,8 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                   
                   {/* The Phase Card */}
                   <div 
-                    onClick={() => setActivePhaseId(phase.id)}
-                    className={`min-w-[260px] p-4 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md ${cardBorder} ${activePhaseId === phase.id ? 'ring-2 ring-blue-500 shadow-md' : ''}`}
+                    onClick={() => router.push(`/dashboard/projects/${project.id}/phases/${phase.id}`)}
+                    className={`min-w-[260px] p-4 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md ${cardBorder}`}
                   >
                     <div className="flex justify-between items-center mb-3">
                       <div className="flex items-center gap-2">
@@ -122,13 +121,7 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
         </div>
         {/* --- END OF TIMELINE --- */}
 
-        {/* The Dynamic Bottom View */}
-        <div className="mt-8">
-          {activePhase?.sdlcType === 'Scrum' && <ScrumView tasks={tasks} />}
-          {activePhase?.sdlcType === 'Kanban' && <KanbanView tasks={tasks} />}
-          {activePhase?.sdlcType === 'Waterfall' && <WaterfallView tasks={tasks} />}
-          {activePhase?.sdlcType === 'DevOps' && <DevOpsView tasks={tasks} />}
-        </div>
+
         
       </div>
     </DashboardLayout>
