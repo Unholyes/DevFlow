@@ -4,11 +4,32 @@ import { ProjectHeader } from '@/components/project/project-header'
 import { ProjectStats } from '@/components/project/project-stats'
 import { TaskBoard } from '@/components/dashboard/task-board'
 
+type ProjectDetailData = {
+  id: string
+  name: string
+  description: string
+  sdlcMethodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
+  status: 'active' | 'archived' | 'completed'
+  progress: number
+  tasksCount: number
+  completedTasks: number
+  dueDate: Date
+  teamMembers: number
+}
+
+type TaskBoardItem = {
+  id: string
+  title: string
+  status: 'todo' | 'in_progress' | 'in_review' | 'done' | 'blocked'
+  priority: 'low' | 'medium' | 'high' | 'critical'
+  assignee: string
+}
+
 // Mock projects data - in production this would come from database
-const mockProjects = []
+const mockProjects: ProjectDetailData[] = []
 
 // Mock tasks for each project
-const mockTasksByProject = {}
+const mockTasksByProject: Record<string, TaskBoardItem[]> = {}
 
 interface ProjectPageProps {
   params: {
@@ -18,7 +39,7 @@ interface ProjectPageProps {
 
 export default function ProjectPage({ params }: ProjectPageProps) {
   const project = mockProjects.find(p => p.id === params.id)
-  const tasks = mockTasksByProject[params.id as keyof typeof mockTasksByProject] || []
+  const tasks = mockTasksByProject[params.id] ?? []
 
   if (!project) {
     notFound()

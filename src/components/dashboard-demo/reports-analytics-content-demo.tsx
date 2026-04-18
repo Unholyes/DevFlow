@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import {
   LineChart,
   Line,
@@ -128,6 +129,12 @@ const recentActivity = [
 const TOTAL_TASKS = statusBreakdown.reduce((s, x) => s + x.value, 0)
 
 export function ReportsAnalyticsContent() {
+  const [hasMounted, setHasMounted] = useState(false)
+
+  useEffect(() => {
+    setHasMounted(true)
+  }, [])
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-10">
       <header className="space-y-1">
@@ -177,32 +184,34 @@ export function ReportsAnalyticsContent() {
           <CardDescription>Completed vs remaining tasks over time</CardDescription>
         </CardHeader>
         <CardContent className="h-[320px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={completionData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#9ca3af" />
-              <YAxis tick={{ fontSize: 12 }} stroke="#9ca3af" domain={[0, 32]} />
-              <Tooltip />
-              <Legend verticalAlign="bottom" height={36} />
-              <Line
-                type="monotone"
-                dataKey="completed"
-                name="Completed"
-                stroke="#2563eb"
-                strokeWidth={2}
-                dot={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="remaining"
-                name="Remaining"
-                stroke="#9ca3af"
-                strokeWidth={2}
-                strokeDasharray="6 4"
-                dot={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {hasMounted ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={completionData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#9ca3af" />
+                <YAxis tick={{ fontSize: 12 }} stroke="#9ca3af" domain={[0, 32]} />
+                <Tooltip />
+                <Legend verticalAlign="bottom" height={36} />
+                <Line
+                  type="monotone"
+                  dataKey="completed"
+                  name="Completed"
+                  stroke="#2563eb"
+                  strokeWidth={2}
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="remaining"
+                  name="Remaining"
+                  stroke="#9ca3af"
+                  strokeWidth={2}
+                  strokeDasharray="6 4"
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -236,32 +245,34 @@ export function ReportsAnalyticsContent() {
             <CardDescription>Tasks remaining over sprint duration</CardDescription>
           </CardHeader>
           <CardContent className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={burndownData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="day" tick={{ fontSize: 12 }} stroke="#9ca3af" />
-                <YAxis tick={{ fontSize: 12 }} stroke="#9ca3af" domain={[0, 28]} />
-                <Tooltip />
-                <Legend verticalAlign="bottom" />
-                <Line
-                  type="monotone"
-                  dataKey="ideal"
-                  name="Ideal Burndown"
-                  stroke="#9ca3af"
-                  strokeWidth={2}
-                  strokeDasharray="6 4"
-                  dot={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="actual"
-                  name="Actual Burndown"
-                  stroke="#2563eb"
-                  strokeWidth={2}
-                  dot={{ r: 3, fill: '#2563eb' }}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
+            {hasMounted ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={burndownData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="day" tick={{ fontSize: 12 }} stroke="#9ca3af" />
+                  <YAxis tick={{ fontSize: 12 }} stroke="#9ca3af" domain={[0, 28]} />
+                  <Tooltip />
+                  <Legend verticalAlign="bottom" />
+                  <Line
+                    type="monotone"
+                    dataKey="ideal"
+                    name="Ideal Burndown"
+                    stroke="#9ca3af"
+                    strokeWidth={2}
+                    strokeDasharray="6 4"
+                    dot={false}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="actual"
+                    name="Actual Burndown"
+                    stroke="#2563eb"
+                    strokeWidth={2}
+                    dot={{ r: 3, fill: '#2563eb' }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : null}
           </CardContent>
         </Card>
       </div>
@@ -275,24 +286,26 @@ export function ReportsAnalyticsContent() {
           <CardContent>
             <div className="flex flex-col sm:flex-row items-center gap-8">
               <div className="relative h-[220px] w-[220px] shrink-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={statusBreakdown}
-                      dataKey="value"
-                      nameKey="name"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={68}
-                      outerRadius={88}
-                      paddingAngle={2}
-                    >
-                      {statusBreakdown.map((entry) => (
-                        <Cell key={entry.name} fill={entry.color} stroke="white" strokeWidth={2} />
-                      ))}
-                    </Pie>
-                  </PieChart>
-                </ResponsiveContainer>
+                {hasMounted ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={statusBreakdown}
+                        dataKey="value"
+                        nameKey="name"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={68}
+                        outerRadius={88}
+                        paddingAngle={2}
+                      >
+                        {statusBreakdown.map((entry) => (
+                          <Cell key={entry.name} fill={entry.color} stroke="white" strokeWidth={2} />
+                        ))}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : null}
                 <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total</span>
                   <span className="text-3xl font-bold text-gray-900">{TOTAL_TASKS}</span>

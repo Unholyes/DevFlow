@@ -16,8 +16,25 @@ export default function Dashboard() {
   }
 
   // Arrays initialized to empty
-  const projects = []
-  const tasks = []
+  const projects: Array<{
+    id: string
+    name: string
+    description: string
+    sdlcMethodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
+    status: 'active' | 'archived' | 'completed'
+    progress: number
+    tasksCount: number
+    completedTasks: number
+    dueDate: Date
+  }> = []
+
+  const tasks: Array<{
+    id: string
+    title: string
+    status: 'todo' | 'in_progress' | 'in_review' | 'done' | 'blocked'
+    priority: 'low' | 'medium' | 'high' | 'critical'
+    assignee: string
+  }> = []
 
   return (
     <DashboardLayout>

@@ -1,8 +1,20 @@
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
 import { ProjectCards } from '@/components/dashboard/project-cards'
 
+type ProjectCardData = {
+  id: string
+  name: string
+  description: string
+  sdlcMethodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
+  status: 'active' | 'archived' | 'completed'
+  progress: number
+  tasksCount: number
+  completedTasks: number
+  dueDate: Date
+}
+
 // Mock projects data - in production this would come from database
-const mockProjects = []
+const mockProjects: ProjectCardData[] = []
 
 export default function ProjectsPage() {
   return (

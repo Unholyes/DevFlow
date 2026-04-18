@@ -8,6 +8,35 @@ export interface User {
 
 export type UserRole = 'super_admin' | 'tenant_admin' | 'team_member'
 
+// Profile types
+export interface Profile {
+  id: string
+  full_name: string | null
+  avatar_url: string | null
+  role: UserRole
+  created_at: Date
+  updated_at: Date
+}
+
+// Organization types
+export interface Organization {
+  id: string
+  name: string
+  owner_id: string
+  created_at: Date
+  updated_at: Date
+}
+
+// Organization member types
+export interface OrganizationMember {
+  id: string
+  organization_id: string
+  user_id: string
+  role: 'admin' | 'member'
+  joined_at: Date
+  profile?: Profile
+}
+
 // Tenant types
 export interface Tenant {
   id: string

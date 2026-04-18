@@ -112,7 +112,7 @@ export function DashboardSidebar() {
       {/* Bottom Navigation */}
       <div className="px-4 py-4 border-t border-gray-200">
         {bottomNavigation.map((item) => {
-          const isActive = pathname === item.href
+          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
           return (
             <Link
               key={item.name}
