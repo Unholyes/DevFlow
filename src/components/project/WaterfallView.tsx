@@ -272,6 +272,8 @@ export default function WaterfallView({ tasks }: { tasks: any[] }) {
           </div>
         </div>
       </div>
+
+      {isModalOpen && <CreateTaskModal onClose={() => setIsModalOpen(false)} />}
     </div>
   );
 }

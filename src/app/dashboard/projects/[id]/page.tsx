@@ -58,7 +58,7 @@ const router = useRouter();
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
           <h2 className="text-lg font-semibold text-gray-900 mb-4">Project Phases Timeline</h2>
           
-          <div className="flex items-center overflow-x-auto pb-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {project.phases?.map((phase, index) => {
               
               // Styling logic to match Figma perfectly
@@ -78,12 +78,11 @@ const router = useRouter();
                 'bg-green-100 text-green-700';
 
               return (
-                <div key={phase.id} className="flex items-center">
-                  
+                <div key={phase.id}>
                   {/* The Phase Card */}
-                  <div 
+                  <div
                     onClick={() => router.push(`/dashboard/projects/${project.id}/phases/${phase.id}`)}
-                    className={`min-w-[260px] p-4 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md ${cardBorder}`}
+                    className={`w-full p-4 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md ${cardBorder}`}
                   >
                     <div className="flex justify-between items-center mb-3">
                       <div className="flex items-center gap-2">
@@ -94,11 +93,11 @@ const router = useRouter();
                         {phase.sdlcType}
                       </span>
                     </div>
-                    
+
                     <div className={`text-xs font-medium mb-3 ${statusColor}`}>
                       {phase.status}
                     </div>
-                    
+
                     <div className="flex justify-between text-xs text-gray-500 mb-1">
                       <span>Progress</span>
                       <span className="font-medium text-gray-700">{phase.progress}%</span>
@@ -107,13 +106,6 @@ const router = useRouter();
                       <div className={`h-1.5 rounded-full ${barBg}`} style={{ width: `${phase.progress}%` }}></div>
                     </div>
                   </div>
-
-                  {/* The Arrow Separator (Hidden on the last item) */}
-                  {index < project.phases!.length - 1 && (
-                    <div className="mx-4 text-gray-300 font-bold">
-                      {'>'}
-                    </div>
-                  )}
                 </div>
               );
             })}
