@@ -37,73 +37,15 @@ type Member = {
   lastActive: string
 }
 
-const members: Member[] = [
-  {
-    id: '1',
-    name: 'Sarah Johnson',
-    email: 'sarah.johnson@devflow.app',
-    initials: 'SJ',
-    role: 'tenant_admin',
-    projects: ['E-commerce Platform', 'Customer Portal'],
-    openTasks: 6,
-    lastActive: 'Active now',
-  },
-  {
-    id: '2',
-    name: 'John Smith',
-    email: 'john.smith@devflow.app',
-    initials: 'JS',
-    role: 'member',
-    projects: ['E-commerce Platform', 'API Migration'],
-    openTasks: 12,
-    lastActive: '2h ago',
-  },
-  {
-    id: '3',
-    name: 'Sarah Jones',
-    email: 'sarah.jones@devflow.app',
-    initials: 'SJ',
-    role: 'member',
-    projects: ['Mobile App Redesign'],
-    openTasks: 9,
-    lastActive: '1d ago',
-  },
-  {
-    id: '4',
-    name: 'Mike Chen',
-    email: 'mike.chen@devflow.app',
-    initials: 'MC',
-    role: 'member',
-    projects: ['API Migration', 'Legacy System Upgrade'],
-    openTasks: 7,
-    lastActive: '30m ago',
-  },
-  {
-    id: '5',
-    name: 'Alex Brown',
-    email: 'alex.brown@devflow.app',
-    initials: 'AB',
-    role: 'member',
-    projects: ['E-commerce Platform', 'Mobile App Redesign', 'Data Analytics Dashboard'],
-    openTasks: 5,
-    lastActive: '5m ago',
-  },
-  {
-    id: '6',
-    name: 'Jordan Lee',
-    email: 'jordan.lee@devflow.app',
-    initials: 'JL',
-    role: 'member',
-    projects: ['Customer Portal'],
-    openTasks: 4,
-    lastActive: '3d ago',
-  },
-]
+type PendingInvite = {
+  email: string
+  role: 'member'
+  sent: string
+}
 
-const pendingInvites = [
-  { email: 'dev.new@example.com', role: 'member' as const, sent: 'Apr 8, 2026' },
-  { email: 'contractor.q2@example.com', role: 'member' as const, sent: 'Apr 5, 2026' },
-]
+const members: Member[] = []
+
+const pendingInvites: PendingInvite[] = []
 
 export function TeamPageContent() {
   const [query, setQuery] = useState('')

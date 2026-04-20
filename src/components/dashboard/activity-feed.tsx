@@ -1,8 +1,12 @@
+'use client'
+
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { CheckCircle, Plus, MessageCircle, GitBranch } from 'lucide-react'
 
-interface ActivityItem {
+// Exporting the interface so you can use it when fetching real data
+export interface ActivityItem {
   id: string
   type: 'task_completed' | 'task_created' | 'comment_added' | 'branch_created'
   user: string
@@ -11,54 +15,6 @@ interface ActivityItem {
   target: string
   timestamp: string
 }
-
-const mockActivities: ActivityItem[] = [
-  {
-    id: '1',
-    type: 'task_completed',
-    user: 'John Doe',
-    userInitials: 'JD',
-    action: 'completed task',
-    target: 'Implement user authentication',
-    timestamp: '2 hours ago',
-  },
-  {
-    id: '2',
-    type: 'task_created',
-    user: 'Jane Smith',
-    userInitials: 'JS',
-    action: 'created task',
-    target: 'Design database schema',
-    timestamp: '4 hours ago',
-  },
-  {
-    id: '3',
-    type: 'comment_added',
-    user: 'Bob Johnson',
-    userInitials: 'BJ',
-    action: 'commented on',
-    target: 'API endpoints task',
-    timestamp: '6 hours ago',
-  },
-  {
-    id: '4',
-    type: 'branch_created',
-    user: 'Alice Brown',
-    userInitials: 'AB',
-    action: 'created branch',
-    target: 'feature/user-auth',
-    timestamp: '1 day ago',
-  },
-  {
-    id: '5',
-    type: 'task_completed',
-    user: 'Charlie Wilson',
-    userInitials: 'CW',
-    action: 'completed task',
-    target: 'Write unit tests',
-    timestamp: '1 day ago',
-  },
-]
 
 const activityIcons = {
   task_completed: CheckCircle,
@@ -75,6 +31,9 @@ const activityColors = {
 }
 
 export function ActivityFeed() {
+  // Initialized as an empty array - ready for real data from an API or Supabase
+  const [activities, setActivities] = useState<ActivityItem[]>([])
+
   return (
     <Card>
       <CardHeader>
@@ -83,42 +42,50 @@ export function ActivityFeed() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {mockActivities.map((activity) => {
-          const Icon = activityIcons[activity.type]
-          const colorClass = activityColors[activity.type]
+        {activities.length === 0 ? (
+          <div className="py-6 text-center">
+            <p className="text-sm text-gray-500">No recent activity found.</p>
+          </div>
+        ) : (
+          activities.map((activity) => {
+            const Icon = activityIcons[activity.type]
+            const colorClass = activityColors[activity.type]
 
-          return (
-            <div key={activity.id} className="flex items-start space-x-3">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="text-xs">
-                  {activity.userInitials}
-                </AvatarFallback>
-              </Avatar>
+            return (
+              <div key={activity.id} className="flex items-start space-x-3">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="text-xs">
+                    {activity.userInitials}
+                  </AvatarFallback>
+                </Avatar>
 
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center space-x-2">
-                  <Icon className={`h-4 w-4 ${colorClass}`} />
-                  <p className="text-sm text-gray-900">
-                    <span className="font-medium">{activity.user}</span>{' '}
-                    {activity.action}{' '}
-                    <span className="font-medium text-gray-600">
-                      {activity.target}
-                    </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-2">
+                    <Icon className={`h-4 w-4 ${colorClass}`} />
+                    <p className="text-sm text-gray-900">
+                      <span className="font-medium">{activity.user}</span>{' '}
+                      {activity.action}{' '}
+                      <span className="font-medium text-gray-600">
+                        {activity.target}
+                      </span>
+                    </p>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {activity.timestamp}
                   </p>
                 </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  {activity.timestamp}
-                </p>
               </div>
-            </div>
-          )
-        })}
+            )
+          })
+        )}
 
-        <div className="pt-2">
-          <button className="text-sm text-blue-600 hover:text-blue-500">
-            View all activity
-          </button>
-        </div>
+        {activities.length > 0 && (
+          <div className="pt-2">
+            <button className="text-sm text-blue-600 hover:text-blue-500">
+              View all activity
+            </button>
+          </div>
+        )}
       </CardContent>
     </Card>
   )

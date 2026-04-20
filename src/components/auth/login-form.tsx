@@ -33,16 +33,27 @@ export function LoginForm() {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
       })
 
       if (error) {
         setError(error.message)
-      } else {
-        // Redirect to dashboard or home
-        window.location.href = "/dashboard"
+      } else if (authData.user) {
+        // Get user role to determine redirect
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', authData.user.id)
+          .single()
+
+        // Redirect based on role
+        if (profile?.role === 'super_admin') {
+          window.location.href = "/super-admin/dashboard"
+        } else {
+          window.location.href = "/dashboard"
+        }
       }
     } catch (err) {
       setError("An unexpected error occurred")
@@ -87,6 +98,12 @@ export function LoginForm() {
                 id="email"
                 placeholder="name@company.com"
                 type="email"
+                autoComplete="email"
+                style={{
+                  WebkitTextFillColor: 'rgb(15, 23, 42)',
+                  WebkitBoxShadow: '0 0 0px 1000px #fff inset',
+                  transition: 'background-color 5000s ease-in-out 0s',
+                }}
               />
             </div>
             {errors.email && (
@@ -107,11 +124,21 @@ export function LoginForm() {
                 id="password"
                 placeholder="Enter your password"
                 type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                style={{
+                  WebkitTextFillColor: 'rgb(15, 23, 42)',
+                  WebkitBoxShadow: '0 0 0px 1000px #fff inset',
+                  transition: 'background-color 5000s ease-in-out 0s',
+                }}
               />
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors duration-200"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setShowPassword(!showPassword)
+                }}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors duration-200 z-10 bg-transparent border-none cursor-pointer"
               >
                 {showPassword ? (
                   <EyeOff className="h-5 w-5" />

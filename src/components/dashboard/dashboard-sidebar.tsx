@@ -4,33 +4,40 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Calendar,
-  CheckSquare,
   Home,
   Settings,
-  Users,
   FolderOpen,
   BarChart3,
+  UserCog,
+  Users,
+  CheckSquare,
+  Calendar,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { UserRole } from '@/types'
+
+type Project = {
+  id: string
+  name: string
+}
 
 // Mock projects for demo
-const mockProjects = [
-  { id: '1', name: 'E-commerce Platform' },
-  { id: '2', name: 'Mobile App Redesign' },
-  { id: '3', name: 'API Migration' },
-  { id: '4', name: 'Data Analytics Dashboard' },
-  { id: '5', name: 'Customer Portal' },
-  { id: '6', name: 'Legacy System Upgrade' },
-]
+const mockProjects: Project[] = []
 
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard-demo', icon: Home },
+const tenantMemberNavigation = [
+  { name: 'Dashboard', href: '/dashboard', icon: Home },
   { name: 'Tasks', href: '/dashboard/tasks', icon: CheckSquare },
   { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
   { name: 'Team', href: '/dashboard/team', icon: Users },
+  { name: 'Reports & Analytics', href: '/dashboard/reports', icon: BarChart3 },
+]
+
+const tenantAdminNavigation = [
+  { name: 'Dashboard', href: '/dashboard', icon: Home },
+  { name: 'Accounts', href: '/dashboard/accounts', icon: UserCog },
+  { name: 'Projects', href: '/dashboard/projects', icon: FolderOpen },
   { name: 'Reports & Analytics', href: '/dashboard/reports', icon: BarChart3 },
 ]
 
@@ -38,18 +45,20 @@ const bottomNavigation = [
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
-export function DashboardSidebar() {
+export function DashboardSidebar({ role = 'team_member' }: { role?: UserRole }) {
   const pathname = usePathname()
   const [isProjectsOpen, setIsProjectsOpen] = useState(true)
+
+  const navItems = role === 'tenant_admin' ? tenantAdminNavigation : tenantMemberNavigation
 
   return (
     <div className="bg-white w-64 min-h-screen border-r border-gray-200 flex flex-col">
       {/* Navigation */}
       <nav className="flex-2 px-4 py-6 space-y-2">
-        {navigation.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            (item.href !== '/dashboard-demo' && pathname.startsWith(item.href))
+        {navItems.map((item) => {
+          const isActive = item.name === 'Dashboard'
+            ? pathname === item.href
+            : pathname === item.href || pathname.startsWith(`${item.href}/`)
           return (
             <Link
               key={item.name}
@@ -116,7 +125,7 @@ export function DashboardSidebar() {
       {/* Bottom Navigation */}
       <div className="px-4 py-4 border-t border-gray-200">
         {bottomNavigation.map((item) => {
-          const isActive = pathname === item.href
+          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
           return (
             <Link
               key={item.name}

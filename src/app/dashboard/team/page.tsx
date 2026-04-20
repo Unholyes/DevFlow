@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
 import { TeamPageContent } from '@/components/dashboard/team-page-content'
 
 export const metadata: Metadata = {
@@ -9,9 +8,5 @@ export const metadata: Metadata = {
 }
 
 export default function TeamPage() {
-  return (
-    <DashboardLayout>
-      <TeamPageContent />
-    </DashboardLayout>
-  )
+  return <TeamPageContent />
 }
