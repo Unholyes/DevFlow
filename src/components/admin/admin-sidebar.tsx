@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Building2,
   BarChart3,
+  FileText,
   Settings,
   ChevronDown,
   ChevronRight,
@@ -19,6 +20,7 @@ import { supabase } from '@/lib/supabase/client'
 const navigation = [
   { name: 'Dashboard', href: '/super-admin/dashboard', icon: LayoutDashboard },
   { name: 'Tenants', href: '/super-admin/tenants', icon: Building2 },
+  { name: 'Applications', href: '/super-admin/applications', icon: FileText },
   { name: 'Overview', href: '/super-admin/overview', icon: BarChart3 },
 ]
 
