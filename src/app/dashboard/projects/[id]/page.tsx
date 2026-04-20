@@ -1,15 +1,12 @@
 "use client";
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
 import { notFound } from 'next/navigation';
 import { ProjectHeader } from '@/components/project/project-header';
 import { ProjectStats } from '@/components/project/project-stats';
-
-import ScrumView from '@/components/project/ScrumView';
-import KanbanView from '@/components/project/KanbanView';
-import WaterfallView from '@/components/project/WaterfallView';
-import DevOpsView from '@/components/project/DevOpsView';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { CheckCircle2, Clock, Circle, ArrowRight } from 'lucide-react';
 
 // The Data with the Phases included
 const mockProjects = [
@@ -36,80 +33,101 @@ const mockProjects = [
 
 const mockTasksByProject = { '1': [] };
 
+const sdlcBadgeColors = {
+  Waterfall: 'bg-purple-100 text-purple-700 border-purple-200',
+  Scrum: 'bg-blue-100 text-blue-700 border-blue-200',
+  Kanban: 'bg-orange-100 text-orange-700 border-orange-200',
+  DevOps: 'bg-green-100 text-green-700 border-green-200',
+};
+
 export default function ProjectPage({ params }: { params: { id: string } }) {
   const project = mockProjects.find(p => p.id === params.id);
   const tasks = mockTasksByProject[params.id as keyof typeof mockTasksByProject] || [];
-
-const router = useRouter();
+  const router = useRouter();
 
   if (!project) {
     notFound();
   }
 
-
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <ProjectHeader project={project} />
       <ProjectStats project={project} />
 
-      {/* --- THIS IS THE HORIZONTAL TIMELINE EXACTLY FROM YOUR PICTURE --- */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Project Phases Timeline</h2>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {project.phases?.map((phase, index) => {
-            
-            // Styling logic to match Figma perfectly
-            const isCompleted = phase.status === 'Completed';
-            const isInProgress = phase.status === 'In Progress';
-            
-            const cardBorder = isCompleted ? 'border-green-200 bg-green-50/20' : isInProgress ? 'border-blue-200 bg-blue-50/20' : 'border-gray-200 bg-gray-50';
-            const statusColor = isCompleted ? 'text-green-600' : isInProgress ? 'text-blue-600' : 'text-gray-400';
-            const barBg = isCompleted ? 'bg-green-500' : isInProgress ? 'bg-blue-600' : 'bg-gray-200';
-            const icon = isCompleted ? '✓' : isInProgress ? '⏱' : '○';
+      <Card className="border-gray-200 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg text-gray-900">Project Phases Timeline</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {project.phases?.map((phase, index) => {
+              const isCompleted = phase.status === 'Completed';
+              const isInProgress = phase.status === 'In Progress';
+              const isNotStarted = phase.status === 'Not Started';
 
-            // Badge Colors
-            const badgeColor = 
-              phase.sdlcType === 'Waterfall' ? 'bg-blue-100 text-blue-700' :
-              phase.sdlcType === 'Scrum' ? 'bg-purple-100 text-purple-700' :
-              phase.sdlcType === 'Kanban' ? 'bg-orange-100 text-orange-700' :
-              'bg-green-100 text-green-700';
+              const statusBg = isCompleted 
+                ? 'bg-green-50 border-green-200' 
+                : isInProgress 
+                  ? 'bg-blue-50 border-blue-200' 
+                  : 'bg-gray-50 border-gray-200';
+              
+              const statusTextColor = isCompleted 
+                ? 'text-green-700' 
+                : isInProgress 
+                  ? 'text-blue-700' 
+                  : 'text-gray-500';
+              
+              const progressColor = isCompleted 
+                ? 'bg-green-500' 
+                : isInProgress 
+                  ? 'bg-blue-600' 
+                  : 'bg-gray-300';
 
-            return (
-              <div
-                key={phase.id}
-                onClick={() => router.push(`/dashboard/projects/${project.id}/phases/${phase.id}`)}
-                className={`w-full p-4 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md ${cardBorder}`}
-              >
-                <div className="flex justify-between items-center mb-3">
-                  <div className="flex items-center gap-2">
-                    <span className={`font-bold ${statusColor}`}>{icon}</span>
-                    <h3 className="font-semibold text-[15px] text-gray-900">{phase.name}</h3>
+              const StatusIcon = isCompleted ? CheckCircle2 : isInProgress ? Clock : Circle;
+
+              return (
+                <div
+                  key={phase.id}
+                  onClick={() => router.push(`/dashboard/projects/${project.id}/phases/${phase.id}`)}
+                  className={`group relative p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md hover:border-blue-300 ${statusBg}`}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2 flex-1">
+                      <StatusIcon className={`h-5 w-5 flex-shrink-0 ${statusTextColor}`} />
+                      <h3 className="font-semibold text-sm text-gray-900 line-clamp-1">{phase.name}</h3>
+                    </div>
+                    <Badge 
+                      variant="outline" 
+                      className={`${sdlcBadgeColors[phase.sdlcType as keyof typeof sdlcBadgeColors]} text-xs font-medium`}
+                    >
+                      {phase.sdlcType}
+                    </Badge>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeColor}`}>
-                    {phase.sdlcType}
-                  </span>
-                </div>
 
-                <div className={`text-xs font-medium mb-3 ${statusColor}`}>
-                  {phase.status}
-                </div>
+                  <div className={`text-xs font-medium mb-3 ${statusTextColor}`}>
+                    {phase.status}
+                  </div>
 
-                <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>Progress</span>
-                  <span className="font-medium text-gray-700">{phase.progress}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-1.5">
-                  <div className={`h-1.5 rounded-full ${barBg}`} style={{ width: `${phase.progress}%` }}></div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      {/* --- END OF TIMELINE --- */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs text-gray-600">
+                      <span>Progress</span>
+                      <span className="font-semibold text-gray-900">{phase.progress}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className={`h-2 rounded-full transition-all duration-300 ${progressColor}`} 
+                        style={{ width: `${phase.progress}%` }}
+                      />
+                    </div>
+                  </div>
 
-      
+                  <ArrowRight className="absolute right-3 bottom-3 h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
