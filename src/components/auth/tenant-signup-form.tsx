@@ -9,7 +9,6 @@ import { Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
 
 const tenantSignupSchema = z.object({
-  organizationName: z.string().min(2, "Organization name must be at least 2 characters"),
   email: z.string().email("Please enter a valid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   confirmPassword: z.string(),
@@ -39,14 +38,13 @@ export function TenantSignupForm() {
     setError(null)
 
     try {
-      // Sign up the user
+      // Sign up the user as a regular user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
         options: {
           data: {
-            role: 'tenant_admin',
-            organization_name: data.organizationName,
+            role: 'team_member',
           }
         }
       })
@@ -56,23 +54,7 @@ export function TenantSignupForm() {
         return
       }
 
-      // Create the organization in your database
-      if (authData.user) {
-        const { error: orgError } = await supabase
-          .from('organizations')
-          .insert({
-            name: data.organizationName,
-            owner_id: authData.user.id,
-            created_at: new Date().toISOString(),
-          })
-
-        if (orgError) {
-          console.error('Error creating organization:', orgError)
-          // You might want to delete the user if org creation fails
-        }
-      }
-
-      window.location.href = "/auth/login?message=Check your email to verify your account and organization setup"
+      window.location.href = "/auth/login?message=Check your email to verify your account"
     } catch (err) {
       setError("An unexpected error occurred")
     } finally {
@@ -100,29 +82,6 @@ export function TenantSignupForm() {
       {/* Form */}
       <div className="flex flex-col items-start gap-6">
         <form onSubmit={handleSubmit(onSubmit)} className="w-full flex flex-col gap-6">
-          {/* Organization Name Field */}
-          <div className="flex flex-col gap-1.5">
-            <label
-              className="font-semibold text-slate-700 text-sm"
-              htmlFor="organizationName"
-            >
-              Organization Name
-            </label>
-
-            <div className="flex items-center px-4 py-3.5 bg-white rounded-xl border border-slate-200">
-              <input
-                {...register("organizationName")}
-                className="relative grow border-[none] bg-transparent self-stretch mt-[-1.00px] font-normal text-slate-900 text-base tracking-[0] leading-[normal] p-0 placeholder:text-slate-400 focus:outline-none"
-                id="organizationName"
-                placeholder="Your Company Name"
-                type="text"
-              />
-            </div>
-            {errors.organizationName && (
-              <p className="text-sm text-red-600 mt-1">{errors.organizationName.message}</p>
-            )}
-          </div>
-
           {/* Email Field */}
           <div className="flex flex-col gap-1.5">
             <label
@@ -139,6 +98,12 @@ export function TenantSignupForm() {
                 id="email"
                 placeholder="admin@company.com"
                 type="email"
+                autoComplete="email"
+                style={{
+                  WebkitTextFillColor: 'rgb(15, 23, 42)',
+                  WebkitBoxShadow: '0 0 0px 1000px #fff inset',
+                  transition: 'background-color 5000s ease-in-out 0s',
+                }}
               />
             </div>
             {errors.email && (
@@ -159,11 +124,21 @@ export function TenantSignupForm() {
                 id="password"
                 placeholder="Create a password"
                 type={showPassword ? "text" : "password"}
+                autoComplete="new-password"
+                style={{
+                  WebkitTextFillColor: 'rgb(15, 23, 42)',
+                  WebkitBoxShadow: '0 0 0px 1000px #fff inset',
+                  transition: 'background-color 5000s ease-in-out 0s',
+                }}
               />
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors duration-200"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setShowPassword(!showPassword)
+                }}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors duration-200 z-10 bg-transparent border-none cursor-pointer"
               >
                 {showPassword ? (
                   <EyeOff className="h-5 w-5" />
@@ -190,11 +165,21 @@ export function TenantSignupForm() {
                 id="confirmPassword"
                 placeholder="Confirm your password"
                 type={showConfirmPassword ? "text" : "password"}
+                autoComplete="new-password"
+                style={{
+                  WebkitTextFillColor: 'rgb(15, 23, 42)',
+                  WebkitBoxShadow: '0 0 0px 1000px #fff inset',
+                  transition: 'background-color 5000s ease-in-out 0s',
+                }}
               />
               <button
                 type="button"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors duration-200"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setShowConfirmPassword(!showConfirmPassword)
+                }}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors duration-200 z-10 bg-transparent border-none cursor-pointer"
               >
                 {showConfirmPassword ? (
                   <EyeOff className="h-5 w-5" />

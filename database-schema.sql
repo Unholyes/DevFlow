@@ -108,6 +108,64 @@ CREATE POLICY "Organization admins can manage members" ON public.organization_me
   );
 
 -- =========================================
+-- ORGANIZATION APPLICATIONS TABLE
+-- =========================================
+
+CREATE TABLE IF NOT EXISTS public.organization_applications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  organization_name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  contact_email TEXT NOT NULL,
+  phone_number TEXT,
+  website_url TEXT,
+  industry TEXT,
+  expected_team_size TEXT,
+  use_case TEXT,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'revision_requested')),
+  revision_notes TEXT,
+  submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  reviewed_at TIMESTAMP WITH TIME ZONE,
+  reviewed_by UUID REFERENCES auth.users(id),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE public.organization_applications ENABLE ROW LEVEL SECURITY;
+
+-- Organization applications policies
+CREATE POLICY "Users can view their own applications" ON public.organization_applications
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Super admins can view all applications" ON public.organization_applications
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE id = auth.uid() AND role = 'super_admin'
+    )
+  );
+
+CREATE POLICY "Users can create their own applications" ON public.organization_applications
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Super admins can update applications" ON public.organization_applications
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE id = auth.uid() AND role = 'super_admin'
+    )
+  );
+
+CREATE POLICY "Super admins can delete applications" ON public.organization_applications
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM public.profiles
+      WHERE id = auth.uid() AND role = 'super_admin'
+    )
+  );
+
+-- =========================================
 -- TEAM INVITATIONS TABLE
 -- =========================================
 
@@ -185,15 +243,6 @@ BEGIN
     NEW.raw_user_meta_data->>'avatar_url',
     COALESCE(NEW.raw_user_meta_data->>'role', 'team_member')
   );
-
-  -- If user is a tenant_admin, create their organization
-  IF NEW.raw_user_meta_data->>'role' = 'tenant_admin' THEN
-    INSERT INTO public.organizations (name, owner_id)
-    VALUES (
-      NEW.raw_user_meta_data->>'organization_name',
-      NEW.id
-    );
-  END IF;
 
   RETURN NEW;
 END;
