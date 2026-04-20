@@ -3,7 +3,6 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { notFound } from 'next/navigation';
-import { DashboardLayout } from '@/components/dashboard/dashboard-layout';
 import { ProjectHeader } from '@/components/project/project-header';
 import { ProjectStats } from '@/components/project/project-stats';
 
@@ -49,73 +48,68 @@ const router = useRouter();
 
 
   return (
-    <DashboardLayout>
-      <div className="space-y-8">
-        <ProjectHeader project={project} />
-        <ProjectStats project={project} />
+    <div className="space-y-8">
+      <ProjectHeader project={project} />
+      <ProjectStats project={project} />
 
-        {/* --- THIS IS THE HORIZONTAL TIMELINE EXACTLY FROM YOUR PICTURE --- */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Project Phases Timeline</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {project.phases?.map((phase, index) => {
-              
-              // Styling logic to match Figma perfectly
-              const isCompleted = phase.status === 'Completed';
-              const isInProgress = phase.status === 'In Progress';
-              
-              const cardBorder = isCompleted ? 'border-green-200 bg-green-50/20' : isInProgress ? 'border-blue-200 bg-blue-50/20' : 'border-gray-200 bg-gray-50';
-              const statusColor = isCompleted ? 'text-green-600' : isInProgress ? 'text-blue-600' : 'text-gray-400';
-              const barBg = isCompleted ? 'bg-green-500' : isInProgress ? 'bg-blue-600' : 'bg-gray-200';
-              const icon = isCompleted ? '✓' : isInProgress ? '⏱' : '○';
-
-              // Badge Colors
-              const badgeColor = 
-                phase.sdlcType === 'Waterfall' ? 'bg-blue-100 text-blue-700' :
-                phase.sdlcType === 'Scrum' ? 'bg-purple-100 text-purple-700' :
-                phase.sdlcType === 'Kanban' ? 'bg-orange-100 text-orange-700' :
-                'bg-green-100 text-green-700';
-
-              return (
-                <div key={phase.id}>
-                  {/* The Phase Card */}
-                  <div
-                    onClick={() => router.push(`/dashboard/projects/${project.id}/phases/${phase.id}`)}
-                    className={`w-full p-4 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md ${cardBorder}`}
-                  >
-                    <div className="flex justify-between items-center mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className={`font-bold ${statusColor}`}>{icon}</span>
-                        <h3 className="font-semibold text-[15px] text-gray-900">{phase.name}</h3>
-                      </div>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeColor}`}>
-                        {phase.sdlcType}
-                      </span>
-                    </div>
-
-                    <div className={`text-xs font-medium mb-3 ${statusColor}`}>
-                      {phase.status}
-                    </div>
-
-                    <div className="flex justify-between text-xs text-gray-500 mb-1">
-                      <span>Progress</span>
-                      <span className="font-medium text-gray-700">{phase.progress}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-1.5">
-                      <div className={`h-1.5 rounded-full ${barBg}`} style={{ width: `${phase.progress}%` }}></div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        {/* --- END OF TIMELINE --- */}
-
-
+      {/* --- THIS IS THE HORIZONTAL TIMELINE EXACTLY FROM YOUR PICTURE --- */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">Project Phases Timeline</h2>
         
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {project.phases?.map((phase, index) => {
+            
+            // Styling logic to match Figma perfectly
+            const isCompleted = phase.status === 'Completed';
+            const isInProgress = phase.status === 'In Progress';
+            
+            const cardBorder = isCompleted ? 'border-green-200 bg-green-50/20' : isInProgress ? 'border-blue-200 bg-blue-50/20' : 'border-gray-200 bg-gray-50';
+            const statusColor = isCompleted ? 'text-green-600' : isInProgress ? 'text-blue-600' : 'text-gray-400';
+            const barBg = isCompleted ? 'bg-green-500' : isInProgress ? 'bg-blue-600' : 'bg-gray-200';
+            const icon = isCompleted ? '✓' : isInProgress ? '⏱' : '○';
+
+            // Badge Colors
+            const badgeColor = 
+              phase.sdlcType === 'Waterfall' ? 'bg-blue-100 text-blue-700' :
+              phase.sdlcType === 'Scrum' ? 'bg-purple-100 text-purple-700' :
+              phase.sdlcType === 'Kanban' ? 'bg-orange-100 text-orange-700' :
+              'bg-green-100 text-green-700';
+
+            return (
+              <div
+                key={phase.id}
+                onClick={() => router.push(`/dashboard/projects/${project.id}/phases/${phase.id}`)}
+                className={`w-full p-4 rounded-xl border-2 cursor-pointer transition-all hover:shadow-md ${cardBorder}`}
+              >
+                <div className="flex justify-between items-center mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className={`font-bold ${statusColor}`}>{icon}</span>
+                    <h3 className="font-semibold text-[15px] text-gray-900">{phase.name}</h3>
+                  </div>
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badgeColor}`}>
+                    {phase.sdlcType}
+                  </span>
+                </div>
+
+                <div className={`text-xs font-medium mb-3 ${statusColor}`}>
+                  {phase.status}
+                </div>
+
+                <div className="flex justify-between text-xs text-gray-500 mb-1">
+                  <span>Progress</span>
+                  <span className="font-medium text-gray-700">{phase.progress}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                  <div className={`h-1.5 rounded-full ${barBg}`} style={{ width: `${phase.progress}%` }}></div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </DashboardLayout>
+      {/* --- END OF TIMELINE --- */}
+
+      
+    </div>
   );
 }
