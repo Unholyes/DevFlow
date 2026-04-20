@@ -1,12 +1,36 @@
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 'use client'
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { ActivityFeed } from '@/components/dashboard/activity-feed'
-import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
 import { DashboardStats } from '@/components/dashboard/dashboard-stats'
 import { ProjectCards } from '@/components/dashboard/project-cards'
 import { TaskBoard } from '@/components/dashboard/task-board'
+import { TenantAdminDashboardHome } from '@/components/dashboard/tenant-admin-dashboard-home'
+
+export default async function Dashboard() {
+  const supabase = createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/auth/login')
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  if (profile?.role === 'tenant_admin') {
+    return <TenantAdminDashboardHome />
+  }
+
 import { CreateOrganizationModal } from '@/components/organization/create-organization-modal'
 import { Clock, CheckCircle, XCircle, AlertCircle, RefreshCw, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -82,12 +106,10 @@ export default function Dashboard() {
   }> = []
 
   return (
-    <DashboardLayout>
+    <>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="mt-2 text-gray-600">
-          Welcome back! Here's an overview of your projects and tasks.
-        </p>
+        <p className="mt-2 text-gray-600">Welcome back! Here's an overview of your projects and tasks.</p>
       </div>
 
       <DashboardStats stats={stats} />
