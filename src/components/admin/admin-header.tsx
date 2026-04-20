@@ -1,7 +1,7 @@
 'use client'
 
 import { supabase } from '@/lib/supabase/client'
-import { Shield, LogOut } from 'lucide-react'
+import { Shield } from 'lucide-react'
 import { useState, useEffect } from 'react'
 
 export function AdminHeader() {
@@ -16,11 +16,6 @@ export function AdminHeader() {
     }
     getUser()
   }, [])
-
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    window.location.href = '/auth/login'
-  }
 
   return (
     <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-6">
@@ -39,14 +34,6 @@ export function AdminHeader() {
           <p className="text-sm font-medium text-gray-900">{userEmail || 'Loading...'}</p>
           <p className="text-xs text-purple-600 font-medium">Super Admin</p>
         </div>
-
-        <button
-          onClick={handleSignOut}
-          className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors"
-        >
-          <LogOut className="h-4 w-4" />
-          Sign Out
-        </button>
       </div>
     </header>
   )

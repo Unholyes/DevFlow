@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { Building2, Users, FolderKanban, CheckSquare, TrendingUp, Clock } from 'lucide-react'
+import { Building2, Users, FolderKanban, TrendingUp } from 'lucide-react'
 
 async function getPlatformStats() {
   const supabase = createClient()
@@ -20,30 +20,16 @@ async function getPlatformStats() {
       .from('projects')
       .select('*', { count: 'exact', head: true })
 
-    // Get total tasks
-    const { count: taskCount } = await supabase
-      .from('tasks')
+    // Get active organizations (not suspended)
+    const { count: activeOrgCount } = await supabase
+      .from('organizations')
       .select('*', { count: 'exact', head: true })
-
-    // Get completed tasks
-    const { count: completedTaskCount } = await supabase
-      .from('tasks')
-      .select('*', { count: 'exact', head: true })
-      .not('completed_at', 'is', null)
-
-    // Get active sprints
-    const { count: sprintCount } = await supabase
-      .from('sprints')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'active')
 
     return {
       totalOrganizations: orgCount || 0,
       totalUsers: userCount || 0,
       totalProjects: projectCount || 0,
-      totalTasks: taskCount || 0,
-      completedTasks: completedTaskCount || 0,
-      activeSprints: sprintCount || 0,
+      activeOrganizations: activeOrgCount || 0,
     }
   } catch (error) {
     console.error('Error fetching platform stats:', error)
@@ -51,9 +37,7 @@ async function getPlatformStats() {
       totalOrganizations: 0,
       totalUsers: 0,
       totalProjects: 0,
-      totalTasks: 0,
-      completedTasks: 0,
-      activeSprints: 0,
+      activeOrganizations: 0,
     }
   }
 }
@@ -110,11 +94,11 @@ export default async function AdminDashboard() {
       trend: '+15%',
     },
     {
-      title: 'Total Tasks',
-      value: stats.totalTasks,
-      icon: CheckSquare,
+      title: 'Active Organizations',
+      value: stats.activeOrganizations,
+      icon: Building2,
       color: 'bg-orange-500',
-      trend: '+22%',
+      trend: 'Active',
     },
   ]
 
@@ -147,48 +131,6 @@ export default async function AdminDashboard() {
             </div>
           </div>
         ))}
-      </div>
-
-      {/* Additional Stats */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Task Completion</h3>
-            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-              <CheckSquare className="h-5 w-5 text-green-600" />
-            </div>
-          </div>
-          <div className="flex items-end gap-4">
-            <p className="text-4xl font-bold text-gray-900">{stats.completedTasks}</p>
-            <p className="text-gray-500 mb-1">of {stats.totalTasks} tasks completed</p>
-          </div>
-          <div className="mt-4 w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-green-500 h-2 rounded-full"
-              style={{
-                width: stats.totalTasks > 0
-                  ? `${(stats.completedTasks / stats.totalTasks) * 100}%`
-                  : '0%',
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Active Sprints</h3>
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Clock className="h-5 w-5 text-blue-600" />
-            </div>
-          </div>
-          <div className="flex items-end gap-4">
-            <p className="text-4xl font-bold text-gray-900">{stats.activeSprints}</p>
-            <p className="text-gray-500 mb-1">active sprints across all projects</p>
-          </div>
-          <p className="mt-4 text-sm text-gray-500">
-            Teams are actively working on their sprint goals
-          </p>
-        </div>
       </div>
 
       {/* Recent Organizations */}

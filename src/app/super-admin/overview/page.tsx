@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { Building2, Users, FolderKanban, CheckSquare, Clock, TrendingUp, Activity } from 'lucide-react'
+import { Building2, Users, FolderKanban, TrendingUp } from 'lucide-react'
 
 async function getOverviewStats() {
   const supabase = createClient()
@@ -25,33 +25,6 @@ async function getOverviewStats() {
       .from('projects')
       .select('*', { count: 'exact', head: true })
 
-    // Get projects by status
-    const { data: projectsByStatus } = await supabase
-      .from('projects')
-      .select('status')
-
-    const statusCounts = projectsByStatus?.reduce((acc, project) => {
-      acc[project.status] = (acc[project.status] || 0) + 1
-      return acc
-    }, {} as Record<string, number>) || { active: 0, archived: 0 }
-
-    // Get total tasks
-    const { count: taskCount } = await supabase
-      .from('tasks')
-      .select('*', { count: 'exact', head: true })
-
-    // Get completed tasks
-    const { count: completedTaskCount } = await supabase
-      .from('tasks')
-      .select('*', { count: 'exact', head: true })
-      .not('completed_at', 'is', null)
-
-    // Get active sprints
-    const { count: sprintCount } = await supabase
-      .from('sprints')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'active')
-
     // Get organizations created in last 30 days
     const thirtyDaysAgo = new Date()
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
@@ -72,13 +45,8 @@ async function getOverviewStats() {
       totalUsers: usersByRole?.length || 0,
       usersByRole: roleCounts,
       totalProjects: projectCount || 0,
-      projectsByStatus: statusCounts,
-      totalTasks: taskCount || 0,
-      completedTasks: completedTaskCount || 0,
-      activeSprints: sprintCount || 0,
       newOrganizations: newOrgCount || 0,
       newUsers: newUserCount || 0,
-      taskCompletionRate: taskCount && taskCount > 0 ? ((completedTaskCount || 0) / taskCount * 100).toFixed(1) : '0',
     }
   } catch (error) {
     console.error('Error fetching overview stats:', error)
@@ -87,13 +55,8 @@ async function getOverviewStats() {
       totalUsers: 0,
       usersByRole: { super_admin: 0, tenant_admin: 0, team_member: 0 },
       totalProjects: 0,
-      projectsByStatus: { active: 0, archived: 0 },
-      totalTasks: 0,
-      completedTasks: 0,
-      activeSprints: 0,
       newOrganizations: 0,
       newUsers: 0,
-      taskCompletionRate: '0',
     }
   }
 }
@@ -109,22 +72,13 @@ async function getRecentActivity() {
       .order('created_at', { ascending: false })
       .limit(5)
 
-    // Get recent projects
-    const { data: recentProjects } = await supabase
-      .from('projects')
-      .select('id, name, created_at, organization_id')
-      .order('created_at', { ascending: false })
-      .limit(5)
-
     return {
       recentOrganizations: recentOrgs || [],
-      recentProjects: recentProjects || [],
     }
   } catch (error) {
     console.error('Error fetching recent activity:', error)
     return {
       recentOrganizations: [],
-      recentProjects: [],
     }
   }
 }
@@ -153,18 +107,10 @@ export default async function AdminOverview() {
     {
       title: 'Total Projects',
       value: stats.totalProjects,
-      change: stats.projectsByStatus.active,
-      changeLabel: 'currently active',
+      change: 0,
+      changeLabel: 'across all tenants',
       icon: FolderKanban,
       color: 'bg-purple-500',
-    },
-    {
-      title: 'Total Tasks',
-      value: stats.totalTasks,
-      change: stats.taskCompletionRate,
-      changeLabel: '% completion rate',
-      icon: CheckSquare,
-      color: 'bg-orange-500',
     },
   ]
 
@@ -230,134 +176,49 @@ export default async function AdminOverview() {
         </div>
 
         <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Project Status</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Platform Growth</h3>
           <div className="space-y-4">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Active Projects</span>
-                <span className="text-sm font-bold text-gray-900">{stats.projectsByStatus.active || 0}</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-green-500 h-2 rounded-full"
-                  style={{
-                    width: stats.totalProjects > 0
-                      ? `${((stats.projectsByStatus.active || 0) / stats.totalProjects) * 100}%`
-                      : '0%',
-                  }}
-                />
+                <span className="text-sm font-medium text-gray-700">New Organizations (30 days)</span>
+                <span className="text-sm font-bold text-gray-900">{stats.newOrganizations}</span>
               </div>
             </div>
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">Archived Projects</span>
-                <span className="text-sm font-bold text-gray-900">{stats.projectsByStatus.archived || 0}</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-gray-500 h-2 rounded-full"
-                  style={{
-                    width: stats.totalProjects > 0
-                      ? `${((stats.projectsByStatus.archived || 0) / stats.totalProjects) * 100}%`
-                      : '0%',
-                  }}
-                />
+                <span className="text-sm font-medium text-gray-700">New Users (30 days)</span>
+                <span className="text-sm font-bold text-gray-900">{stats.newUsers}</span>
               </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Additional Metrics */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Active Sprints</h3>
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Clock className="h-5 w-5 text-blue-600" />
-            </div>
-          </div>
-          <p className="text-4xl font-bold text-gray-900">{stats.activeSprints}</p>
-          <p className="text-sm text-gray-500 mt-2">Sprints currently in progress</p>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Task Completion</h3>
-            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-              <CheckSquare className="h-5 w-5 text-green-600" />
-            </div>
-          </div>
-          <p className="text-4xl font-bold text-gray-900">{stats.completedTasks}</p>
-          <p className="text-sm text-gray-500 mt-2">Tasks completed out of {stats.totalTasks}</p>
-        </div>
-
-        <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-200">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">Completion Rate</h3>
-            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-              <Activity className="h-5 w-5 text-purple-600" />
-            </div>
-          </div>
-          <p className="text-4xl font-bold text-gray-900">{stats.taskCompletionRate}%</p>
-          <p className="text-sm text-gray-500 mt-2">Overall task completion rate</p>
         </div>
       </div>
 
       {/* Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Recent Organizations</h3>
-          </div>
-          <div className="divide-y divide-gray-200">
-            {activity.recentOrganizations.length === 0 ? (
-              <div className="p-6 text-center text-gray-500">
-                No organizations yet
-              </div>
-            ) : (
-              activity.recentOrganizations.map((org: any) => (
-                <div key={org.id} className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <Building2 className="h-4 w-4 text-blue-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">{org.name}</p>
-                      <p className="text-xs text-gray-500">{new Date(org.created_at).toLocaleDateString()}</p>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="p-6 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-900">Recent Organizations</h3>
         </div>
-
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="p-6 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">Recent Projects</h3>
-          </div>
-          <div className="divide-y divide-gray-200">
-            {activity.recentProjects.length === 0 ? (
-              <div className="p-6 text-center text-gray-500">
-                No projects yet
-              </div>
-            ) : (
-              activity.recentProjects.map((project: any) => (
-                <div key={project.id} className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <FolderKanban className="h-4 w-4 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-gray-900">{project.name}</p>
-                      <p className="text-xs text-gray-500">{new Date(project.created_at).toLocaleDateString()}</p>
-                    </div>
+        <div className="divide-y divide-gray-200">
+          {activity.recentOrganizations.length === 0 ? (
+            <div className="p-6 text-center text-gray-500">
+              No organizations yet
+            </div>
+          ) : (
+            activity.recentOrganizations.map((org: any) => (
+              <div key={org.id} className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Building2 className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">{org.name}</p>
+                    <p className="text-xs text-gray-500">{new Date(org.created_at).toLocaleDateString()}</p>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
