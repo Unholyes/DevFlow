@@ -33,16 +33,27 @@ export function LoginForm() {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
         email: data.email,
         password: data.password,
       })
 
       if (error) {
         setError(error.message)
-      } else {
-        // Redirect to dashboard or home
-        window.location.href = "/dashboard"
+      } else if (authData.user) {
+        // Get user role to determine redirect
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', authData.user.id)
+          .single()
+
+        // Redirect based on role
+        if (profile?.role === 'super_admin') {
+          window.location.href = "/super-admin/dashboard"
+        } else {
+          window.location.href = "/dashboard"
+        }
       }
     } catch (err) {
       setError("An unexpected error occurred")

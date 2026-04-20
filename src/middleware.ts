@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
+import { USER_ROLES } from './constants'
 
 export async function middleware(req: NextRequest) {
   let res = NextResponse.next({
@@ -43,13 +44,50 @@ export async function middleware(req: NextRequest) {
   } = await supabase.auth.getSession()
 
   const { pathname } = req.nextUrl
+
+  // Define route types
+  const isAdminRoute = pathname.startsWith('/super-admin')
   const isProtectedRoute =
     pathname.startsWith('/dashboard') || pathname.startsWith('/settings')
+  const isAuthRoute = pathname.startsWith('/auth')
 
-  if (isProtectedRoute && !session) {
+  // Redirect unauthenticated users from protected routes
+  if ((isProtectedRoute || isAdminRoute) && !session) {
     const redirectUrl = new URL('/auth/login', req.url)
     redirectUrl.searchParams.set('redirectedFrom', pathname)
     return NextResponse.redirect(redirectUrl)
+  }
+
+  // Role-based access control for admin routes
+  if (isAdminRoute && session) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', session.user.id)
+      .single()
+
+    if (!profile || profile.role !== USER_ROLES.SUPER_ADMIN) {
+      // Redirect non-super-admin users to dashboard
+      return NextResponse.redirect(new URL('/dashboard', req.url))
+    }
+  }
+
+  // Redirect authenticated users away from auth pages
+  if (isAuthRoute && session) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', session.user.id)
+      .single()
+
+    if (profile) {
+      // Redirect based on role
+      if (profile.role === USER_ROLES.SUPER_ADMIN) {
+        return NextResponse.redirect(new URL('/super-admin/dashboard', req.url))
+      } else {
+        return NextResponse.redirect(new URL('/dashboard', req.url))
+      }
+    }
   }
 
   return res
