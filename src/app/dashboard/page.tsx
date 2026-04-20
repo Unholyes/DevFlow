@@ -1,10 +1,32 @@
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 import { ActivityFeed } from '@/components/dashboard/activity-feed'
-import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
 import { DashboardStats } from '@/components/dashboard/dashboard-stats'
 import { ProjectCards } from '@/components/dashboard/project-cards'
 import { TaskBoard } from '@/components/dashboard/task-board'
+import { TenantAdminDashboardHome } from '@/components/dashboard/tenant-admin-dashboard-home'
 
-export default function Dashboard() {
+export default async function Dashboard() {
+  const supabase = createClient()
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    redirect('/auth/login')
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single()
+
+  if (profile?.role === 'tenant_admin') {
+    return <TenantAdminDashboardHome />
+  }
+
   // Stats initialized to zero
   const stats = {
     totalProjects: 0,
@@ -37,12 +59,10 @@ export default function Dashboard() {
   }> = []
 
   return (
-    <DashboardLayout>
+    <>
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="mt-2 text-gray-600">
-          Welcome back! Here's an overview of your projects and tasks.
-        </p>
+        <p className="mt-2 text-gray-600">Welcome back! Here's an overview of your projects and tasks.</p>
       </div>
 
       <DashboardStats stats={stats} />
@@ -74,6 +94,6 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
-    </DashboardLayout>
+    </>
   )
 }

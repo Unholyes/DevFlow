@@ -4,17 +4,19 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Calendar,
-  CheckSquare,
   Home,
   Settings,
-  Users,
   FolderOpen,
   BarChart3,
+  UserCog,
+  Users,
+  CheckSquare,
+  Calendar,
   ChevronDown,
   ChevronRight,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { UserRole } from '@/types'
 
 type Project = {
   id: string
@@ -32,19 +34,28 @@ const navigation = [
   { name: 'Reports & Analytics', href: '/dashboard/reports', icon: BarChart3 },
 ]
 
+const tenantAdminNavigation = [
+  { name: 'Dashboard', href: '/dashboard', icon: Home },
+  { name: 'Accounts', href: '/dashboard/accounts', icon: UserCog },
+  { name: 'Projects', href: '/dashboard/projects', icon: FolderOpen },
+  { name: 'Reports & Analytics', href: '/dashboard/reports', icon: BarChart3 },
+]
+
 const bottomNavigation = [
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
-export function DashboardSidebar() {
+export function DashboardSidebar({ role = 'team_member' }: { role?: UserRole }) {
   const pathname = usePathname()
   const [isProjectsOpen, setIsProjectsOpen] = useState(true)
+
+  const navItems = role === 'tenant_admin' ? tenantAdminNavigation : navigation
 
   return (
     <div className="bg-white w-64 min-h-screen border-r border-gray-200 flex flex-col">
       {/* Navigation */}
       <nav className="flex-2 px-4 py-6 space-y-2">
-        {navigation.map((item) => {
+        {navItems.map((item) => {
           const isActive = item.name === 'Dashboard'
             ? pathname === item.href
             : pathname === item.href || pathname.startsWith(`${item.href}/`)

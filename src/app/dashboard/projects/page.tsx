@@ -1,4 +1,3 @@
-import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
 import { ProjectCards } from '@/components/dashboard/project-cards'
 
 type ProjectCardData = {
@@ -18,19 +17,13 @@ const mockProjects: ProjectCardData[] = []
 
 export default function ProjectsPage() {
   return (
-    <DashboardLayout>
-      <div className="space-y-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">All Projects</h1>
-          <p className="mt-2 text-gray-600">
-            View and manage all your projects in one place.
-          </p>
-        </div>
-
-        {/* Projects Grid */}
-        <ProjectCards projects={mockProjects} showViewAll={false} />
+    <div className="space-y-8">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">All Projects</h1>
+        <p className="mt-2 text-gray-600">View and manage all your projects in one place.</p>
       </div>
-    </DashboardLayout>
+
+      <ProjectCards projects={mockProjects} showViewAll={false} />
+    </div>
   )
 }
