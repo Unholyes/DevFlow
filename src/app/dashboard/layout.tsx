@@ -23,6 +23,11 @@ export default async function DashboardRouteLayout({ children }: { children: Rea
 
   const role = (profile?.role ?? 'team_member') as UserRole
 
+  // Redirect super admins to their dashboard
+  if (role === 'super_admin') {
+    redirect('/super-admin/dashboard')
+  }
+
   return <DashboardLayout role={role}>{children}</DashboardLayout>
 }
 

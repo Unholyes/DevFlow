@@ -26,7 +26,7 @@ type Project = {
 // Mock projects for demo
 const mockProjects: Project[] = []
 
-const navigation = [
+const tenantMemberNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
   { name: 'Tasks', href: '/dashboard/tasks', icon: CheckSquare },
   { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
@@ -49,7 +49,7 @@ export function DashboardSidebar({ role = 'team_member' }: { role?: UserRole }) 
   const pathname = usePathname()
   const [isProjectsOpen, setIsProjectsOpen] = useState(true)
 
-  const navItems = role === 'tenant_admin' ? tenantAdminNavigation : navigation
+  const navItems = role === 'tenant_admin' ? tenantAdminNavigation : tenantMemberNavigation
 
   return (
     <div className="bg-white w-64 min-h-screen border-r border-gray-200 flex flex-col">
