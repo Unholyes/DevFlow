@@ -41,6 +41,18 @@ export default function CreateTaskModal({ onClose }: { onClose: () => void }) {
           </div>
           
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Story Points</label>
+            <input
+              type="number"
+              min="0"
+              max="21"
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="0"
+            />
+            <p className="text-xs text-gray-500 mt-1">Fibonacci scale: 0, 1, 2, 3, 5, 8, 13, 21</p>
+          </div>
+          
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
             <input
               type="date"
