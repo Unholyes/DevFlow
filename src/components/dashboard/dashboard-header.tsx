@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, Bell, Plus, Settings, User, LogOut } from 'lucide-react'
+import { Search, Bell, Plus, Settings, User, LogOut, Menu } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -23,7 +23,12 @@ type HeaderUser = {
   avatarUrl: string | null
 }
 
-export function DashboardHeader() {
+interface DashboardHeaderProps {
+  isSidebarCollapsed?: boolean
+  onToggleSidebar?: () => void
+}
+
+export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }: DashboardHeaderProps) {
   const router = useRouter()
   const [userInfo, setUserInfo] = useState<HeaderUser | null>(null)
 
@@ -78,8 +83,18 @@ export function DashboardHeader() {
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-4">
       <div className="flex items-center justify-between">
-        {/* Logo */}
+        {/* Logo & Toggle */}
         <div className="flex items-center space-x-4">
+          {onToggleSidebar && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onToggleSidebar}
+              className="p-2"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+          )}
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
               <span className="text-white font-bold text-sm">DF</span>

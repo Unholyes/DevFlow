@@ -6,7 +6,8 @@ import { ProjectHeader } from '@/components/project/project-header';
 import { ProjectStats } from '@/components/project/project-stats';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, Clock, Circle, ArrowRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { CheckCircle2, Clock, Circle, ArrowRight, List, Plus } from 'lucide-react';
 
 // The Data with the Phases included
 const mockProjects = [
@@ -53,6 +54,18 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
     <div className="space-y-6">
       <ProjectHeader project={project} />
       <ProjectStats project={project} />
+
+      {/* Quick Actions */}
+      <div className="flex gap-3">
+        <Button onClick={() => router.push(`/dashboard/projects/${params.id}/backlog`)} variant="outline">
+          <List className="h-4 w-4 mr-2" />
+          View Backlog
+        </Button>
+        <Button onClick={() => router.push(`/dashboard/projects/${params.id}/sprints/plan`)} className="bg-blue-600 hover:bg-blue-700">
+          <Plus className="h-4 w-4 mr-2" />
+          Plan Sprint
+        </Button>
+      </div>
 
       <Card className="border-gray-200 shadow-sm">
         <CardHeader>
