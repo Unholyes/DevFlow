@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, Bell, Plus, Settings, User, LogOut, Menu } from 'lucide-react'
+import { Search, Bell, Plus, Settings, User, LogOut, Menu, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { supabase } from '@/lib/supabase/client'
+import { useOrganizationName } from '@/lib/hooks/use-organization-name'
 
 type HeaderUser = {
   fullName: string
@@ -31,6 +32,7 @@ interface DashboardHeaderProps {
 export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }: DashboardHeaderProps) {
   const router = useRouter()
   const [userInfo, setUserInfo] = useState<HeaderUser | null>(null)
+  const { name: organizationName } = useOrganizationName()
 
   useEffect(() => {
     let isMounted = true
@@ -116,6 +118,16 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
 
         {/* Right Side Actions */}
         <div className="flex items-center space-x-4">
+          {/* Organization */}
+          {organizationName && (
+            <div className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200">
+              <Building2 className="h-4 w-4 text-gray-500" />
+              <span className="text-sm text-gray-700 truncate max-w-[180px]">
+                {organizationName}
+              </span>
+            </div>
+          )}
+
           {/* Quick Actions */}
           <Button size="sm" className="flex items-center space-x-2">
             <Plus className="h-4 w-4" />

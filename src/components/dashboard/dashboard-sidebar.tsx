@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { UserRole } from '@/types'
+import { useOrganizationName } from '@/lib/hooks/use-organization-name'
 
 type Project = {
   id: string
@@ -48,6 +49,7 @@ const bottomNavigation = [
 export function DashboardSidebar({ role = 'team_member', isCollapsed = false, onToggle }: { role?: UserRole; isCollapsed?: boolean; onToggle?: () => void }) {
   const pathname = usePathname()
   const [isProjectsOpen, setIsProjectsOpen] = useState(true)
+  const { name: organizationName } = useOrganizationName()
 
   const navItems = role === 'tenant_admin' ? tenantAdminNavigation : tenantMemberNavigation
 
@@ -158,7 +160,9 @@ export function DashboardSidebar({ role = 'team_member', isCollapsed = false, on
               <span className="text-white font-bold text-sm">DF</span>
             </div>
             <div>
-              <p className="text-sm font-medium text-gray-900">DevFlow Team</p>
+              <p className="text-sm font-medium text-gray-900">
+                {organizationName || 'No organization'}
+              </p>
               <p className="text-xs text-gray-500">Workspace</p>
             </div>
           </div>
