@@ -1,5 +1,6 @@
 "use client";
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { notFound } from 'next/navigation';
 import { ProjectHeader } from '@/components/project/project-header';
@@ -7,7 +8,7 @@ import { ProjectStats } from '@/components/project/project-stats';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, Clock, Circle, ArrowRight, List, Plus } from 'lucide-react';
+import { CheckCircle2, Clock, Circle, ArrowRight, List, Plus, ArrowLeft } from 'lucide-react';
 
 // The Data with the Phases included
 const mockProjects = [
@@ -52,6 +53,15 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="space-y-6">
+      {/* Back Button */}
+      <Link 
+        href="/dashboard/projects"
+        className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors"
+      >
+        <ArrowLeft className="h-4 w-4 mr-1" />
+        Back to Projects
+      </Link>
+
       <ProjectHeader project={project} />
       <ProjectStats project={project} />
 

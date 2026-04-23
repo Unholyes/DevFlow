@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { useState } from 'react';
 import { Plus, Layers, Calendar, CheckCircle2, Clock, ArrowRight, TrendingUp } from 'lucide-react';
 
 import ScrumView from '@/components/project/ScrumView';
@@ -46,14 +45,12 @@ export default function PhasePage({ params }: { params: { id: string, phaseId: s
   const project = mockProjects.find(p => p.id === params.id);
   const phase = project?.phases.find(p => p.id === params.phaseId);
 
-  const [showScrumView, setShowScrumView] = useState(false);
-
   if (!project || !phase) {
     notFound();
   }
 
   // For Scrum methodology, show overview first
-  if (phase.sdlcType === 'Scrum' && !showScrumView) {
+  if (phase.sdlcType === 'Scrum') {
     return (
       <div className="space-y-6">
         {/* Top Header Section with Back Button */}
@@ -273,13 +270,13 @@ export default function PhasePage({ params }: { params: { id: string, phaseId: s
                 <h3 className="text-lg font-semibold text-gray-900">Scrum Board</h3>
                 <p className="text-sm text-gray-500 mt-1">View and manage tasks on the scrum board</p>
               </div>
-              <button
-                onClick={() => setShowScrumView(true)}
+              <Link
+                href={`/dashboard/projects/${params.id}/phases/${params.phaseId}/board`}
                 className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
               >
                 <Layers className="h-4 w-4" />
                 Open Scrum Board
-              </button>
+              </Link>
             </div>
           </div>
         </div>
@@ -320,7 +317,7 @@ export default function PhasePage({ params }: { params: { id: string, phaseId: s
 
       {/* Dynamic View Rendering based on Phase Type */}
       <div className="mt-4">
-        {phase.sdlcType === 'Scrum' && <ScrumView tasks={[]} />}
+        {phase.sdlcType === 'Scrum' && <ScrumView />}
         {phase.sdlcType === 'Kanban' && <KanbanView tasks={[]} />}
         {phase.sdlcType === 'Waterfall' && <WaterfallView tasks={[]} />}
         {phase.sdlcType === 'DevOps' && <DevOpsView tasks={[]} />}
