@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import CreateTaskModal from '@/components/project/CreateTaskModal';
-import { ChevronRight, Calendar, Users, MoreHorizontal, Plus, Settings, ZoomIn, ZoomOut, X, Clock, AlertCircle, LayoutGrid } from 'lucide-react';
+import { ChevronRight, Calendar, Users, MoreHorizontal, Plus, Settings, ZoomIn, ZoomOut, X, Clock, AlertCircle, LayoutGrid, FileText, Upload, Check } from 'lucide-react';
 
 // --- Types ---
 type TimelineView = 'day' | 'week' | 'month';
@@ -154,10 +154,14 @@ export default function WaterfallView({ tasks }: { tasks: any[] }) {
   const [ganttTasks, setGanttTasks] = useState(GANTT_TASKS);
   const [zoomLevel, setZoomLevel] = useState(0.8);
   const [timelineView, setTimelineView] = useState<TimelineView>('day');
+  const [documentSubmitted, setDocumentSubmitted] = useState(false);
+  const [documentName, setDocumentName] = useState('');
+  const [showUploadModal, setShowUploadModal] = useState(false);
   
   const timelineDates = generateTimelineDates(ganttTasks, timelineView);
   const unitWidth = (timelineView === 'day' ? 50 : timelineView === 'week' ? 120 : 200) * zoomLevel;
   const totalWidth = timelineDates.length * unitWidth;
+  const allTasksCompleted = ganttTasks.every(t => t.status === 'Completed');
 
   const getTaskPosition = (task: GanttTask) => {
     const startIndex = timelineDates.findIndex(d => {
@@ -452,6 +456,92 @@ export default function WaterfallView({ tasks }: { tasks: any[] }) {
         </div>
       </div>
 
+      {/* Document Submission Section */}
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className={`p-3 rounded-lg ${documentSubmitted ? 'bg-green-100' : 'bg-blue-100'}`}>
+              {documentSubmitted ? (
+                <Check className="h-6 w-6 text-green-600" />
+              ) : (
+                <FileText className="h-6 w-6 text-blue-600" />
+              )}
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Phase Completion Document</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                {documentSubmitted 
+                  ? `Document submitted: ${documentName}`
+                  : 'Submit the final phase documentation to complete this phase'
+                }
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowUploadModal(true)}
+            disabled={documentSubmitted}
+            className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${
+              documentSubmitted
+                ? 'bg-green-100 text-green-700 cursor-default'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+            }`}
+          >
+            {documentSubmitted ? (
+              <>
+                <Check className="h-4 w-4" />
+                Submitted
+              </>
+            ) : (
+              <>
+                <Upload className="h-4 w-4" />
+                Upload Document
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Complete Phase Button */}
+      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">Complete Phase</h3>
+            <p className="text-sm text-gray-500 mt-1">
+              {allTasksCompleted && documentSubmitted
+                ? 'All requirements met. You can now complete this phase.'
+                : 'Complete all tasks and submit the required document to finish this phase.'
+              }
+            </p>
+          </div>
+          <button
+            disabled={!allTasksCompleted || !documentSubmitted}
+            className={`px-6 py-3 rounded-lg text-sm font-medium transition-colors ${
+              allTasksCompleted && documentSubmitted
+                ? 'bg-green-600 hover:bg-green-700 text-white'
+                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            Complete Phase
+          </button>
+        </div>
+        {(!allTasksCompleted || !documentSubmitted) && (
+          <div className="mt-4 flex items-center gap-4 text-sm text-gray-500">
+            {!allTasksCompleted && (
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-orange-500" />
+                <span>{ganttTasks.filter(t => t.status !== 'Completed').length} tasks remaining</span>
+              </div>
+            )}
+            {!documentSubmitted && (
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 text-orange-500" />
+                <span>Document not submitted</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Task Detail Modal */}
       {selectedTask && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -561,6 +651,66 @@ export default function WaterfallView({ tasks }: { tasks: any[] }) {
       )}
 
       {isModalOpen && <CreateTaskModal onClose={() => setIsModalOpen(false)} />}
+
+      {/* Document Upload Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+            <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-gray-900">Upload Phase Document</h3>
+              <button 
+                onClick={() => setShowUploadModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="h-5 w-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Document Name</label>
+                <input
+                  type="text"
+                  value={documentName}
+                  onChange={(e) => setDocumentName(e.target.value)}
+                  placeholder="e.g., Requirements Phase Report.pdf"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Upload File</label>
+                <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors cursor-pointer">
+                  <Upload className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm text-gray-600">Click to upload or drag and drop</p>
+                  <p className="text-xs text-gray-400 mt-1">PDF, DOC, DOCX up to 10MB</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+              <button 
+                onClick={() => setShowUploadModal(false)}
+                className="px-4 py-2 rounded-lg border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  if (documentName) {
+                    setDocumentSubmitted(true);
+                    setShowUploadModal(false);
+                  }
+                }}
+                disabled={!documentName}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                Submit Document
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
