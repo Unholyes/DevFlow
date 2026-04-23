@@ -81,6 +81,9 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const { searchParams } = new URL(request.url)
+    const admin = searchParams.get('admin') === '1'
+
     // Check if user is super admin
     const { data: profile } = await supabase
       .from('profiles')
@@ -89,6 +92,9 @@ export async function GET(request: Request) {
       .single()
 
     if (profile?.role !== 'super_admin') {
+      if (admin) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      }
       // Regular users can only see their own applications
       const { data: applications } = await supabase
         .from('organization_applications')
@@ -100,7 +106,6 @@ export async function GET(request: Request) {
     }
 
     // Super admins can see all applications
-    const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
 
     let query = supabase
@@ -109,7 +114,7 @@ export async function GET(request: Request) {
         *,
         profiles:user_id (
           full_name,
-          email
+          role
         )
       `)
       .order('submitted_at', { ascending: false })
@@ -118,7 +123,12 @@ export async function GET(request: Request) {
       query = query.eq('status', status)
     }
 
-    const { data: applications } = await query
+    const { data: applications, error: applicationsError } = await query
+
+    if (applicationsError) {
+      console.error('Error fetching applications (super admin):', applicationsError)
+      return NextResponse.json({ error: 'Failed to fetch applications' }, { status: 500 })
+    }
 
     return NextResponse.json({ applications })
   } catch (error) {

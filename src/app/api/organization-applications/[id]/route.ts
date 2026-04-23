@@ -46,9 +46,16 @@ export async function PATCH(
       return NextResponse.json({ error: 'Application has already been processed' }, { status: 400 })
     }
 
+    const nextStatus =
+      action === 'approve'
+        ? 'approved'
+        : action === 'decline'
+        ? 'declined'
+        : 'revision_requested'
+
     // Update the application status
     const updateData: any = {
-      status: action === 'revision' ? 'revision_requested' : action,
+      status: nextStatus,
       reviewed_at: new Date().toISOString(),
       reviewed_by: user.id,
     }
@@ -70,12 +77,14 @@ export async function PATCH(
     // If approved, create the organization and update user role
     if (action === 'approve') {
       // Create the organization
-      const { error: orgError } = await supabase
+      const { data: organization, error: orgError } = await supabase
         .from('organizations')
         .insert({
           name: application.organization_name,
           owner_id: application.user_id,
         })
+        .select()
+        .single()
 
       if (orgError) {
         console.error('Error creating organization:', orgError)
@@ -85,6 +94,21 @@ export async function PATCH(
           .update({ status: 'pending' })
           .eq('id', params.id)
         return NextResponse.json({ error: 'Failed to create organization' }, { status: 500 })
+      }
+
+      // Ensure the owner is also a member/admin of the org (RBAC in app uses this table)
+      if (organization?.id) {
+        const { error: memberError } = await supabase
+          .from('organization_members')
+          .insert({
+            organization_id: organization.id,
+            user_id: application.user_id,
+            role: 'admin',
+          })
+
+        if (memberError) {
+          console.error('Error creating owner membership:', memberError)
+        }
       }
 
       // Update user role to tenant_admin

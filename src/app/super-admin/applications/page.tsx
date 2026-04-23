@@ -40,7 +40,7 @@ interface Application {
   reviewed_at: string | null
   profiles: {
     full_name: string | null
-    email: string
+    role?: string | null
   }
 }
 
@@ -64,14 +64,16 @@ export default function ApplicationsPage() {
     setLoading(true)
     try {
       const url = statusFilter === 'all' 
-        ? '/api/organization-applications'
-        : `/api/organization-applications?status=${statusFilter}`
+        ? '/api/organization-applications?admin=1'
+        : `/api/organization-applications?admin=1&status=${statusFilter}`
       
-      const response = await fetch(url)
+      const response = await fetch(url, { credentials: 'include' })
       const data = await response.json()
       
       if (response.ok) {
         setApplications(data.applications || [])
+      } else {
+        console.error('Error fetching applications:', data?.error || response.statusText)
       }
     } catch (error) {
       console.error('Error fetching applications:', error)
@@ -124,7 +126,7 @@ export default function ApplicationsPage() {
     return (
       app.organization_name.toLowerCase().includes(searchLower) ||
       app.contact_email.toLowerCase().includes(searchLower) ||
-      app.profiles.email.toLowerCase().includes(searchLower)
+      (app.profiles?.full_name || '').toLowerCase().includes(searchLower)
     )
   })
 
@@ -212,7 +214,7 @@ export default function ApplicationsPage() {
                   <TableCell>
                     <div>
                       <p className="font-medium">{application.profiles.full_name || 'N/A'}</p>
-                      <p className="text-sm text-gray-500">{application.profiles.email}</p>
+                      <p className="text-sm text-gray-500">{application.contact_email}</p>
                     </div>
                   </TableCell>
                   <TableCell>{application.industry || 'N/A'}</TableCell>
