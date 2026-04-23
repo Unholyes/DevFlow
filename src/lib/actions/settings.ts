@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 
@@ -57,6 +58,7 @@ const updateOrganizationSchema = z.object({
 export async function updateOrganization(formData: FormData) {
   try {
     const supabase = createClient()
+    const admin = createAdminClient()
 
     // Get current user and verify they are a tenant admin
     const { data: { user }, error: userError } = await supabase.auth.getUser()
@@ -75,14 +77,32 @@ export async function updateOrganization(formData: FormData) {
       throw new Error('Insufficient permissions')
     }
 
-    // Get user's organization
-    const { data: org, error: orgError } = await supabase
+    // Find the org the user can administer (owner OR org admin member)
+    let organizationId: string | null = null
+
+    const { data: ownedOrg } = await supabase
       .from('organizations')
       .select('id')
       .eq('owner_id', user.id)
-      .single()
+      .maybeSingle()
 
-    if (orgError || !org) {
+    if (ownedOrg?.id) {
+      organizationId = ownedOrg.id
+    } else {
+      const { data: membership } = await supabase
+        .from('organization_members')
+        .select('organization_id, role')
+        .eq('user_id', user.id)
+        .order('joined_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (membership?.organization_id && membership.role === 'admin') {
+        organizationId = membership.organization_id
+      }
+    }
+
+    if (!organizationId) {
       throw new Error('Organization not found')
     }
 
@@ -92,13 +112,13 @@ export async function updateOrganization(formData: FormData) {
     })
 
     // Update organization
-    const { error } = await supabase
+    const { error } = await admin
       .from('organizations')
       .update({
         name: validatedData.name,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', org.id)
+      .eq('id', organizationId)
 
     if (error) {
       throw new Error(error.message)

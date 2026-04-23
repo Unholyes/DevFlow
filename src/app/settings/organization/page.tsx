@@ -1,10 +1,12 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { updateOrganization } from '@/lib/actions/settings'
 import { OrganizationForm } from '@/components/settings/organization-form'
 
 export default async function OrganizationPage() {
   const supabase = createClient()
+  const admin = createAdminClient()
 
   const { data: { user }, error: userError } = await supabase.auth.getUser()
   if (userError || !user) {
@@ -22,15 +24,43 @@ export default async function OrganizationPage() {
     redirect('/settings')
   }
 
-  // Get user's organization
-  const { data: organization } = await supabase
+  // Get user's organization (owner first, otherwise membership)
+  let organizationId: string | null = null
+
+  const { data: ownedOrg } = await admin
     .from('organizations')
     .select('*')
     .eq('owner_id', user.id)
     .single()
 
+  if (ownedOrg?.id) {
+    organizationId = ownedOrg.id
+  } else {
+    const { data: membership } = await admin
+      .from('organization_members')
+      .select('organization_id')
+      .eq('user_id', user.id)
+      .order('joined_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    organizationId = membership?.organization_id ?? null
+  }
+
+  const { data: organization } = organizationId
+    ? await admin.from('organizations').select('*').eq('id', organizationId).single()
+    : { data: null }
+
+  // Get owner profile (display info) - uses the org owner_id when available
+  const ownerId = organization?.owner_id ?? user.id
+  const { data: ownerProfile } = await admin
+    .from('profiles')
+    .select('full_name')
+    .eq('id', ownerId)
+    .single()
+
   // Get organization members
-  const { data: members } = await supabase
+  const { data: members } = await admin
     .from('organization_members')
     .select(`
       *,
@@ -39,7 +69,7 @@ export default async function OrganizationPage() {
         avatar_url
       )
     `)
-    .eq('organization_id', organization?.id)
+    .eq('organization_id', organizationId ?? '')
 
   if (!organization) {
     return (
@@ -60,6 +90,35 @@ export default async function OrganizationPage() {
       </div>
 
       <div className="space-y-8">
+        {/* Organization Overview */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Overview</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="rounded-lg bg-gray-50 border border-gray-200 p-4">
+              <p className="text-xs font-medium text-gray-500">Organization</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900">{organization.name}</p>
+            </div>
+            <div className="rounded-lg bg-gray-50 border border-gray-200 p-4">
+              <p className="text-xs font-medium text-gray-500">Owner</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900">{ownerProfile?.full_name || 'You'}</p>
+            </div>
+            <div className="rounded-lg bg-gray-50 border border-gray-200 p-4">
+              <p className="text-xs font-medium text-gray-500">Members</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900">{members?.length ?? 0}</p>
+            </div>
+            <div className="rounded-lg bg-gray-50 border border-gray-200 p-4">
+              <p className="text-xs font-medium text-gray-500">Created</p>
+              <p className="mt-1 text-sm font-semibold text-gray-900">
+                {organization.created_at ? new Date(organization.created_at).toLocaleDateString() : 'Unknown'}
+              </p>
+            </div>
+            <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 sm:col-span-2">
+              <p className="text-xs font-medium text-gray-500">Organization ID</p>
+              <p className="mt-1 text-sm font-mono text-gray-900 break-all">{organization.id}</p>
+            </div>
+          </div>
+        </div>
+
         {/* Organization Settings */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Organization Details</h2>
