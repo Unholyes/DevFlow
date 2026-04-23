@@ -38,10 +38,10 @@ interface Application {
   revision_notes: string | null
   submitted_at: string
   reviewed_at: string | null
-  profiles: {
+  profiles?: {
     full_name: string | null
     role?: string | null
-  }
+  } | null
 }
 
 export default function ApplicationsPage() {
@@ -55,6 +55,7 @@ export default function ApplicationsPage() {
   const [actionType, setActionType] = useState<'approve' | 'decline' | 'revision'>('approve')
   const [revisionNotes, setRevisionNotes] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   useEffect(() => {
     fetchApplications()
@@ -91,6 +92,7 @@ export default function ApplicationsPage() {
     setSelectedApplication(application)
     setActionType(action)
     setRevisionNotes('')
+    setActionError(null)
     setIsActionModalOpen(true)
   }
 
@@ -98,6 +100,7 @@ export default function ApplicationsPage() {
     if (!selectedApplication) return
 
     setActionLoading(true)
+    setActionError(null)
     try {
       const response = await fetch(`/api/organization-applications/${selectedApplication.id}`, {
         method: 'PATCH',
@@ -108,14 +111,19 @@ export default function ApplicationsPage() {
         }),
       })
 
+      const data = await response.json().catch(() => ({}))
+
       if (response.ok) {
         setIsActionModalOpen(false)
         setSelectedApplication(null)
         setRevisionNotes('')
         fetchApplications()
+      } else {
+        setActionError(data?.error || 'Failed to perform action')
       }
     } catch (error) {
       console.error('Error performing action:', error)
+      setActionError('Network error while performing action')
     } finally {
       setActionLoading(false)
     }
@@ -213,7 +221,7 @@ export default function ApplicationsPage() {
                   </TableCell>
                   <TableCell>
                     <div>
-                      <p className="font-medium">{application.profiles.full_name || 'N/A'}</p>
+                      <p className="font-medium">{application.profiles?.full_name || 'N/A'}</p>
                       <p className="text-sm text-gray-500">{application.contact_email}</p>
                     </div>
                   </TableCell>
@@ -290,7 +298,7 @@ export default function ApplicationsPage() {
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-gray-500">Applicant Name</Label>
-                  <p className="font-medium">{selectedApplication.profiles.full_name || 'N/A'}</p>
+                  <p className="font-medium">{selectedApplication.profiles?.full_name || 'N/A'}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-gray-500">Contact Email</Label>
@@ -372,6 +380,11 @@ export default function ApplicationsPage() {
                 onChange={(e) => setRevisionNotes(e.target.value)}
                 rows={4}
               />
+            </div>
+          )}
+          {actionError && (
+            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
+              {actionError}
             </div>
           )}
           <DialogFooter>

@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 
 export async function PATCH(
@@ -7,6 +8,7 @@ export async function PATCH(
 ) {
   try {
     const supabase = createClient()
+    const admin = createAdminClient()
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
@@ -32,11 +34,16 @@ export async function PATCH(
     }
 
     // Get the application
-    const { data: application } = await supabase
+    const { data: application, error: applicationError } = await admin
       .from('organization_applications')
       .select('*')
       .eq('id', params.id)
       .single()
+
+    if (applicationError) {
+      console.error('Error fetching application:', applicationError)
+      return NextResponse.json({ error: 'Failed to fetch application' }, { status: 500 })
+    }
 
     if (!application) {
       return NextResponse.json({ error: 'Application not found' }, { status: 404 })
@@ -64,7 +71,7 @@ export async function PATCH(
       updateData.revision_notes = revision_notes
     }
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await admin
       .from('organization_applications')
       .update(updateData)
       .eq('id', params.id)
@@ -77,7 +84,7 @@ export async function PATCH(
     // If approved, create the organization and update user role
     if (action === 'approve') {
       // Create the organization
-      const { data: organization, error: orgError } = await supabase
+      const { data: organization, error: orgError } = await admin
         .from('organizations')
         .insert({
           name: application.organization_name,
@@ -89,7 +96,7 @@ export async function PATCH(
       if (orgError) {
         console.error('Error creating organization:', orgError)
         // Rollback the application status
-        await supabase
+        await admin
           .from('organization_applications')
           .update({ status: 'pending' })
           .eq('id', params.id)
@@ -98,7 +105,7 @@ export async function PATCH(
 
       // Ensure the owner is also a member/admin of the org (RBAC in app uses this table)
       if (organization?.id) {
-        const { error: memberError } = await supabase
+        const { error: memberError } = await admin
           .from('organization_members')
           .insert({
             organization_id: organization.id,
@@ -112,7 +119,7 @@ export async function PATCH(
       }
 
       // Update user role to tenant_admin
-      const { error: roleError } = await supabase
+      const { error: roleError } = await admin
         .from('profiles')
         .update({ role: 'tenant_admin' })
         .eq('id', application.user_id)

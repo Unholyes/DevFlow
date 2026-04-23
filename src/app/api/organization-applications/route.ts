@@ -110,13 +110,7 @@ export async function GET(request: Request) {
 
     let query = supabase
       .from('organization_applications')
-      .select(`
-        *,
-        profiles:user_id (
-          full_name,
-          role
-        )
-      `)
+      .select('*')
       .order('submitted_at', { ascending: false })
 
     if (status) {
