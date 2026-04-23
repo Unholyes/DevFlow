@@ -55,18 +55,6 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
       <ProjectHeader project={project} />
       <ProjectStats project={project} />
 
-      {/* Quick Actions */}
-      <div className="flex gap-3">
-        <Button onClick={() => router.push(`/dashboard/projects/${params.id}/backlog`)} variant="outline">
-          <List className="h-4 w-4 mr-2" />
-          View Backlog
-        </Button>
-        <Button onClick={() => router.push(`/dashboard/projects/${params.id}/sprints/plan`)} className="bg-blue-600 hover:bg-blue-700">
-          <Plus className="h-4 w-4 mr-2" />
-          Plan Sprint
-        </Button>
-      </div>
-
       <Card className="border-gray-200 shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg text-gray-900">Project Phases Timeline</CardTitle>
