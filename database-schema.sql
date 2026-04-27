@@ -55,6 +55,63 @@ CREATE POLICY "Organization owners can update their organizations" ON public.org
   FOR UPDATE USING (auth.uid() = owner_id);
 
 -- =========================================
+-- PRIVATE HELPERS (SECURITY DEFINER)
+-- =========================================
+
+CREATE SCHEMA IF NOT EXISTS private;
+
+CREATE OR REPLACE FUNCTION private.is_org_member(p_org_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.organization_members om
+    WHERE om.organization_id = p_org_id
+      AND om.user_id = auth.uid()
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION private.is_org_admin(p_org_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.organization_members om
+    WHERE om.organization_id = p_org_id
+      AND om.user_id = auth.uid()
+      AND om.role = 'admin'
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION private.is_org_owner(p_org_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.organizations o
+    WHERE o.id = p_org_id
+      AND o.owner_id = auth.uid()
+  );
+$$;
+
+GRANT USAGE ON SCHEMA private TO authenticated;
+GRANT EXECUTE ON FUNCTION private.is_org_member(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION private.is_org_admin(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION private.is_org_owner(uuid) TO authenticated;
+
+-- =========================================
 -- ORGANIZATION MEMBERS TABLE
 -- =========================================
 
@@ -74,42 +131,33 @@ ALTER TABLE public.organization_members ENABLE ROW LEVEL SECURITY;
 -- so create it only after the table is defined.
 CREATE POLICY "Users can view organizations they belong to" ON public.organizations
   FOR SELECT USING (
-    auth.uid() = owner_id OR
-    EXISTS (
-      SELECT 1 FROM public.organization_members
-      WHERE organization_id = organizations.id
-      AND user_id = auth.uid()
-    )
+    auth.uid() = owner_id
+    OR private.is_org_member(id)
   );
 
 -- Organization members policies
 CREATE POLICY "Users can view members of organizations they belong to" ON public.organization_members
   FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_members om
-      WHERE om.organization_id = organization_members.organization_id
-      AND om.user_id = auth.uid()
-    ) OR
-    EXISTS (
-      SELECT 1 FROM public.organizations
-      WHERE id = organization_members.organization_id
-      AND owner_id = auth.uid()
-    )
+    private.is_org_owner(organization_id)
+    OR private.is_org_member(organization_id)
   );
 
-CREATE POLICY "Organization admins can manage members" ON public.organization_members
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM public.organizations
-      WHERE id = organization_members.organization_id
-      AND owner_id = auth.uid()
-    ) OR
-    EXISTS (
-      SELECT 1 FROM public.organization_members om
-      WHERE om.organization_id = organization_members.organization_id
-      AND om.user_id = auth.uid()
-      AND om.role = 'admin'
-    )
+CREATE POLICY "Organization admins can insert members" ON public.organization_members
+  FOR INSERT WITH CHECK (
+    private.is_org_owner(organization_id)
+    OR private.is_org_admin(organization_id)
+  );
+
+CREATE POLICY "Organization admins can update members" ON public.organization_members
+  FOR UPDATE USING (
+    private.is_org_owner(organization_id)
+    OR private.is_org_admin(organization_id)
+  );
+
+CREATE POLICY "Organization admins can delete members" ON public.organization_members
+  FOR DELETE USING (
+    private.is_org_owner(organization_id)
+    OR private.is_org_admin(organization_id)
   );
 
 -- =========================================

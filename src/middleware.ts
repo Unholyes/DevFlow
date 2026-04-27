@@ -4,6 +4,22 @@ import type { NextRequest } from 'next/server'
 import { USER_ROLES } from './constants'
 import { resolveTenantSlugFromHost, TENANT_SLUG_HEADER } from '@/lib/tenant/resolve'
 
+function stripPort(host: string) {
+  const idx = host.indexOf(':')
+  return idx === -1 ? host : host.slice(0, idx)
+}
+
+function resolveSharedCookieDomain(host: string | null) {
+  const h = stripPort((host ?? '').toLowerCase())
+  if (!h) return undefined
+  // For local dev, do NOT set Domain=.localhost (often rejected by browsers).
+  // Keep host-only cookies per subdomain. For production, share cookies across tenant subdomains.
+  const baseDomain = (process.env.NEXT_PUBLIC_BASE_DOMAIN ?? '').trim().toLowerCase()
+  if (baseDomain) return `.${baseDomain}`
+
+  return undefined
+}
+
 function baseDomainRedirect(req: NextRequest, pathname: string, tenantSlug: string) {
   const protocol = req.nextUrl.protocol
   const host = req.headers.get('host') ?? ''
@@ -49,27 +65,22 @@ export async function middleware(req: NextRequest) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookieOptions: {
+      domain: resolveSharedCookieDomain(req.headers.get('host')),
+    },
     cookies: {
-      get(name: string) {
-        return req.cookies.get(name)?.value
+      getAll() {
+        return req.cookies.getAll().map((c) => ({ name: c.name, value: c.value }))
       },
-      set(name: string, value: string, options: Record<string, unknown>) {
-        req.cookies.set(name, value)
+      setAll(cookiesToSet) {
         res = NextResponse.next({
           request: {
             headers: requestHeaders,
           },
         })
-        res.cookies.set(name, value, options)
-      },
-      remove(name: string, options: Record<string, unknown>) {
-        req.cookies.set(name, '')
-        res = NextResponse.next({
-          request: {
-            headers: requestHeaders,
-          },
+        cookiesToSet.forEach(({ name, value, options }) => {
+          res.cookies.set(name, value, options)
         })
-        res.cookies.set(name, '', { ...options, maxAge: 0 })
       },
     },
   })
@@ -125,6 +136,11 @@ export async function middleware(req: NextRequest) {
   if ((isProtectedRoute || isAdminRoute) && !session) {
     const redirectUrl = new URL('/auth/login', req.url)
     redirectUrl.searchParams.set('redirectedFrom', pathname)
+    console.log('[mw] unauth protected -> /auth/login', {
+      host: req.headers.get('host'),
+      pathname,
+      tenantSlug,
+    })
     return NextResponse.redirect(redirectUrl)
   }
 
@@ -141,6 +157,12 @@ export async function middleware(req: NextRequest) {
         .maybeSingle()
 
       const targetPath = project?.id ? '/dashboard' : '/onboarding/setup'
+      console.log('[mw] base->tenant redirect', {
+        host: req.headers.get('host'),
+        pathname,
+        targetPath,
+        targetSlug: primaryOrg.slug,
+      })
       return tenantDomainRedirect(req, targetPath, primaryOrg.slug)
     }
   }
@@ -148,6 +170,7 @@ export async function middleware(req: NextRequest) {
   // On the base domain (no tenant subdomain), authenticated users should complete onboarding
   // before using /dashboard or /settings.
   if (session && isProtectedRoute && !tenantSlug) {
+    console.log('[mw] base protected -> /onboarding', { host: req.headers.get('host'), pathname })
     return NextResponse.redirect(new URL('/onboarding', req.url))
   }
 
@@ -161,6 +184,7 @@ export async function middleware(req: NextRequest) {
 
     if (!profile || profile.role !== USER_ROLES.SUPER_ADMIN) {
       // Redirect non-super-admin users to dashboard
+      console.log('[mw] non-super-admin -> /dashboard', { host: req.headers.get('host'), pathname })
       return NextResponse.redirect(new URL('/dashboard', req.url))
     }
   }
@@ -176,6 +200,12 @@ export async function middleware(req: NextRequest) {
 
     // If slug doesn't exist or user cannot read it via RLS, redirect to base domain onboarding.
     if (orgError || !org) {
+      console.log('[mw] tenant slug invalid/unreadable -> base /onboarding', {
+        host: req.headers.get('host'),
+        pathname,
+        tenantSlug,
+        orgError: orgError ? { message: orgError.message, code: (orgError as any).code } : null,
+      })
       return baseDomainRedirect(req, '/onboarding', tenantSlug)
     }
   }
@@ -191,8 +221,10 @@ export async function middleware(req: NextRequest) {
     if (profile) {
       // Redirect based on role
       if (profile.role === USER_ROLES.SUPER_ADMIN) {
+        console.log('[mw] super_admin auth route -> /super-admin/dashboard', { host: req.headers.get('host'), pathname })
         return NextResponse.redirect(new URL('/super-admin/dashboard', req.url))
       } else {
+        console.log('[mw] authed auth route -> /dashboard', { host: req.headers.get('host'), pathname, tenantSlug })
         return NextResponse.redirect(new URL('/dashboard', req.url))
       }
     }
@@ -201,6 +233,7 @@ export async function middleware(req: NextRequest) {
   // If already on a tenant subdomain, onboarding isn't the primary entry point.
   // Allow a tenant-scoped setup wizard under /onboarding/setup.
   if (session && isOnboardingRoute && tenantSlug && pathname === '/onboarding') {
+    console.log('[mw] tenant /onboarding -> /dashboard', { host: req.headers.get('host'), pathname, tenantSlug })
     return NextResponse.redirect(new URL('/dashboard', req.url))
   }
 
@@ -208,5 +241,7 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  // Include /api routes so tenant context (x-tenant-slug) is injected consistently.
+  // Many API handlers rely on x-tenant-slug to enforce organization scoping.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }

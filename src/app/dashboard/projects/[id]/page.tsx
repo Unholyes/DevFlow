@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { CheckCircle2, Clock, Circle, ArrowRight, ArrowLeft, Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
+import type { ProjectStatus } from '@/types'
 
 const sdlcBadgeColors = {
   Scrum: 'bg-blue-100 text-blue-700 border-blue-200',
@@ -27,20 +28,75 @@ export default async function ProjectPage({ params }: { params: { id: string } }
 
   if (!org?.id) redirect('/onboarding')
 
-  const { data: project } = await supabase
-    .from('projects')
-    .select('id,name,description,status,progress_percent,phase_gating_enabled')
-    .eq('id', params.id)
-    .eq('organization_id', org.id)
-    .maybeSingle()
+  // `phase_gating_enabled` was introduced in `migrations/add_phase_gating.sql`.
+  // If the column doesn't exist yet, PostgREST returns PGRST204, causing `project` to be null.
+  // Retry without the column so the page doesn't 404.
+  let project:
+    | {
+        id: string
+        name: string
+        description: string | null
+        status: string
+        progress_percent: number | null
+        phase_gating_enabled?: boolean | null
+      }
+    | null = null
+
+  {
+    const attempt = await supabase
+      .from('projects')
+      .select('id,name,description,status,progress_percent,phase_gating_enabled')
+      .eq('id', params.id)
+      .eq('organization_id', org.id)
+      .maybeSingle()
+
+    if (attempt.error?.code === 'PGRST204') {
+      const fallback = await supabase
+        .from('projects')
+        .select('id,name,description,status,progress_percent')
+        .eq('id', params.id)
+        .eq('organization_id', org.id)
+        .maybeSingle()
+
+      project = fallback.data as any
+    } else {
+      project = attempt.data as any
+    }
+  }
 
   if (!project) notFound()
 
-  const { data: phases } = await supabase
-    .from('sdlc_phases')
-    .select('id,title,methodology,status,order_index,is_gated')
-    .eq('project_id', project.id)
-    .order('order_index', { ascending: true })
+  // `is_gated` was introduced in `migrations/add_phase_gating.sql`.
+  // Retry without it if needed.
+  let phases:
+    | {
+        id: string
+        title: string
+        methodology: 'scrum' | 'kanban'
+        status: string
+        order_index: number
+        is_gated?: boolean | null
+      }[]
+    | null = null
+
+  {
+    const attempt = await supabase
+      .from('sdlc_phases')
+      .select('id,title,methodology,status,order_index,is_gated')
+      .eq('project_id', project.id)
+      .order('order_index', { ascending: true })
+
+    if (attempt.error?.code === 'PGRST204') {
+      const fallback = await supabase
+        .from('sdlc_phases')
+        .select('id,title,methodology,status,order_index')
+        .eq('project_id', project.id)
+        .order('order_index', { ascending: true })
+      phases = fallback.data as any
+    } else {
+      phases = attempt.data as any
+    }
+  }
 
   const mappedPhases = (phases ?? []).map((p) => {
     const sdlcType = p.methodology === 'scrum' ? 'Scrum' : 'Kanban'
@@ -49,7 +105,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       name: p.title,
       sdlcType,
       dbStatus: p.status as 'active' | 'completed' | 'archived',
-      isGated: p.is_gated,
+      isGated: !!p.is_gated,
     }
   })
 
@@ -80,7 +136,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           description: project.description ?? '',
           // MVP: treat project-level methodology as a display label; hybrid is modeled per-phase.
           sdlcMethodology: 'kanban',
-          status: project.status,
+          status: project.status as ProjectStatus,
           progress: project.progress_percent ?? 0,
           tasksCount: 0,
           completedTasks: 0,
@@ -94,7 +150,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           name: project.name,
           description: project.description ?? '',
           sdlcMethodology: 'kanban',
-          status: project.status,
+          status: project.status as ProjectStatus,
           progress: project.progress_percent ?? 0,
           tasksCount: 0,
           completedTasks: 0,
@@ -139,9 +195,6 @@ export default async function ProjectPage({ params }: { params: { id: string } }
               return (
                 <div
                   key={phase.id}
-                  onClick={() => {
-                    if (locked) return
-                  }}
                   className={`group relative p-4 rounded-lg border-2 transition-all ${locked ? 'cursor-not-allowed opacity-70' : 'hover:shadow-md hover:border-blue-300'} ${statusBg}`}
                 >
                   {!locked ? (

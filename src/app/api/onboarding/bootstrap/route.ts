@@ -77,18 +77,45 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Organization already has a project' }, { status: 409 })
     }
 
-    const { data: project, error: projectError } = await supabase
-      .from('projects')
-      .insert({
-        organization_id: org.id,
-        name: projectName.trim(),
-        description: projectDescription?.trim() || null,
-        phase_gating_enabled: !!phaseGatingEnabled,
-      })
-      .select('id')
-      .single()
+    const projectInsertBase = {
+      organization_id: org.id,
+      name: projectName.trim(),
+      description: projectDescription?.trim() || null,
+    } as Record<string, unknown>
+
+    // `phase_gating_enabled` was introduced in `migrations/add_phase_gating.sql`.
+    // If the migration hasn't been applied yet (or PostgREST schema cache is stale),
+    // inserting that column will fail with PGRST204. Retry without the column so onboarding can proceed.
+    const projectInsertWithGating = {
+      ...projectInsertBase,
+      phase_gating_enabled: !!phaseGatingEnabled,
+    }
+
+    let project: { id: string } | null = null
+    let projectError: any = null
+
+    {
+      const attempt = await supabase
+        .from('projects')
+        .insert(projectInsertWithGating)
+        .select('id')
+        .single()
+      project = attempt.data
+      projectError = attempt.error
+    }
+
+    if (projectError?.code === 'PGRST204') {
+      const attempt = await supabase
+        .from('projects')
+        .insert(projectInsertBase)
+        .select('id')
+        .single()
+      project = attempt.data
+      projectError = attempt.error
+    }
 
     if (projectError) throw projectError
+    if (!project?.id) return NextResponse.json({ error: 'Failed to create project' }, { status: 500 })
 
     const createdPhaseIds: { id: string; methodology: PhaseInput['methodology'] }[] = []
 
@@ -96,23 +123,48 @@ export async function POST(request: Request) {
       const p = phases[i]
       if (!p?.title?.trim()) continue
 
-      const { data: phase, error: phaseError } = await supabase
-        .from('sdlc_phases')
-        .insert({
-          organization_id: org.id,
-          project_id: project.id,
-          methodology: p.methodology,
-          is_gated: !!p.is_gated,
-          order_index: i,
-          title: p.title.trim(),
-          // Keep all phases "active"; gating logic controls access.
-          // (phase_status_enum is: active | completed | archived)
-          status: 'active',
-        })
-        .select('id')
-        .single()
+      const phaseInsertBase = {
+        organization_id: org.id,
+        project_id: project.id,
+        methodology: p.methodology,
+        order_index: i,
+        title: p.title.trim(),
+        // Keep all phases "active"; gating logic controls access.
+        // (phase_status_enum is: active | completed | archived)
+        status: 'active',
+      } as Record<string, unknown>
+
+      // `is_gated` was introduced in `migrations/add_phase_gating.sql`.
+      const phaseInsertWithGating = {
+        ...phaseInsertBase,
+        is_gated: !!p.is_gated,
+      }
+
+      let phase: { id: string } | null = null
+      let phaseError: any = null
+
+      {
+        const attempt = await supabase
+          .from('sdlc_phases')
+          .insert(phaseInsertWithGating)
+          .select('id')
+          .single()
+        phase = attempt.data
+        phaseError = attempt.error
+      }
+
+      if (phaseError?.code === 'PGRST204') {
+        const attempt = await supabase
+          .from('sdlc_phases')
+          .insert(phaseInsertBase)
+          .select('id')
+          .single()
+        phase = attempt.data
+        phaseError = attempt.error
+      }
 
       if (phaseError) throw phaseError
+      if (!phase?.id) throw new Error('Failed to create phase')
       createdPhaseIds.push({ id: phase.id, methodology: p.methodology })
     }
 
@@ -135,6 +187,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ data: { project_id: project.id } })
   } catch (error) {
     console.error('Error bootstrapping onboarding wizard:', error)
+    const e = error as any
+    if (e?.code === 'PGRST204') {
+      return NextResponse.json(
+        {
+          error:
+            "Database schema is missing gating columns. Run `migrations/add_phase_gating.sql` (projects.phase_gating_enabled and sdlc_phases.is_gated) and retry.",
+        },
+        { status: 500 }
+      )
+    }
     return NextResponse.json({ error: 'Failed to bootstrap project' }, { status: 500 })
   }
 }
