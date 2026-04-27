@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { TENANT_SLUG_HEADER } from '@/lib/tenant/resolve'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -37,19 +38,37 @@ export async function POST(request: Request) {
       name, 
       start_date, 
       end_date,
-      story_points_total = 0
+      story_points_total = 0,
+      status = 'active'
     } = body
+
+    const tenantSlug = request.headers.get(TENANT_SLUG_HEADER)
+    if (!tenantSlug) {
+      return NextResponse.json({ error: 'Missing tenant context' }, { status: 400 })
+    }
+
+    const { data: org, error: orgError } = await supabase
+      .from('organizations')
+      .select('id')
+      .eq('slug', tenantSlug)
+      .maybeSingle()
+
+    if (orgError) throw orgError
+    if (!org?.id) {
+      return NextResponse.json({ error: 'Invalid tenant context' }, { status: 400 })
+    }
 
     const { data, error } = await supabase
       .from('sprints')
       .insert({
+        organization_id: org.id,
         project_id,
         phase_id,
         name,
         start_date,
         end_date,
         story_points_total,
-        status: 'planned',
+        status,
       })
       .select()
       .single()

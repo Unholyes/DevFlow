@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
+import { slugifyOrganization } from '@/lib/tenant/slug'
 
 export async function PATCH(
   request: Request,
@@ -83,11 +84,29 @@ export async function PATCH(
 
     // If approved, create the organization and update user role
     if (action === 'approve') {
+      const baseSlug = slugifyOrganization(application.organization_name) || 'org'
+      let finalSlug = baseSlug
+
+      // Ensure slug uniqueness (retry with suffix if needed).
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const { data: existing } = await admin
+          .from('organizations')
+          .select('id')
+          .eq('slug', finalSlug)
+          .limit(1)
+
+        if (!existing || existing.length === 0) break
+
+        const suffix = Math.random().toString(36).slice(2, 6)
+        finalSlug = `${baseSlug}-${suffix}`.slice(0, 48)
+      }
+
       // Create the organization
       const { data: organization, error: orgError } = await admin
         .from('organizations')
         .insert({
           name: application.organization_name,
+          slug: finalSlug,
           owner_id: application.user_id,
         })
         .select()

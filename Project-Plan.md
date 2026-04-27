@@ -1,79 +1,105 @@
 Brief Description of the Project
-         This project seeks to develop a multi-tenant Software-as-a-Service (SaaS) project management system tailored for software development teams, providing a structured and configurable environment for planning, tracking, and managing development projects across different methodologies.
-This project seeks to build a platform that allows organizations to manage their software development workflows by selecting and configuring Software Development Life Cycle (SDLC) methodologies per project, enabling teams to work in a structured, role-driven, and methodology-appropriate environment.
+This project aims to develop a multi-tenant Software-as-a-Service (SaaS) project management system for software development organizations. Each organization has an isolated workspace where they can create projects, collaborate on tasks, and manage delivery using a configurable (hybrid) process.
 
-Main goal of the system is to:
-Provide organizations with isolated and secure workspaces for managing their software development projects.
-Allow tenant administrators to configure project workflows based on a chosen SDLC methodology (Scrum, Kanban, Waterfall, DevOps, etc).
-Enable development teams to collaborate, track, and complete tasks within a structured and role-driven project environment.
+The system focuses on a realistic understanding of “Hybrid SDLC”:
+- Projects are broken into ordered project phases (e.g., Requirements → Design → Development → Testing → Release).
+- The project may optionally enforce phase gates (Waterfall-style governance): a phase must be completed (and optionally approved) before the next phase can proceed.
+- Inside each phase, the team selects a work management process (Scrum or Kanban) to execute the work.
 
+Main goals of the system
+- Provide organizations with isolated and secure workspaces (multi-tenant).
+- Provide an onboarding-first experience: users configure the organization and project process before seeing the full dashboard.
+- Support hybrid project management by combining phase gating (optional) with Scrum/Kanban execution per phase.
+- Enable teams to collaborate, track, and complete work using role-based access control (RBAC).
 
-Specific functions of the system are as follows:
-Super Administrator Side:
-Super Admin Authentication: Secure login for platform owners.
+Core User Flow (Corrected Architecture)
+1) Sign Up / Sign In
+2) Onboarding Wizard (before full dashboard)
+   - Create organization workspace (name, basic info)
+   - Create first project
+   - Configure project phases (names, order)
+   - Configure governance (phase gating on/off; optional “complete/approve” step)
+   - For each phase choose process type (Scrum or Kanban) and initialize default columns/stages
+   - Invite team members (optional)
+3) Dashboard
+   - Navigation and pages reflect the configured organization + project settings.
 
-Manage Tenant Accounts:
-Super Admin can view all registered tenant organizations (workspaces).
-Super Admin can suspend, activate, or delete tenant accounts.
-Super Admin can monitor platform-wide usage statistics (e.g., active tenants, total users, total projects).
+Roles and Responsibilities (RBAC)
+The system uses a small, explainable role set.
 
-Tenant Administrator Side
-Tenant Administrator Authentication: Secure login for organization owners.
+1) Super Administrator (Platform Owner)
+- Authentication: secure login for platform owners.
+- Manage tenants (organizations/workspaces):
+  - View all tenant organizations.
+  - Approve/decline organization applications.
+  - Suspend/activate/delete tenant accounts.
+  - View platform-wide statistics (active tenants, total users, total projects).
 
-Manage the Organization Workspace:
-Tenant Administrator will set up and name the organization workspace upon registration.
-Tenant Administrator will invite team members via email.
-Tenant Administrator will manage access and assign users to the general "Developers / Team Members" role.
-Tenant Administrator can remove members from the workspace.
-Tenant Administrator can update overall workspace settings.
+2) Tenant Administrator (Organization Admin)
+- Authentication: secure login for organization owners/admins.
+- Manage organization workspace:
+  - Update workspace settings (organization profile).
+  - Invite/remove members.
+  - Assign organization-level roles (Project Manager / Team Member).
+- Manage projects (organization scope):
+  - Create/archive/delete projects.
+  - Assign members to projects.
+  - Enable/disable project governance features (e.g., phase gating).
 
-Manage Project Members:
-Tenant Administrator can assign workspace members to specific projects.
+3) Project Manager (Project-level Admin)
+- Scope: permissions apply only to projects they are assigned to.
+- Manage project structure and process:
+  - Configure project phases (order, titles) and apply governance rules.
+  - For each phase, select the execution process (Scrum or Kanban).
+  - Configure phase workflow stages/columns (and WIP limits for Kanban).
+  - Manage Scrum artifacts for Scrum phases (backlog priority, sprint creation/planning, sprint close).
+- Coordinate work:
+  - Create/assign tasks, update priorities, monitor progress and team workload.
 
-Monitor Workspace Overview:
-Tenant Administrator can view a dashboard showing all active projects and their current overall status.
-Tenant Administrator can view all workspace members and identify which projects they belong to.
+4) Team Member (Developer / General Member)
+- Scope: permissions apply only to projects they are assigned to.
+- Execute work:
+  - Create and update tasks (or only update tasks assigned to them, depending on final policy).
+  - Move tasks through workflow stages (columns).
+  - Add comments, mark tasks as blocked and provide reasons.
+  - View boards (Scrum/Kanban), calendars, and project analytics.
+- Manage own profile:
+  - Update own profile information.
 
-Developers / Team Members Side
-Team Member Authentication: Secure login for developers and general project members.
+Hybrid Process Model (How “Hybrid” Works)
+Hybrid in this system means “configurable per phase,” not “one SDLC model equals one phase type.”
 
-Manage Project Tasks:
-Team Members will create projects within the workspace.
-Team Members can archive or delete projects.
-Team Members will create tasks and define task details (title, description, priority, due date).
-Team Members will assign tasks to themselves or other team members.
-Team Members can update or delete tasks.
-Team Members can set task priority levels (Low, Medium, High, Critical).
-Team Members can mark a task as blocked and specify the reason/add comments to keep the team informed.
-Team Members can filter and search tasks by status, priority, assignee, or due date.
-Team Members will update task statuses by moving them through the configured workflow stages (e.g., To Do → In Progress → In Review → Done).
-Team Members can mark a task as complete once all work is finished.
+A) Project Phases (Milestones)
+- A project contains ordered phases (e.g., Requirements, Design, Development, Testing, Release).
+- Optional phase gating (Waterfall-style governance):
+  - If enabled, Phase N+1 cannot be started until Phase N is marked complete (and optionally approved).
+  - This provides a simple, explainable Waterfall-like control at the project level.
 
-Manage Hybrid SDLC-Specific Workflows:
-Team Members can configure the project to utilize different SDLC methodologies at different phases, maintaining the specific rules of the active framework:
-For Scrum phases: Team Members will manage the product backlog, prioritize items, assign story points, create sprints, set sprint duration, move backlog items into a sprint, and automatically move unfinished tasks back to the backlog upon sprint closure.
-For Waterfall phases: Team Members will define sequential project phases and enforce phase completion before allowing progression to the next phase.
-For Kanban phases: Team Members will configure board columns and set/manage strict WIP (Work In Progress) limits.
-For DevOps phases: Team Members will define pipeline stages and track tasks continuously from planning through deployment.
+B) Execution inside a phase (Scrum or Kanban)
+- Scrum phase features:
+  - Product backlog (prioritize items, story points).
+  - Sprint planning (move backlog items into a sprint, set sprint dates).
+  - Scrum board (track sprint tasks).
+  - Sprint close behavior (unfinished items return to backlog).
+- Kanban phase features:
+  - Continuous board with configurable columns.
+  - Optional WIP limits per column.
+  - Archive/completed workflow.
 
-View Project Boards:
-Team Members can switch views based on the active SDLC configurations (Kanban board, Scrum sprint board, Waterfall phase view, DevOps pipeline view).
+Key Pages / Modules (Conceptual)
+- Onboarding wizard (org + first project + phase/process config)
+- Organization dashboard (overview of projects, members, activity)
+- Project dashboard (overview + phase timeline + progress)
+- Phase workspace
+  - If Scrum: Backlog / Sprint Planning / Sprint Board
+  - If Kanban: Kanban Board
+- Reports / Analytics (basic metrics such as tasks done, sprint burndown if Scrum)
+- Calendar (task due dates and sprint schedules)
+- Settings (profile + organization settings)
 
-Monitor Project Progress:
-Team Members can view the overall project status and task completion rates on a centralized project dashboard.
-Team Members can view team workloads, showing how many tasks each member currently has assigned.
-Team Members can view a burndown chart for active Scrum sprints showing tasks completed versus tasks remaining
-
-Manage the Project Calendar:
-Team Members will set task due dates and sprint schedules visible on the calendar.
-Team Members can view all upcoming deadlines, milestones, and personal schedules in the shared calendar view.
-
-Manage Profile:
-Team Members can update their own profile information.
-
-Technology:
-Backend: Node.js / TypeScript 
-Database: Supabase (Postgres) with Row-Level Security
-Frontend: Next.js + React + TypeScript
-Auth: Supabase Auth 
-Hosting: Vercel (frontend) + Supabase (DB) 
+Technology
+- Backend: Node.js / TypeScript
+- Database: Supabase (Postgres) with Row-Level Security (RLS)
+- Frontend: Next.js + React + TypeScript
+- Auth: Supabase Auth
+- Hosting: Vercel (frontend) + Supabase (DB)

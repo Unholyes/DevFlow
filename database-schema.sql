@@ -34,10 +34,15 @@ CREATE POLICY "Users can update their own profile" ON public.profiles
 CREATE TABLE IF NOT EXISTS public.organizations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
+  -- Used for multi-tenant subdomain routing: {slug}.devflow.com
+  slug TEXT NOT NULL,
   owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS organizations_slug_unique_idx
+ON public.organizations (slug);
 
 -- Enable RLS
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
@@ -48,6 +53,63 @@ CREATE POLICY "Only authenticated users can create organizations" ON public.orga
 
 CREATE POLICY "Organization owners can update their organizations" ON public.organizations
   FOR UPDATE USING (auth.uid() = owner_id);
+
+-- =========================================
+-- PRIVATE HELPERS (SECURITY DEFINER)
+-- =========================================
+
+CREATE SCHEMA IF NOT EXISTS private;
+
+CREATE OR REPLACE FUNCTION private.is_org_member(p_org_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.organization_members om
+    WHERE om.organization_id = p_org_id
+      AND om.user_id = auth.uid()
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION private.is_org_admin(p_org_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.organization_members om
+    WHERE om.organization_id = p_org_id
+      AND om.user_id = auth.uid()
+      AND om.role = 'admin'
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION private.is_org_owner(p_org_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.organizations o
+    WHERE o.id = p_org_id
+      AND o.owner_id = auth.uid()
+  );
+$$;
+
+GRANT USAGE ON SCHEMA private TO authenticated;
+GRANT EXECUTE ON FUNCTION private.is_org_member(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION private.is_org_admin(uuid) TO authenticated;
+GRANT EXECUTE ON FUNCTION private.is_org_owner(uuid) TO authenticated;
 
 -- =========================================
 -- ORGANIZATION MEMBERS TABLE
@@ -69,42 +131,33 @@ ALTER TABLE public.organization_members ENABLE ROW LEVEL SECURITY;
 -- so create it only after the table is defined.
 CREATE POLICY "Users can view organizations they belong to" ON public.organizations
   FOR SELECT USING (
-    auth.uid() = owner_id OR
-    EXISTS (
-      SELECT 1 FROM public.organization_members
-      WHERE organization_id = organizations.id
-      AND user_id = auth.uid()
-    )
+    auth.uid() = owner_id
+    OR private.is_org_member(id)
   );
 
 -- Organization members policies
 CREATE POLICY "Users can view members of organizations they belong to" ON public.organization_members
   FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_members om
-      WHERE om.organization_id = organization_members.organization_id
-      AND om.user_id = auth.uid()
-    ) OR
-    EXISTS (
-      SELECT 1 FROM public.organizations
-      WHERE id = organization_members.organization_id
-      AND owner_id = auth.uid()
-    )
+    private.is_org_owner(organization_id)
+    OR private.is_org_member(organization_id)
   );
 
-CREATE POLICY "Organization admins can manage members" ON public.organization_members
-  FOR ALL USING (
-    EXISTS (
-      SELECT 1 FROM public.organizations
-      WHERE id = organization_members.organization_id
-      AND owner_id = auth.uid()
-    ) OR
-    EXISTS (
-      SELECT 1 FROM public.organization_members om
-      WHERE om.organization_id = organization_members.organization_id
-      AND om.user_id = auth.uid()
-      AND om.role = 'admin'
-    )
+CREATE POLICY "Organization admins can insert members" ON public.organization_members
+  FOR INSERT WITH CHECK (
+    private.is_org_owner(organization_id)
+    OR private.is_org_admin(organization_id)
+  );
+
+CREATE POLICY "Organization admins can update members" ON public.organization_members
+  FOR UPDATE USING (
+    private.is_org_owner(organization_id)
+    OR private.is_org_admin(organization_id)
+  );
+
+CREATE POLICY "Organization admins can delete members" ON public.organization_members
+  FOR DELETE USING (
+    private.is_org_owner(organization_id)
+    OR private.is_org_admin(organization_id)
   );
 
 -- =========================================
@@ -383,6 +436,8 @@ CREATE TABLE IF NOT EXISTS public.projects (
   description TEXT,
   status public.project_status_enum NOT NULL DEFAULT 'active',
   progress_percent INTEGER NOT NULL DEFAULT 0,
+  -- Waterfall-style governance toggle: if enabled, phases can be locked sequentially
+  phase_gating_enabled BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -584,6 +639,8 @@ CREATE TABLE IF NOT EXISTS public.sdlc_phases (
   organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   methodology public.sdlc_methodology_enum NOT NULL,
+  -- Per-phase override for governance locking
+  is_gated BOOLEAN NOT NULL DEFAULT true,
   order_index INTEGER NOT NULL,
   title TEXT NOT NULL,
   status public.phase_status_enum NOT NULL DEFAULT 'active',

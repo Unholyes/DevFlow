@@ -1,32 +1,92 @@
-"use client";
+import Link from 'next/link'
+import { notFound, redirect } from 'next/navigation'
+import { ArrowLeft } from 'lucide-react'
+import ScrumView from '@/components/project/ScrumView'
+import KanbanView from '@/components/project/KanbanView'
+import { createClient } from '@/lib/supabase/server'
+import { getTenantSlug } from '@/lib/tenant/server'
 
-import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
-import ScrumView from '@/components/project/ScrumView';
+export default async function PhaseBoardPage({ params }: { params: { id: string; phaseId: string } }) {
+  const tenantSlug = getTenantSlug()
+  if (!tenantSlug) redirect('/onboarding')
 
-// --- Temporary Mock Data ---
-const mockProjects = [
-  {
-    id: '1', 
-    name: 'E-Commerce Platform Redesign',
-    phases: [
-      { id: 'p1', name: 'Requirements', sdlcType: 'Waterfall', status: 'Completed', progress: 100 },
-      { id: 'p2', name: 'Design', sdlcType: 'Waterfall', status: 'Completed', progress: 100 },
-      { id: 'p3', name: 'Development', sdlcType: 'Scrum', status: 'In Progress', progress: 65 },
-      { id: 'p4', name: 'Testing', sdlcType: 'Kanban', status: 'In Progress', progress: 40 },
-      { id: 'p5', name: 'Deployment', sdlcType: 'DevOps', status: 'Not Started', progress: 0 },
-    ]
+  const supabase = createClient()
+
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('id')
+    .eq('slug', tenantSlug)
+    .maybeSingle()
+
+  if (!org?.id) redirect('/onboarding')
+
+  const { data: project } = await supabase
+    .from('projects')
+    .select('id,phase_gating_enabled')
+    .eq('id', params.id)
+    .eq('organization_id', org.id)
+    .maybeSingle()
+
+  if (!project) notFound()
+
+  const { data: phases } = await supabase
+    .from('sdlc_phases')
+    .select('id,methodology,status,order_index,is_gated')
+    .eq('project_id', project.id)
+    .order('order_index', { ascending: true })
+
+  const phase = (phases ?? []).find((p) => p.id === params.phaseId)
+  if (!phase) notFound()
+
+  const phaseIndex = (phases ?? []).findIndex((p) => p.id === phase.id)
+  const prev = phaseIndex > 0 ? (phases ?? [])[phaseIndex - 1] : null
+
+  const isLocked =
+    project.phase_gating_enabled && phase.is_gated && phaseIndex > 0 && prev?.status !== 'completed'
+
+  if (isLocked) {
+    return redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}`)
   }
-];
 
-export default function ScrumBoardPage({ params }: { params: { id: string, phaseId: string } }) {
-  const project = mockProjects.find(p => p.id === params.id);
-  const phase = project?.phases.find(p => p.id === params.phaseId);
+  const { data: stages } = await supabase
+    .from('workflow_stages')
+    .select('id,name,stage_order,is_done,is_backlog')
+    .eq('phase_id', phase.id)
+    .eq('organization_id', org.id)
+    .order('stage_order', { ascending: true })
 
-  if (!project || !phase) {
-    notFound();
-  }
+  const { data: sprint } = await supabase
+    .from('sprints')
+    .select('id,name,status')
+    .eq('project_id', project.id)
+    .eq('phase_id', phase.id)
+    .eq('organization_id', org.id)
+    .in('status', ['active', 'planned'])
+    .order('start_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const { data: sprintTasks } = sprint
+    ? await supabase
+        .from('tasks')
+        .select('id,title,priority,story_points,workflow_stage_id,completed_at,position')
+        .eq('project_id', project.id)
+        .eq('organization_id', org.id)
+        .eq('sprint_id', sprint.id)
+        .order('position', { ascending: true })
+    : { data: [] as any[] }
+
+  const stageIds = (stages ?? []).map((s) => s.id)
+  const { data: kanbanTasks } =
+    stageIds.length > 0
+      ? await supabase
+          .from('tasks')
+          .select('id,title,priority,story_points,workflow_stage_id,completed_at,position')
+          .eq('project_id', project.id)
+          .eq('organization_id', org.id)
+          .in('workflow_stage_id', stageIds)
+          .order('position', { ascending: true })
+      : { data: [] as any[] }
 
   return (
     <div className="space-y-6">
@@ -39,8 +99,23 @@ export default function ScrumBoardPage({ params }: { params: { id: string, phase
         Back to Phase Overview
       </Link>
 
-      {/* Scrum Board */}
-      <ScrumView />
+      {/* Phase Board (Scrum or Kanban) */}
+      {phase.methodology === 'scrum' ? (
+        <ScrumView
+          projectId={project.id}
+          phaseId={phase.id}
+          sprint={(sprint as any) ?? null}
+          stages={(stages ?? []) as any}
+          tasks={(sprintTasks ?? []) as any}
+        />
+      ) : (
+        <KanbanView
+          projectId={project.id}
+          phaseId={phase.id}
+          stages={(stages ?? []) as any}
+          tasks={(kanbanTasks ?? []) as any}
+        />
+      )}
     </div>
-  );
+  )
 }

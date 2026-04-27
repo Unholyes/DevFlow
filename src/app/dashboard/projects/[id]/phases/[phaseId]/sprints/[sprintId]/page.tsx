@@ -1,9 +1,13 @@
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
-import { SprintPlanningPageClient } from '@/components/sprints/sprint-planning-page-client'
+import { SprintDetailsPageClient } from '@/components/sprints/sprint-details-page-client'
 
-export default async function SprintPlanningPage({ params }: { params: { id: string; phaseId: string } }) {
+export default async function SprintDetailsPage({
+  params,
+}: {
+  params: { id: string; phaseId: string; sprintId: string }
+}) {
   const tenantSlug = getTenantSlug()
   if (!tenantSlug) redirect('/onboarding')
 
@@ -29,34 +33,31 @@ export default async function SprintPlanningPage({ params }: { params: { id: str
   if (!phase) notFound()
   if (phase.methodology !== 'scrum') redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}`)
 
-  const { data: backlogStage } = await supabase
-    .from('workflow_stages')
-    .select('id')
+  const { data: sprint } = await supabase
+    .from('sprints')
+    .select('id,name,start_date,end_date,status,story_points_total')
+    .eq('id', params.sprintId)
+    .eq('project_id', project.id)
     .eq('phase_id', phase.id)
-    .eq('is_backlog', true)
-    .order('stage_order', { ascending: true })
-    .limit(1)
+    .eq('organization_id', org.id)
     .maybeSingle()
-
-  if (!backlogStage?.id) {
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">Backlog not configured</h2>
-        <p className="text-sm text-gray-600">
-          This Scrum phase does not have a workflow stage marked as backlog (`is_backlog = true`). Create a backlog
-          column/stage for this phase to plan sprints.
-        </p>
-      </div>
-    )
-  }
+  if (!sprint) notFound()
 
   const { data: tasks } = await supabase
     .from('tasks')
-    .select('id,title,description,priority,story_points,assignee_id,position')
+    .select('id,title,description,priority,story_points,completed_at,position')
     .eq('project_id', project.id)
-    .eq('workflow_stage_id', backlogStage.id)
-    .is('sprint_id', null)
+    .eq('organization_id', org.id)
+    .eq('sprint_id', sprint.id)
     .order('position', { ascending: true })
 
-  return <SprintPlanningPageClient projectId={project.id} phaseId={phase.id} backlogTasks={(tasks ?? []) as any} />
+  return (
+    <SprintDetailsPageClient
+      projectId={project.id}
+      phaseId={phase.id}
+      sprint={sprint as any}
+      tasks={(tasks ?? []) as any}
+    />
+  )
 }
+
