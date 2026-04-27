@@ -34,10 +34,15 @@ CREATE POLICY "Users can update their own profile" ON public.profiles
 CREATE TABLE IF NOT EXISTS public.organizations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
+  -- Used for multi-tenant subdomain routing: {slug}.devflow.com
+  slug TEXT NOT NULL,
   owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS organizations_slug_unique_idx
+ON public.organizations (slug);
 
 -- Enable RLS
 ALTER TABLE public.organizations ENABLE ROW LEVEL SECURITY;
@@ -383,6 +388,8 @@ CREATE TABLE IF NOT EXISTS public.projects (
   description TEXT,
   status public.project_status_enum NOT NULL DEFAULT 'active',
   progress_percent INTEGER NOT NULL DEFAULT 0,
+  -- Waterfall-style governance toggle: if enabled, phases can be locked sequentially
+  phase_gating_enabled BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -584,6 +591,8 @@ CREATE TABLE IF NOT EXISTS public.sdlc_phases (
   organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   methodology public.sdlc_methodology_enum NOT NULL,
+  -- Per-phase override for governance locking
+  is_gated BOOLEAN NOT NULL DEFAULT true,
   order_index INTEGER NOT NULL,
   title TEXT NOT NULL,
   status public.phase_status_enum NOT NULL DEFAULT 'active',

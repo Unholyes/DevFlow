@@ -1,45 +1,31 @@
-"use client";
+import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { FolderKanban, Calendar } from 'lucide-react'
+import { createClient } from '@/lib/supabase/server'
+import { getTenantSlug } from '@/lib/tenant/server'
 
-import Link from 'next/link';
-import { FolderKanban, Users, Calendar, TrendingUp } from 'lucide-react';
+export default async function ProjectsPage() {
+  const tenantSlug = getTenantSlug()
+  if (!tenantSlug) redirect('/onboarding')
 
-const mockProjects = [
-  {
-    id: '1',
-    name: 'E-commerce Platform Redesign',
-    description: 'Complete overhaul of the shopping cart and checkout experience',
-    status: 'active' as const,
-    progress: 68,
-    tasksCount: 131,
-    completedTasks: 89,
-    dueDate: new Date('2026-06-20'),
-    teamMembers: 4,
-  },
-  {
-    id: '2',
-    name: 'Mobile App Development',
-    description: 'Native iOS and Android application for customer engagement',
-    status: 'active' as const,
-    progress: 42,
-    tasksCount: 87,
-    completedTasks: 37,
-    dueDate: new Date('2026-08-15'),
-    teamMembers: 6,
-  },
-  {
-    id: '3',
-    name: 'Data Analytics Dashboard',
-    description: 'Business intelligence platform for executive reporting',
-    status: 'planning' as const,
-    progress: 15,
-    tasksCount: 45,
-    completedTasks: 7,
-    dueDate: new Date('2026-09-30'),
-    teamMembers: 3,
-  },
-];
+  const supabase = createClient()
 
-export default function ProjectsPage() {
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('id')
+    .eq('slug', tenantSlug)
+    .maybeSingle()
+
+  if (!org?.id) {
+    redirect('/onboarding')
+  }
+
+  const { data: projects } = await supabase
+    .from('projects')
+    .select('id,name,description,status,progress_percent,created_at')
+    .eq('organization_id', org.id)
+    .order('created_at', { ascending: false })
+
   return (
     <div className="space-y-8">
       <div>
@@ -49,7 +35,7 @@ export default function ProjectsPage() {
 
       {/* Projects Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {mockProjects.map((project) => (
+        {(projects ?? []).map((project) => (
           <Link
             key={project.id}
             href={`/dashboard/projects/${project.id}`}
@@ -75,37 +61,24 @@ export default function ProjectsPage() {
               <div>
                 <div className="flex justify-between text-sm mb-1">
                   <span className="text-gray-600">Progress</span>
-                  <span className="font-medium text-gray-900">{project.progress}%</span>
+                  <span className="font-medium text-gray-900">{project.progress_percent}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
                     className="bg-purple-600 h-2 rounded-full transition-all"
-                    style={{ width: `${project.progress}%` }}
+                    style={{ width: `${project.progress_percent}%` }}
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="flex items-center text-gray-600">
-                  <Users className="h-4 w-4 mr-2" />
-                  <span>{project.teamMembers} members</span>
-                </div>
-                <div className="flex items-center text-gray-600">
-                  <Calendar className="h-4 w-4 mr-2" />
-                  <span>{new Date(project.dueDate).toLocaleDateString()}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between text-sm pt-2 border-t border-gray-100">
-                <div className="flex items-center text-gray-600">
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  <span>{project.completedTasks}/{project.tasksCount} tasks</span>
-                </div>
+              <div className="flex items-center text-sm text-gray-600 pt-2 border-t border-gray-100">
+                <Calendar className="h-4 w-4 mr-2" />
+                <span>Created {new Date(project.created_at).toLocaleDateString()}</span>
               </div>
             </div>
           </Link>
         ))}
       </div>
     </div>
-  );
+  )
 }

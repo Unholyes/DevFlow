@@ -1,64 +1,99 @@
-"use client";
+"use client"
 
-import { useState } from 'react';
-import CreateTaskModal from '@/components/project/CreateTaskModal';
+import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
-// --- Types ---
-interface Task {
-  id: string;
-  title: string;
-  tags: string[];
-  priority: 'High' | 'Medium' | 'Low' | 'Critical';
-  status: string;
-  assignee: { name: string; avatarBg: string };
-  date: string;
-  isBlocked?: boolean;
-  comments?: number;
-  attachments?: number;
-  position: number;
-  isArchived?: boolean;
+type Stage = {
+  id: string
+  name: string
+  stage_order: number
+  is_done: boolean
+  is_backlog: boolean
+  wip_limit?: number | null
 }
 
-// --- Dummy Data matching image_12.png ---
-const MOCK_KANBAN_TASKS: Task[] = [
-  { id: 'KAN-1', title: 'Design user onboarding flow', tags: ['Design', 'UX'], priority: 'High', status: 'To Do', assignee: { name: 'SJ', avatarBg: 'bg-green-500' }, date: 'Mar 22', comments: 3, position: 0 },
-  { id: 'KAN-2', title: 'Update API documentation', tags: ['Docs'], priority: 'Low', status: 'To Do', assignee: { name: 'MC', avatarBg: 'bg-yellow-500' }, date: 'Mar 25', attachments: 2, position: 1 },
-  { id: 'KAN-3', title: 'Implement payment gateway', tags: ['Backend', 'Critical'], priority: 'High', status: 'In Progress', assignee: { name: 'JS', avatarBg: 'bg-blue-500' }, date: 'Mar 21', isBlocked: true, comments: 8, position: 0 },
-  { id: 'KAN-4', title: 'Fix mobile responsive issues', tags: ['Frontend'], priority: 'Medium', status: 'In Progress', assignee: { name: 'AB', avatarBg: 'bg-red-500' }, date: 'Mar 23', comments: 2, position: 1 },
-  { id: 'KAN-5', title: 'Optimize image loading', tags: ['Performance'], priority: 'Medium', status: 'In Progress', assignee: { name: 'SJ', avatarBg: 'bg-green-500' }, date: 'Mar 24', attachments: 1, position: 2 },
-  { id: 'KAN-6', title: 'E2E tests for checkout', tags: ['Testing', 'QA'], priority: 'High', status: 'In Review', assignee: { name: 'MC', avatarBg: 'bg-yellow-500' }, date: 'Mar 20', comments: 5, position: 0 },
-  { id: 'KAN-7', title: 'Security audit review', tags: ['Security'], priority: 'High', status: 'In Review', assignee: { name: 'JS', avatarBg: 'bg-blue-500' }, date: 'Mar 22', isBlocked: true, comments: 12, attachments: 3, position: 1 },
-  { id: 'KAN-8', title: 'Setup monitoring dashboard', tags: ['DevOps'], priority: 'Medium', status: 'Completed', assignee: { name: 'AB', avatarBg: 'bg-red-500' }, date: 'Mar 19', comments: 4, position: 0 },
-];
+type TaskRow = {
+  id: string
+  title: string
+  priority: 'low' | 'medium' | 'high' | 'critical'
+  story_points: number | null
+  workflow_stage_id: string
+  completed_at: string | null
+  position: number | null
+}
 
-const COLUMNS = [
-  { name: 'To Do', wip: '2/10' },
-  { name: 'In Progress', wip: '3/5' },
-  { name: 'In Review', wip: '2/3' },
-  { name: 'Completed', wip: '1/20' }
-];
+function priorityStyle(priority: TaskRow['priority']) {
+  const p = priority === 'critical' ? 'high' : priority
+  switch (p) {
+    case 'high':
+      return 'bg-red-50 text-red-600 border border-red-100'
+    case 'medium':
+      return 'bg-yellow-50 text-yellow-600 border border-yellow-100'
+    case 'low':
+      return 'bg-green-50 text-green-600 border border-green-100'
+    default:
+      return 'bg-gray-50 text-gray-600 border border-gray-100'
+  }
+}
 
-export default function KanbanView() {
-  const [tasks, setTasks] = useState(MOCK_KANBAN_TASKS);
-  const [archivedTasks, setArchivedTasks] = useState<Task[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [draggedTask, setDraggedTask] = useState<Task | null>(null);
-  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
-  const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [showArchiveView, setShowArchiveView] = useState(false);
+export default function KanbanView(props: { projectId: string; phaseId: string; stages: Stage[]; tasks: TaskRow[] }) {
+  const router = useRouter()
+  const [tasks, setTasks] = useState<TaskRow[]>(props.tasks)
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
+  const [dragOverStageId, setDragOverStageId] = useState<string | null>(null)
+  const [movingTaskId, setMovingTaskId] = useState<string | null>(null)
 
-  const activeTasks = tasks.filter(t => !t.isArchived);
-  const noActiveTasks = activeTasks.length === 0;
+  const stages = useMemo(
+    () => [...props.stages].filter((s) => !s.is_backlog).sort((a, b) => a.stage_order - b.stage_order),
+    [props.stages]
+  )
+  const stageById = useMemo(() => Object.fromEntries(stages.map((s) => [s.id, s])), [stages])
+
+  const totalTasks = tasks.length
+  const inProgressCount = tasks.filter((t) => !stageById[t.workflow_stage_id]?.is_done).length
+  const completedCount = tasks.filter((t) => stageById[t.workflow_stage_id]?.is_done || !!t.completed_at).length
+
+  const moveTask = async (taskId: string, stageId: string) => {
+    const stage = stageById[stageId]
+    if (!stage) return
+
+    setMovingTaskId(taskId)
+    const nextCompletedAt = stage.is_done ? new Date().toISOString() : null
+
+    // optimistic update
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, workflow_stage_id: stageId, completed_at: nextCompletedAt } : t))
+    )
+
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: taskId, workflow_stage_id: stageId, completed_at: nextCompletedAt }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || 'Failed to move task')
+      router.refresh()
+    } catch (e) {
+      console.error(e)
+      router.refresh()
+      alert(e instanceof Error ? e.message : 'Failed to move task')
+    } finally {
+      setMovingTaskId(null)
+    }
+  }
 
   return (
     <div className="space-y-6">
-      {/* 1. Header Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Tasks', value: '8', color: 'text-gray-900' },
-          { label: 'In Progress', value: '3', color: 'text-blue-600' },
-          { label: 'Blocked Tasks', value: '2', color: 'text-red-600' },
-          { label: 'Completed Today', value: '3', color: 'text-green-600' },
+          { label: 'Total Tasks', value: String(totalTasks), color: 'text-gray-900' },
+          { label: 'In Progress', value: String(inProgressCount), color: 'text-blue-600' },
+          { label: 'Completed', value: String(completedCount), color: 'text-green-600' },
+          { label: 'Method', value: 'Kanban', color: 'text-gray-900' },
         ].map((stat, i) => (
           <div key={i} className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
             <p className="text-xs font-medium text-gray-500 mb-1">{stat.label}</p>
@@ -67,303 +102,113 @@ export default function KanbanView() {
         ))}
       </div>
 
-      {/* 2. Board Toolbar */}
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-        <div className="flex items-center gap-4 text-sm">
-          <h3 className="font-bold text-gray-800">Testing Phase Board</h3>
-          <div className="flex items-center gap-2 text-gray-400">
-            <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-            <span>Active</span>
-            <span>•</span>
-            <span>Continuous Flow</span>
+      <Card className="border-gray-100 shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Kanban Board</CardTitle>
+            <p className="text-sm text-gray-500 mt-1">Drag cards between columns (WIP limits enforced by DB).</p>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2"
-          >
-            <span className="text-lg leading-none">+</span> Create Task
-          </button>
-          <button 
-            onClick={() => setShowArchiveView(!showArchiveView)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 ${showArchiveView ? 'bg-purple-100 text-purple-700 border-purple-200' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'}`}
-          >
-            📦 Archive {archivedTasks.length > 0 && `(${archivedTasks.length})`}
-          </button>
-          <button className="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-gray-50">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-            Board Settings
-          </button>
-          <button className="bg-white border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-50">+ Add Column</button>
-        </div>
-      </div>
-
-      {/* Complete Phase Button */}
-      <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm flex justify-between items-center">
-        <div>
-          <h3 className="font-bold text-gray-800 text-sm">Complete Phase</h3>
-          <p className="text-xs text-gray-500 mt-1">
-            {noActiveTasks 
-              ? 'All tasks completed or archived. You can now complete this phase.'
-              : 'Complete or archive all tasks to finish this phase.'
-            }
-          </p>
-        </div>
-        <button
-          disabled={!noActiveTasks}
-          className={`px-6 py-2 rounded-lg text-sm font-semibold transition-colors ${
-            noActiveTasks
-              ? 'bg-green-600 hover:bg-green-700 text-white'
-              : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-          }`}
-        >
-          Complete Phase
-        </button>
-      </div>
-
-      {/* 3. The Kanban Board */}
-      {showArchiveView ? (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-bold text-gray-800">Archived Tasks ({archivedTasks.length})</h3>
-            <button 
-              onClick={() => setShowArchiveView(false)}
-              className="text-sm text-gray-600 hover:text-gray-800"
-            >
-              ← Back to Board
-            </button>
-          </div>
-          {archivedTasks.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
-              <p className="text-lg">No archived tasks</p>
-              <p className="text-sm mt-2">Tasks archived from the Completed column will appear here</p>
-            </div>
+          <Button variant="outline" onClick={() => router.refresh()}>
+            Refresh
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {stages.length === 0 ? (
+            <div className="text-sm text-gray-600">No workflow stages configured for this phase.</div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {archivedTasks.map((task) => (
-                <div key={task.id} className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase">Archived</span>
-                    <button
-                      onClick={() => {
-                        setArchivedTasks(archivedTasks.filter(t => t.id !== task.id));
-                        setTasks([...tasks, { ...task, isArchived: false }]);
+            <div className="flex gap-6 overflow-x-auto pb-6">
+              {stages.map((stage) => {
+                const stageTasks = tasks
+                  .filter((t) => t.workflow_stage_id === stage.id)
+                  .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+
+                const wipLabel =
+                  stage.wip_limit != null ? `${stageTasks.filter((t) => !t.completed_at).length}/${stage.wip_limit}` : null
+
+                return (
+                  <div key={stage.id} className="min-w-[320px] flex flex-col gap-4">
+                    <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex justify-between items-center">
+                      <div>
+                        <span className="font-bold text-gray-800 text-sm">{stage.name}</span>
+                        <span className="ml-2 text-xs text-gray-400 font-medium">{stageTasks.length} tasks</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {wipLabel ? (
+                          <span className="text-[10px] font-bold bg-green-50 text-green-600 px-2 py-0.5 rounded border border-green-100 uppercase">
+                            WIP: {wipLabel}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold bg-gray-50 text-gray-500 px-2 py-0.5 rounded border border-gray-100 uppercase">
+                            No WIP
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div
+                      className={`flex-1 space-y-4 overflow-y-auto pr-2 ${dragOverStageId === stage.id ? 'bg-blue-50 rounded-lg' : ''}`}
+                      onDragOver={(e) => {
+                        e.preventDefault()
+                        setDragOverStageId(stage.id)
                       }}
-                      className="text-xs text-blue-600 hover:text-blue-800"
+                      onDragLeave={() => setDragOverStageId(null)}
+                      onDrop={() => {
+                        if (!draggedTaskId) return
+                        if (movingTaskId) return
+                        moveTask(draggedTaskId, stage.id)
+                        setDraggedTaskId(null)
+                        setDragOverStageId(null)
+                      }}
                     >
-                      Restore
-                    </button>
+                      {stageTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          draggable
+                          onDragStart={() => setDraggedTaskId(task.id)}
+                          className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing"
+                        >
+                          <div className="flex justify-between items-start mb-2">
+                            <span className="text-[10px] font-bold text-gray-400 uppercase">{task.id.slice(0, 8)}</span>
+                            <Badge variant="outline" className={`text-[10px] font-bold ${priorityStyle(task.priority)}`}>
+                              {task.priority === 'critical' ? 'high' : task.priority}
+                            </Badge>
+                          </div>
+
+                          <h4 className="text-sm font-bold text-gray-800 mb-3 leading-snug">{task.title}</h4>
+
+                          <div className="flex justify-between items-center pt-3 border-t border-gray-50">
+                            <span className="text-[10px] text-gray-500 font-medium">
+                              {task.story_points || 0} pts
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <select
+                                value={task.workflow_stage_id}
+                                onChange={(e) => moveTask(task.id, e.target.value)}
+                                disabled={movingTaskId === task.id}
+                                className="text-[11px] border border-gray-200 rounded px-2 py-1 bg-white"
+                              >
+                                {stages.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      {stageTasks.length === 0 ? (
+                        <div className="text-xs text-gray-400 px-2 py-4">Drop tasks here</div>
+                      ) : null}
+                    </div>
                   </div>
-                  <h4 className="text-sm font-bold text-gray-700 mb-2">{task.title}</h4>
-                  <div className="flex flex-wrap gap-1.5">
-                    {task.tags.map(tag => (
-                      <span key={tag} className="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-200 text-gray-600">{tag}</span>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
-        </div>
-      ) : (
-        <div className="flex gap-6 overflow-x-auto pb-6 h-[calc(100vh-350px)]">
-          {COLUMNS.map((col) => (
-            <div key={col.name} className="min-w-[320px] flex flex-col gap-4">
-              {/* Column Header */}
-              <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex justify-between items-center">
-                <div>
-                  <span className="font-bold text-gray-800 text-sm">{col.name}</span>
-                  <span className="ml-2 text-xs text-gray-400 font-medium">{activeTasks.filter(t => t.status === col.name).length} tasks</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {col.name === 'Completed' && activeTasks.filter(t => t.status === 'Completed').length > 0 && (
-                    <button
-                      onClick={() => {
-                        const completedTasks = activeTasks.filter(t => t.status === 'Completed');
-                        setArchivedTasks([...archivedTasks, ...completedTasks.map(t => ({ ...t, isArchived: true }))]);
-                        setTasks(tasks.filter(t => t.status !== 'Completed'));
-                      }}
-                      className="text-[10px] font-bold bg-purple-50 text-purple-600 px-2 py-0.5 rounded border border-purple-100 uppercase hover:bg-purple-100"
-                    >
-                      Archive All
-                    </button>
-                  )}
-                  <span className="text-[10px] font-bold bg-green-50 text-green-600 px-2 py-0.5 rounded border border-green-100 uppercase">WIP: {col.wip}</span>
-                </div>
-              </div>
-
-              {/* Task List */}
-              <div
-                className={`flex-1 space-y-4 overflow-y-auto pr-2 custom-scrollbar ${dragOverColumn === col.name ? 'bg-blue-50 rounded-lg' : ''}`}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOverColumn(col.name);
-                }}
-                onDragLeave={() => setDragOverColumn(null)}
-                onDrop={() => {
-                  if (draggedTask) {
-                    if (draggedTask.status !== col.name) {
-                      // Moving to different column, place at top
-                      const maxPosition = Math.max(...tasks.filter(t => t.status === col.name).map(t => t.position), -1);
-                      const updatedTasks = tasks.map((t) =>
-                        t.id === draggedTask.id ? { ...t, status: col.name, position: maxPosition + 1 } : t
-                      );
-                      setTasks(updatedTasks);
-                    }
-                    setDraggedTask(null);
-                    setDragOverColumn(null);
-                  }
-                }}
-              >
-                {/* Drop zone for top */}
-                <div
-                  className={`h-8 border-2 border-dashed rounded-lg flex items-center justify-center text-gray-400 text-sm ${dragOverColumn === `${col.name}-top` ? 'border-blue-400 bg-blue-50' : 'border-gray-200'}`}
-                  onDragOver={(e) => {
-                    e.preventDefault();
-                    setDragOverColumn(`${col.name}-top`);
-                  }}
-                  onDragLeave={() => setDragOverColumn(null)}
-                  onDrop={() => {
-                    if (draggedTask) {
-                      const columnTasks = tasks.filter(t => t.status === col.name).sort((a, b) => a.position - b.position);
-                      const minPosition = columnTasks.length > 0 ? columnTasks[0].position : 0;
-                      const updatedTasks = tasks.map((t) => {
-                        if (t.id === draggedTask.id) {
-                          return { ...t, status: col.name, position: minPosition - 0.5 };
-                        }
-                        if (t.status === col.name && t.position >= minPosition) {
-                          return { ...t, position: t.position + 1 };
-                        }
-                        return t;
-                      });
-                      setTasks(updatedTasks);
-                      setDraggedTask(null);
-                      setDragOverColumn(null);
-                    }
-                  }}
-                >
-                  {dragOverColumn === `${col.name}-top` ? '' : ''}
-                </div>
-
-                {activeTasks.filter(t => t.status === col.name).sort((a, b) => a.position - b.position).map((task) => (
-                  <div
-                    key={task.id}
-                    draggable
-                    onDragStart={() => setDraggedTask(task)}
-                    className={`bg-white p-4 rounded-xl border ${task.isBlocked ? 'border-red-200' : 'border-gray-100'} shadow-sm hover:shadow-md transition-all group cursor-grab active:cursor-grabbing`}
-                  >
-                    <div className="flex justify-between items-start mb-2 relative">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase">{task.id}</span>
-                      <button
-                        onClick={() => setOpenDropdown(openDropdown === task.id ? null : task.id)}
-                        className="text-gray-300 hover:text-gray-600"
-                      >
-                        •••
-                      </button>
-                      {openDropdown === task.id && (
-                        <div className="absolute right-0 top-6 bg-white border border-gray-200 rounded-md shadow-lg z-10 w-32">
-                          <button className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                            Edit Details
-                          </button>
-                          {task.status === 'Completed' && (
-                            <button
-                              onClick={() => {
-                                setArchivedTasks([...archivedTasks, { ...task, isArchived: true }]);
-                                setTasks(tasks.filter(t => t.id !== task.id));
-                                setOpenDropdown(null);
-                              }}
-                              className="w-full text-left px-3 py-2 text-sm text-purple-600 hover:bg-purple-50"
-                            >
-                              Archive Task
-                            </button>
-                          )}
-                          <button
-                            onClick={() => {
-                              setTasks(tasks.filter(t => t.id !== task.id));
-                              setOpenDropdown(null);
-                            }}
-                            className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                          >
-                            Delete Task
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    
-                    <h4 className="text-sm font-bold text-gray-800 mb-3 group-hover:text-blue-600 leading-snug">{task.title}</h4>
-                    
-                    <div className="flex flex-wrap gap-1.5 mb-4">
-                      {task.tags.map(tag => (
-                        <span key={tag} className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100">{tag}</span>
-                      ))}
-                    </div>
-
-                    <div className="flex flex-wrap gap-2 mb-4">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${task.priority === 'High' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-yellow-50 text-yellow-600 border border-yellow-100'}`}>
-                        {task.priority}
-                      </span>
-                      {task.isBlocked && (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-red-50 text-red-600 border border-red-200 flex items-center gap-1">
-                          ⚠️ Blocked
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex justify-between items-center pt-3 border-t border-gray-50">
-                      <div className="flex items-center gap-3">
-                        <div className={`${task.assignee.avatarBg} w-6 h-6 rounded-full flex items-center justify-center text-[10px] text-white font-bold border-2 border-white`}>
-                          {task.assignee.name}
-                        </div>
-                        <div className="flex items-center gap-1 text-[10px] text-gray-400">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                          {task.date}
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center gap-2 text-[10px] text-gray-400">
-                        {task.comments && <span className="flex items-center gap-1">💬 {task.comments}</span>}
-                        {task.attachments && <span className="flex items-center gap-1">📎 {task.attachments}</span>}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-
-              {/* Drop zone for bottom */}
-              <div
-                className={`h-8 border-2 border-dashed rounded-lg flex items-center justify-center text-gray-400 text-sm ${dragOverColumn === `${col.name}-bottom` ? 'border-blue-400 bg-blue-50' : 'border-gray-200'}`}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOverColumn(`${col.name}-bottom`);
-                }}
-                onDragLeave={() => setDragOverColumn(null)}
-                onDrop={() => {
-                  if (draggedTask) {
-                    const columnTasks = tasks.filter(t => t.status === col.name).sort((a, b) => a.position - b.position);
-                    const maxPosition = columnTasks.length > 0 ? columnTasks[columnTasks.length - 1].position : -1;
-                    const updatedTasks = tasks.map((t) =>
-                      t.id === draggedTask.id ? { ...t, status: col.name, position: maxPosition + 1 } : t
-                    );
-                    setTasks(updatedTasks);
-                    setDraggedTask(null);
-                    setDragOverColumn(null);
-                  }
-                }}
-              >
-                {dragOverColumn === `${col.name}-bottom` ? '' : ''}
-              </div>
-
-              {/* Add Task Dotted Button */}
-              <button className="w-full py-3 border-2 border-dashed border-gray-200 rounded-xl text-gray-400 text-sm font-medium hover:bg-gray-50 hover:border-blue-300 hover:text-blue-500 transition-all">
-                + Add Task
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-      )}
-
-      {isModalOpen && <CreateTaskModal onClose={() => setIsModalOpen(false)} />}
+        </CardContent>
+      </Card>
     </div>
-  );
+  )
 }
