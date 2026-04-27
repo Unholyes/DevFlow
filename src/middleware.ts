@@ -86,8 +86,8 @@ export async function middleware(req: NextRequest) {
   })
 
   const {
-    data: { session },
-  } = await supabase.auth.getSession()
+    data: { user },
+  } = await supabase.auth.getUser()
 
   const { pathname } = req.nextUrl
 
@@ -98,9 +98,7 @@ export async function middleware(req: NextRequest) {
   const isAuthRoute = pathname.startsWith('/auth')
   const isOnboardingRoute = pathname.startsWith('/onboarding')
 
-  async function resolveUsersPrimaryTenantSlug() {
-    if (!session) return null
-    const uid = session.user.id
+  async function resolveUsersPrimaryTenantSlug(uid: string) {
 
     // Prefer orgs the user owns.
     const { data: owned } = await supabase
@@ -133,7 +131,7 @@ export async function middleware(req: NextRequest) {
   }
 
   // Redirect unauthenticated users from protected routes
-  if ((isProtectedRoute || isAdminRoute) && !session) {
+  if ((isProtectedRoute || isAdminRoute) && !user) {
     const redirectUrl = new URL('/auth/login', req.url)
     redirectUrl.searchParams.set('redirectedFrom', pathname)
     console.log('[mw] unauth protected -> /auth/login', {
@@ -146,8 +144,8 @@ export async function middleware(req: NextRequest) {
 
   // Automatic tenant-domain redirect (base domain -> tenant subdomain) after approval.
   // If user has a tenant org slug, send them to the tenant domain and into setup wizard if needed.
-  if (session && !tenantSlug && (isAuthRoute || isOnboardingRoute || isProtectedRoute)) {
-    const primaryOrg = await resolveUsersPrimaryTenantSlug()
+  if (user && !tenantSlug && (isAuthRoute || isOnboardingRoute || isProtectedRoute)) {
+    const primaryOrg = await resolveUsersPrimaryTenantSlug(user.id)
     if (primaryOrg?.slug) {
       const { data: project } = await supabase
         .from('projects')
@@ -169,17 +167,17 @@ export async function middleware(req: NextRequest) {
 
   // On the base domain (no tenant subdomain), authenticated users should complete onboarding
   // before using /dashboard or /settings.
-  if (session && isProtectedRoute && !tenantSlug) {
+  if (user && isProtectedRoute && !tenantSlug) {
     console.log('[mw] base protected -> /onboarding', { host: req.headers.get('host'), pathname })
     return NextResponse.redirect(new URL('/onboarding', req.url))
   }
 
   // Role-based access control for admin routes
-  if (isAdminRoute && session) {
+  if (isAdminRoute && user) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
-      .eq('id', session.user.id)
+      .eq('id', user.id)
       .single()
 
     if (!profile || profile.role !== USER_ROLES.SUPER_ADMIN) {
@@ -191,7 +189,7 @@ export async function middleware(req: NextRequest) {
 
   // Tenant membership enforcement on tenant subdomains.
   // If a request is served from {orgSlug} subdomain, the user must belong to that organization.
-  if (tenantSlug && session && (isProtectedRoute || isOnboardingRoute || pathname === '/')) {
+  if (tenantSlug && user && (isProtectedRoute || isOnboardingRoute || pathname === '/')) {
     const { data: org, error: orgError } = await supabase
       .from('organizations')
       .select('id')
@@ -211,11 +209,11 @@ export async function middleware(req: NextRequest) {
   }
 
   // Redirect authenticated users away from auth pages
-  if (isAuthRoute && session) {
+  if (isAuthRoute && user) {
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')
-      .eq('id', session.user.id)
+      .eq('id', user.id)
       .single()
 
     if (profile) {
@@ -232,7 +230,7 @@ export async function middleware(req: NextRequest) {
 
   // If already on a tenant subdomain, onboarding isn't the primary entry point.
   // Allow a tenant-scoped setup wizard under /onboarding/setup.
-  if (session && isOnboardingRoute && tenantSlug && pathname === '/onboarding') {
+  if (user && isOnboardingRoute && tenantSlug && pathname === '/onboarding') {
     console.log('[mw] tenant /onboarding -> /dashboard', { host: req.headers.get('host'), pathname, tenantSlug })
     return NextResponse.redirect(new URL('/dashboard', req.url))
   }

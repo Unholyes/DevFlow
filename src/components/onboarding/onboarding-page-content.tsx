@@ -20,6 +20,7 @@ export function OnboardingPageContent() {
   const [loadingApplication, setLoadingApplication] = useState(true)
   const [isCreateOrgModalOpen, setIsCreateOrgModalOpen] = useState(false)
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [isSigningOut, setIsSigningOut] = useState(false)
 
   const fetchApplication = async () => {
     setLoadingApplication(true)
@@ -52,6 +53,16 @@ export function OnboardingPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const handleSignOut = async () => {
+    try {
+      setIsSigningOut(true)
+      await supabase.auth.signOut()
+      window.location.href = '/auth/login'
+    } finally {
+      setIsSigningOut(false)
+    }
+  }
+
   const getCardStyles = (status: Application['status']) => {
     switch (status) {
       case 'approved':
@@ -69,12 +80,17 @@ export function OnboardingPageContent() {
     <>
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
         <div className="w-full max-w-3xl">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900">Set up your organization</h1>
-            <p className="mt-2 text-gray-600">
-              DevFlow is organization-based. Submit your organization application to get approved and access your tenant
-              workspace.
-            </p>
+          <div className="mb-6 flex items-start justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Set up your organization</h1>
+              <p className="mt-2 text-gray-600">
+                DevFlow is organization-based. Submit your organization application to get approved and access your tenant
+                workspace.
+              </p>
+            </div>
+            <Button type="button" variant="outline" onClick={handleSignOut} disabled={isSigningOut}>
+              {isSigningOut ? 'Signing out...' : 'Sign out'}
+            </Button>
           </div>
 
           {loadingApplication ? (

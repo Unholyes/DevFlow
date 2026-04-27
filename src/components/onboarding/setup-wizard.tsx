@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { supabase } from '@/lib/supabase/client'
 
 type Phase = {
   title: string
@@ -25,6 +26,7 @@ export function SetupWizard(props: { tenantSlug: string }) {
   const router = useRouter()
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [saving, setSaving] = useState(false)
+  const [isSigningOut, setIsSigningOut] = useState(false)
 
   const [projectName, setProjectName] = useState('My First Project')
   const [projectDescription, setProjectDescription] = useState('')
@@ -66,18 +68,33 @@ export function SetupWizard(props: { tenantSlug: string }) {
     }
   }
 
+  const handleSignOut = async () => {
+    try {
+      setIsSigningOut(true)
+      await supabase.auth.signOut()
+      window.location.href = '/auth/login'
+    } finally {
+      setIsSigningOut(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="mx-auto w-full max-w-4xl space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Tenant Setup Wizard</h1>
-          <p className="mt-2 text-gray-600">
-            Configure your first project. This is where “Hybrid SDLC” becomes real: phases are sequential milestones,
-            and each phase can run Scrum or Kanban.
-          </p>
-          <div className="mt-3 text-xs text-gray-500">
-            Tenant: <Badge variant="outline">{props.tenantSlug}</Badge>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Tenant Setup Wizard</h1>
+            <p className="mt-2 text-gray-600">
+              Configure your first project. This is where “Hybrid SDLC” becomes real: phases are sequential milestones,
+              and each phase can run Scrum or Kanban.
+            </p>
+            <div className="mt-3 text-xs text-gray-500">
+              Tenant: <Badge variant="outline">{props.tenantSlug}</Badge>
+            </div>
           </div>
+          <Button type="button" variant="outline" onClick={handleSignOut} disabled={isSigningOut}>
+            {isSigningOut ? 'Signing out...' : 'Sign out'}
+          </Button>
         </div>
 
         <div className="flex gap-2">
@@ -127,6 +144,18 @@ export function SetupWizard(props: { tenantSlug: string }) {
               <div className="space-y-3">
                 {phases.map((p, idx) => (
                   <div key={idx} className="rounded-lg border border-gray-200 bg-white p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <span className="text-xs font-medium text-gray-500">Phase {idx + 1}</span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPhases((prev) => prev.filter((_, i) => i !== idx))}
+                        disabled={phases.length <= 1}
+                      >
+                        Remove
+                      </Button>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">Phase title</label>
