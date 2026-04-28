@@ -86,11 +86,6 @@ export async function middleware(req: NextRequest) {
     },
   })
 
-<<<<<<< Updated upstream
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-=======
   let user: Awaited<ReturnType<typeof supabase.auth.getUser>>['data']['user'] | null = null
   {
     const { data, error } = await supabase.auth.getUser()
@@ -108,7 +103,6 @@ export async function middleware(req: NextRequest) {
       user = data.user
     }
   }
->>>>>>> Stashed changes
 
   const { pathname } = req.nextUrl
 
@@ -119,13 +113,9 @@ export async function middleware(req: NextRequest) {
   const isAuthRoute = pathname.startsWith('/auth')
   const isOnboardingRoute = pathname.startsWith('/onboarding')
 
-<<<<<<< Updated upstream
-  async function resolveUsersPrimaryTenantSlug(uid: string) {
-=======
   async function resolveUsersPrimaryTenantSlug() {
     if (!user) return null
     const uid = user.id
->>>>>>> Stashed changes
 
     // Prefer orgs the user owns.
     const { data: owned } = await supabase
@@ -183,9 +173,6 @@ export async function middleware(req: NextRequest) {
   // Automatic tenant-domain redirect (base domain -> tenant subdomain) after approval.
   // If user has a tenant org slug, send them to the tenant domain and into setup wizard if needed.
   if (user && !tenantSlug && (isAuthRoute || isOnboardingRoute || isProtectedRoute)) {
-<<<<<<< Updated upstream
-    const primaryOrg = await resolveUsersPrimaryTenantSlug(user.id)
-=======
     const configuredBaseDomain = (process.env.NEXT_PUBLIC_BASE_DOMAIN ?? '').trim()
     const host = stripPort(req.headers.get('host') ?? '').toLowerCase()
 
@@ -195,7 +182,6 @@ export async function middleware(req: NextRequest) {
     if (!configuredBaseDomain && host === 'localhost') return res
 
     const primaryOrg = await resolveUsersPrimaryTenantSlug()
->>>>>>> Stashed changes
     if (primaryOrg?.slug) {
       const { data: project } = await supabase
         .from('projects')
