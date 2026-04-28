@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { User, Camera, Save, X } from 'lucide-react'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase/client'
 
 const profileSchema = z.object({
   full_name: z.string().min(1, "Full name is required").max(100, "Full name must be less than 100 characters"),
@@ -28,6 +29,8 @@ export function ProfileForm({ user, profile, updateProfile }: ProfileFormProps) 
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false)
+  const [deleteConfirmText, setDeleteConfirmText] = useState('')
 
   const {
     register,
@@ -258,6 +261,60 @@ export function ProfileForm({ user, profile, updateProfile }: ProfileFormProps) 
               ? 'Uploading Photo...'
               : 'Save Changes'}
         </Button>
+      </div>
+
+      {/* Danger Zone */}
+      <div className="pt-6 border-t border-red-100">
+        <h3 className="text-lg font-semibold text-red-700">Danger zone</h3>
+        <p className="text-sm text-gray-600 mt-1">
+          Deleting your account is permanent and will remove your profile and memberships. If you own an organization,
+          it may also be deleted.
+        </p>
+
+        <div className="mt-4 space-y-3">
+          <div className="space-y-2">
+            <label htmlFor="delete-confirm" className="block text-sm font-medium text-gray-700">
+              Type <span className="font-semibold">DELETE</span> to confirm
+            </label>
+            <Input
+              id="delete-confirm"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder="DELETE"
+              className="max-w-xs"
+            />
+          </div>
+
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={isDeletingAccount || deleteConfirmText !== 'DELETE'}
+            onClick={async () => {
+              setIsDeletingAccount(true)
+              setMessage(null)
+              try {
+                const resp = await fetch('/api/me/delete-account', { method: 'POST' })
+                const body = await resp.json().catch(() => ({}))
+                if (!resp.ok) {
+                  throw new Error(body?.error || 'Failed to delete account')
+                }
+
+                // Best-effort local sign-out + redirect.
+                await supabase.auth.signOut()
+                window.location.href = '/'
+              } catch (e) {
+                setMessage({
+                  type: 'error',
+                  text: e instanceof Error ? e.message : 'Failed to delete account',
+                })
+              } finally {
+                setIsDeletingAccount(false)
+              }
+            }}
+          >
+            {isDeletingAccount ? 'Deleting…' : 'Delete account'}
+          </Button>
+        </div>
       </div>
     </form>
   )
