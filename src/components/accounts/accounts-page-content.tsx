@@ -272,97 +272,48 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
     if (!email) return
 
     setError(null)
-    const signupUrl =
-      typeof window !== 'undefined' ? `${window.location.origin}/auth/signup` : '/auth/signup'
 
-    // "Email a simple link" (no backend email): open the user's email client with a pre-filled message.
-    // This will still work even if the user doesn't exist yet.
-    try {
-      const subject = `You're invited to join ${window.location.host}`
-      const body = `Hi,\n\nUse this link to sign up and join the workspace:\n${signupUrl}\n\nThanks`
-      const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-      window.open(mailto, '_blank', 'noreferrer')
-    } catch {
-      // If popup is blocked, we still proceed with the rest of the flow.
-    }
-
-    // IMPORTANT: per requirements, "Invite user" only mutates `public.organization_members`.
-    // We do NOT create tokens or write to invitation tables here.
-    const optimisticId = `optimistic-member-${Date.now()}`
-    setMembersList((prev) => [
-      ...prev,
-      {
-        id: optimisticId,
-        userId: optimisticId,
-        fullName: 'Adding…',
-        email,
-        role: 'member',
-        joinedAt: '—',
-        projects: [],
-      },
-    ])
+    // IMPORTANT: This action creates a Pending Invite (team_invitations),
+    // not an immediate organization_members row.
+    const optimisticId = `optimistic-invite-${Date.now()}`
+    setInvitesList((prev) => [{ id: optimisticId, email, sentAt: 'Just now' }, ...prev])
     setInviteEmail('')
     setIsInviteModalOpen(false)
 
     try {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id,full_name,email')
-        .eq('email', email)
-        .maybeSingle()
-
-      if (profileError) throw profileError
-      if (!profile?.id) {
-        // They don't exist yet; the email link is enough. Roll back optimistic row and show a helpful message.
-        setMembersList((prev) => prev.filter((m) => m.id !== optimisticId))
-        setError(`Invite link prepared for ${email}. Ask them to sign up using: ${signupUrl}`)
-        return
+      // Fast client-side guard (server enforces too).
+      if (invitesList.some((i) => i.email.toLowerCase() === email)) {
+        throw new Error('An invite is already pending for this email.')
       }
 
-      const { data: inserted, error: insertError } = await supabase
-        .from('organization_members')
-        .insert({
-          organization_id: organizationId,
-          user_id: profile.id,
-          role: 'member',
-        })
-        .select(
-          `
-          id,
-          user_id,
-          role,
-          joined_at,
-          profiles:user_id (
-            full_name,
-            email
-          )
-        `,
-        )
-        .single()
+      const res = await fetch('/api/tenant/invite', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
 
-      if (insertError) throw insertError
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error(payload?.error ?? 'Failed to create invite.')
+      }
 
-      const fullName = (inserted as any).profiles?.full_name ?? profile.full_name ?? 'Unknown User'
-      const insertedEmail = (inserted as any).profiles?.email ?? profile.email ?? email
+      const inserted = payload?.invite
+      if (!inserted?.id) throw new Error(payload?.error ?? payload?.warning ?? 'Failed to create invite.')
 
-      setMembersList((prev) =>
-        prev.map((m) =>
-          m.id === optimisticId
-            ? {
-                id: inserted.id,
-                userId: inserted.user_id,
-                fullName,
-                email: insertedEmail ?? email,
-                role: inserted.role as WorkspaceRole,
-                joinedAt: formatRelativeDate(inserted.joined_at),
-                projects: [],
-              }
-            : m,
+      setInvitesList((prev) =>
+        prev.map((i) =>
+          i.id === optimisticId
+            ? { id: inserted.id, email: inserted.email, sentAt: formatRelativeDate(inserted.created_at) }
+            : i,
         ),
       )
+
+      if (payload?.warning) {
+        setError(String(payload.warning))
+      }
     } catch (e: any) {
-      setMembersList((prev) => prev.filter((m) => m.id !== optimisticId))
-      setError(e?.message ?? 'Failed to add member.')
+      setInvitesList((prev) => prev.filter((i) => i.id !== optimisticId))
+      setError(e?.message ?? 'Failed to create invite.')
     }
   }
 
