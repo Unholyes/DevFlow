@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { USER_ROLES } from './constants'
 import { resolveTenantSlugFromHost, TENANT_SLUG_HEADER } from '@/lib/tenant/resolve'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 function stripPort(host: string) {
   const idx = host.indexOf(':')
@@ -85,9 +86,29 @@ export async function middleware(req: NextRequest) {
     },
   })
 
+<<<<<<< Updated upstream
   const {
     data: { user },
   } = await supabase.auth.getUser()
+=======
+  let user: Awaited<ReturnType<typeof supabase.auth.getUser>>['data']['user'] | null = null
+  {
+    const { data, error } = await supabase.auth.getUser()
+    if (error) {
+      // Common in local dev when cookies are stale (non-incognito sessions).
+      // Clear auth cookies to avoid redirect loops.
+      if ((error as any).code === 'refresh_token_not_found') {
+        try {
+          await supabase.auth.signOut()
+        } catch {
+          // ignore
+        }
+      }
+    } else {
+      user = data.user
+    }
+  }
+>>>>>>> Stashed changes
 
   const { pathname } = req.nextUrl
 
@@ -98,7 +119,13 @@ export async function middleware(req: NextRequest) {
   const isAuthRoute = pathname.startsWith('/auth')
   const isOnboardingRoute = pathname.startsWith('/onboarding')
 
+<<<<<<< Updated upstream
   async function resolveUsersPrimaryTenantSlug(uid: string) {
+=======
+  async function resolveUsersPrimaryTenantSlug() {
+    if (!user) return null
+    const uid = user.id
+>>>>>>> Stashed changes
 
     // Prefer orgs the user owns.
     const { data: owned } = await supabase
@@ -130,6 +157,17 @@ export async function middleware(req: NextRequest) {
     return memberOrg?.slug ? memberOrg : null
   }
 
+  // Super-admin routes must be base-domain only (no tenant subdomain).
+  // Prevent a tenant host like {slug}.localhost from ever serving /super-admin/*.
+  if (isAdminRoute && tenantSlug) {
+    console.log('[mw] tenant host attempted /super-admin -> base redirect', {
+      host: req.headers.get('host'),
+      pathname,
+      tenantSlug,
+    })
+    return baseDomainRedirect(req, pathname, tenantSlug)
+  }
+
   // Redirect unauthenticated users from protected routes
   if ((isProtectedRoute || isAdminRoute) && !user) {
     const redirectUrl = new URL('/auth/login', req.url)
@@ -145,7 +183,19 @@ export async function middleware(req: NextRequest) {
   // Automatic tenant-domain redirect (base domain -> tenant subdomain) after approval.
   // If user has a tenant org slug, send them to the tenant domain and into setup wizard if needed.
   if (user && !tenantSlug && (isAuthRoute || isOnboardingRoute || isProtectedRoute)) {
+<<<<<<< Updated upstream
     const primaryOrg = await resolveUsersPrimaryTenantSlug(user.id)
+=======
+    const configuredBaseDomain = (process.env.NEXT_PUBLIC_BASE_DOMAIN ?? '').trim()
+    const host = stripPort(req.headers.get('host') ?? '').toLowerCase()
+
+    // Localhost dev: avoid automatic subdomain redirects.
+    // Browsers typically don't share host-only auth cookies from `localhost` to `{tenant}.localhost`,
+    // which causes login bounce loops.
+    if (!configuredBaseDomain && host === 'localhost') return res
+
+    const primaryOrg = await resolveUsersPrimaryTenantSlug()
+>>>>>>> Stashed changes
     if (primaryOrg?.slug) {
       const { data: project } = await supabase
         .from('projects')
@@ -198,6 +248,55 @@ export async function middleware(req: NextRequest) {
 
     // If slug doesn't exist or user cannot read it via RLS, redirect to base domain onboarding.
     if (orgError || !org) {
+      // RLS can make this lookup return null even for valid slugs (especially during onboarding),
+      // so fall back to a server-side check that validates:
+      // - the tenant slug exists
+      // - the authenticated user belongs to that tenant (owner or member)
+      const admin = createAdminClient()
+      const { data: orgRow, error: adminOrgError } = await admin
+        .from('organizations')
+        .select('id,owner_id')
+        .eq('slug', tenantSlug)
+        .maybeSingle()
+
+      if (adminOrgError) {
+        console.log('[mw] admin org lookup failed', {
+          host: req.headers.get('host'),
+          pathname,
+          tenantSlug,
+          adminOrgError: { message: adminOrgError.message, code: (adminOrgError as any).code },
+        })
+      }
+
+      if (orgRow) {
+        const isOwner = orgRow.owner_id === user.id
+        if (!isOwner) {
+          const { data: membership, error: adminMemberError } = await admin
+            .from('organization_members')
+            .select('id')
+            .eq('organization_id', orgRow.id)
+            .eq('user_id', user.id)
+            .maybeSingle()
+
+          if (adminMemberError) {
+            console.log('[mw] admin membership lookup failed', {
+              host: req.headers.get('host'),
+              pathname,
+              tenantSlug,
+              adminMemberError: { message: adminMemberError.message, code: (adminMemberError as any).code },
+            })
+          }
+
+          if (membership) {
+            // Valid tenant + valid membership, allow.
+            return res
+          }
+        } else {
+          // Valid tenant + ownership, allow.
+          return res
+        }
+      }
+
       console.log('[mw] tenant slug invalid/unreadable -> base /onboarding', {
         host: req.headers.get('host'),
         pathname,
@@ -222,6 +321,12 @@ export async function middleware(req: NextRequest) {
         console.log('[mw] super_admin auth route -> /super-admin/dashboard', { host: req.headers.get('host'), pathname })
         return NextResponse.redirect(new URL('/super-admin/dashboard', req.url))
       } else {
+        // In local dev (no configured base domain), cookies are typically host-only for `localhost`
+        // and won't be readable on `{tenant}.localhost`. Redirecting away from /auth/login on the
+        // base domain causes confusing bounce loops.
+        const hasConfiguredBaseDomain = Boolean((process.env.NEXT_PUBLIC_BASE_DOMAIN ?? '').trim())
+        if (!tenantSlug && !hasConfiguredBaseDomain) return res
+
         console.log('[mw] authed auth route -> /dashboard', { host: req.headers.get('host'), pathname, tenantSlug })
         return NextResponse.redirect(new URL('/dashboard', req.url))
       }
