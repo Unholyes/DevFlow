@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { User, Building, Settings as SettingsIcon } from 'lucide-react'
+import { User, Building, Settings as SettingsIcon, Shield } from 'lucide-react'
 
 export default async function SettingsPage() {
   const supabase = createClient()
@@ -48,22 +48,41 @@ export default async function SettingsPage() {
 
         {/* Organization Settings - Only for tenant admins */}
         {isTenantAdmin && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center mb-4">
-              <Building className="h-6 w-6 text-green-600 mr-3" />
-              <h2 className="text-xl font-semibold text-gray-900">Organization</h2>
+          <>
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="flex items-center mb-4">
+                <Building className="h-6 w-6 text-green-600 mr-3" />
+                <h2 className="text-xl font-semibold text-gray-900">Organization</h2>
+              </div>
+              <p className="text-gray-600 mb-4">
+                Manage your organization settings and team members.
+              </p>
+              <Link
+                href="/settings/organization"
+                className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+              >
+                <SettingsIcon className="h-4 w-4 mr-2" />
+                Manage Organization
+              </Link>
             </div>
-            <p className="text-gray-600 mb-4">
-              Manage your organization settings and team members.
-            </p>
-            <Link
-              href="/settings/organization"
-              className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-            >
-              <SettingsIcon className="h-4 w-4 mr-2" />
-              Manage Organization
-            </Link>
-          </div>
+
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="flex items-center mb-4">
+                <Shield className="h-6 w-6 text-blue-600 mr-3" />
+                <h2 className="text-xl font-semibold text-gray-900">Permissions</h2>
+              </div>
+              <p className="text-gray-600 mb-4">
+                Define account-level permissions for default and custom roles.
+              </p>
+              <Link
+                href="/settings/permissions"
+                className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <SettingsIcon className="h-4 w-4 mr-2" />
+                Manage Permissions
+              </Link>
+            </div>
+          </>
         )}
       </div>
 
