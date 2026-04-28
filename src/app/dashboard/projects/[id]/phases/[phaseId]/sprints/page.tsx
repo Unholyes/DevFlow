@@ -2,21 +2,29 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { SprintsPageClient, type SprintWithStats } from '@/components/sprints/sprints-page-client'
+import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 
 export default async function SprintsPage({ params }: { params: { id: string; phaseId: string } }) {
   const tenantSlug = getTenantSlug()
-  if (!tenantSlug) redirect('/onboarding')
-
   const supabase = createClient()
 
-  const { data: org } = await supabase.from('organizations').select('id').eq('slug', tenantSlug).maybeSingle()
-  if (!org?.id) redirect('/onboarding')
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) redirect('/auth/login')
+
+  const orgId = tenantSlug
+    ? (await supabase.from('organizations').select('id').eq('slug', tenantSlug).maybeSingle()).data?.id ?? null
+    : await resolvePrimaryOrgIdForUser(supabase as any, user.id)
+
+  if (!orgId) redirect('/onboarding')
 
   const { data: project } = await supabase
     .from('projects')
     .select('id')
     .eq('id', params.id)
-    .eq('organization_id', org.id)
+    .eq('organization_id', orgId)
     .maybeSingle()
   if (!project) notFound()
 

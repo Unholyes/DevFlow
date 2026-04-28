@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge'
 import { CheckCircle2, Clock, Circle, ArrowRight, ArrowLeft, Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
+import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import type { ProjectStatus } from '@/types'
 
 const sdlcBadgeColors = {
@@ -16,17 +17,25 @@ const sdlcBadgeColors = {
 
 export default async function ProjectPage({ params }: { params: { id: string } }) {
   const tenantSlug = getTenantSlug()
-  if (!tenantSlug) redirect('/onboarding')
-
   const supabase = createClient()
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('slug', tenantSlug)
-    .maybeSingle()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  if (!org?.id) redirect('/onboarding')
+  if (!user) redirect('/auth/login')
+
+  const orgId = tenantSlug
+    ? (
+        await supabase
+          .from('organizations')
+          .select('id')
+          .eq('slug', tenantSlug)
+          .maybeSingle()
+      ).data?.id ?? null
+    : await resolvePrimaryOrgIdForUser(supabase as any, user.id)
+
+  if (!orgId) redirect('/onboarding')
 
   // `phase_gating_enabled` was introduced in `migrations/add_phase_gating.sql`.
   // If the column doesn't exist yet, PostgREST returns PGRST204, causing `project` to be null.
@@ -47,7 +56,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       .from('projects')
       .select('id,name,description,status,progress_percent,phase_gating_enabled')
       .eq('id', params.id)
-      .eq('organization_id', org.id)
+      .eq('organization_id', orgId)
       .maybeSingle()
 
     if (attempt.error?.code === 'PGRST204') {
@@ -55,7 +64,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         .from('projects')
         .select('id,name,description,status,progress_percent')
         .eq('id', params.id)
-        .eq('organization_id', org.id)
+        .eq('organization_id', orgId)
         .maybeSingle()
 
       project = fallback.data as any

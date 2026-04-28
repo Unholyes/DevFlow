@@ -208,6 +208,14 @@ export async function middleware(req: NextRequest) {
   // On the base domain (no tenant subdomain), authenticated users should complete onboarding
   // before using /dashboard or /settings.
   if (user && isProtectedRoute && !tenantSlug) {
+    const configuredBaseDomain = (process.env.NEXT_PUBLIC_BASE_DOMAIN ?? '').trim()
+    const host = stripPort(req.headers.get('host') ?? '').toLowerCase()
+
+    // Single-host deployments (e.g. the default Vercel *.vercel.app domain) don't support tenant
+    // subdomains. In that mode, the base domain is also the tenant experience, so do not force
+    // users back to /onboarding for all dashboard/settings routes.
+    if (!configuredBaseDomain && host.endsWith('.vercel.app')) return res
+
     console.log('[mw] base protected -> /onboarding', { host: req.headers.get('host'), pathname })
     return NextResponse.redirect(new URL('/onboarding', req.url))
   }

@@ -3,27 +3,34 @@ import { redirect } from 'next/navigation'
 import { FolderKanban, Calendar } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
+import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 
 export default async function ProjectsPage() {
   const tenantSlug = getTenantSlug()
-  if (!tenantSlug) redirect('/onboarding')
-
   const supabase = createClient()
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('slug', tenantSlug)
-    .maybeSingle()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  if (!org?.id) {
-    redirect('/onboarding')
-  }
+  if (!user) redirect('/auth/login')
+
+  const orgId = tenantSlug
+    ? (
+        await supabase
+          .from('organizations')
+          .select('id')
+          .eq('slug', tenantSlug)
+          .maybeSingle()
+      ).data?.id ?? null
+    : await resolvePrimaryOrgIdForUser(supabase as any, user.id)
+
+  if (!orgId) redirect('/onboarding')
 
   const { data: projects } = await supabase
     .from('projects')
     .select('id,name,description,status,progress_percent,created_at')
-    .eq('organization_id', org.id)
+    .eq('organization_id', orgId)
     .order('created_at', { ascending: false })
 
   return (

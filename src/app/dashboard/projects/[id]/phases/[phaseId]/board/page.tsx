@@ -5,26 +5,35 @@ import ScrumView from '@/components/project/ScrumView'
 import KanbanView from '@/components/project/KanbanView'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
+import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 
 export default async function PhaseBoardPage({ params }: { params: { id: string; phaseId: string } }) {
   const tenantSlug = getTenantSlug()
-  if (!tenantSlug) redirect('/onboarding')
-
   const supabase = createClient()
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('slug', tenantSlug)
-    .maybeSingle()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  if (!org?.id) redirect('/onboarding')
+  if (!user) redirect('/auth/login')
+
+  const orgId = tenantSlug
+    ? (
+        await supabase
+          .from('organizations')
+          .select('id')
+          .eq('slug', tenantSlug)
+          .maybeSingle()
+      ).data?.id ?? null
+    : await resolvePrimaryOrgIdForUser(supabase as any, user.id)
+
+  if (!orgId) redirect('/onboarding')
 
   const { data: project } = await supabase
     .from('projects')
     .select('id,phase_gating_enabled')
     .eq('id', params.id)
-    .eq('organization_id', org.id)
+    .eq('organization_id', orgId)
     .maybeSingle()
 
   if (!project) notFound()
@@ -52,7 +61,7 @@ export default async function PhaseBoardPage({ params }: { params: { id: string;
     .from('workflow_stages')
     .select('id,name,stage_order,is_done,is_backlog')
     .eq('phase_id', phase.id)
-    .eq('organization_id', org.id)
+    .eq('organization_id', orgId)
     .order('stage_order', { ascending: true })
 
   const { data: sprint } = await supabase
@@ -60,7 +69,7 @@ export default async function PhaseBoardPage({ params }: { params: { id: string;
     .select('id,name,status')
     .eq('project_id', project.id)
     .eq('phase_id', phase.id)
-    .eq('organization_id', org.id)
+    .eq('organization_id', orgId)
     .in('status', ['active', 'planned'])
     .order('start_date', { ascending: false })
     .limit(1)
@@ -71,7 +80,7 @@ export default async function PhaseBoardPage({ params }: { params: { id: string;
         .from('tasks')
         .select('id,title,priority,story_points,workflow_stage_id,completed_at,position')
         .eq('project_id', project.id)
-        .eq('organization_id', org.id)
+        .eq('organization_id', orgId)
         .eq('sprint_id', sprint.id)
         .order('position', { ascending: true })
     : { data: [] as any[] }
@@ -83,7 +92,7 @@ export default async function PhaseBoardPage({ params }: { params: { id: string;
           .from('tasks')
           .select('id,title,priority,story_points,workflow_stage_id,completed_at,position')
           .eq('project_id', project.id)
-          .eq('organization_id', org.id)
+          .eq('organization_id', orgId)
           .in('workflow_stage_id', stageIds)
           .order('position', { ascending: true })
       : { data: [] as any[] }

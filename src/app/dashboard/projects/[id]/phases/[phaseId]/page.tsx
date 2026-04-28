@@ -3,26 +3,35 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { CompletePhaseButton } from '@/components/phases/complete-phase-button'
+import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 
 export default async function PhasePage({ params }: { params: { id: string; phaseId: string } }) {
   const tenantSlug = getTenantSlug()
-  if (!tenantSlug) redirect('/onboarding')
-
   const supabase = createClient()
 
-  const { data: org } = await supabase
-    .from('organizations')
-    .select('id')
-    .eq('slug', tenantSlug)
-    .maybeSingle()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  if (!org?.id) redirect('/onboarding')
+  if (!user) redirect('/auth/login')
+
+  const orgId = tenantSlug
+    ? (
+        await supabase
+          .from('organizations')
+          .select('id')
+          .eq('slug', tenantSlug)
+          .maybeSingle()
+      ).data?.id ?? null
+    : await resolvePrimaryOrgIdForUser(supabase as any, user.id)
+
+  if (!orgId) redirect('/onboarding')
 
   const { data: project } = await supabase
     .from('projects')
     .select('id,name,phase_gating_enabled')
     .eq('id', params.id)
-    .eq('organization_id', org.id)
+    .eq('organization_id', orgId)
     .maybeSingle()
 
   if (!project) notFound()
@@ -73,7 +82,7 @@ export default async function PhasePage({ params }: { params: { id: string; phas
       .select('id,status')
       .eq('project_id', project.id)
       .eq('phase_id', phase.id)
-      .eq('organization_id', org.id)
+      .eq('organization_id', orgId)
       .in('status', ['active', 'planned'])
       .limit(1)
 
@@ -152,7 +161,7 @@ export default async function PhasePage({ params }: { params: { id: string; phas
     .from('workflow_stages')
     .select('id,is_done')
     .eq('phase_id', phase.id)
-    .eq('organization_id', org.id)
+    .eq('organization_id', orgId)
 
   const doneStageIds = new Set((stages ?? []).filter((s) => s.is_done).map((s) => s.id))
   const stageIds = (stages ?? []).map((s) => s.id)
@@ -163,7 +172,7 @@ export default async function PhasePage({ params }: { params: { id: string; phas
           .from('tasks')
           .select('id,workflow_stage_id')
           .eq('project_id', project.id)
-          .eq('organization_id', org.id)
+          .eq('organization_id', orgId)
           .in('workflow_stage_id', stageIds)
       : { data: [] as any[] }
 
