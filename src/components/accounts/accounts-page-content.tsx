@@ -272,6 +272,20 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
     if (!email) return
 
     setError(null)
+    const signupUrl =
+      typeof window !== 'undefined' ? `${window.location.origin}/auth/signup` : '/auth/signup'
+
+    // "Email a simple link" (no backend email): open the user's email client with a pre-filled message.
+    // This will still work even if the user doesn't exist yet.
+    try {
+      const subject = `You're invited to join ${window.location.host}`
+      const body = `Hi,\n\nUse this link to sign up and join the workspace:\n${signupUrl}\n\nThanks`
+      const mailto = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      window.open(mailto, '_blank', 'noreferrer')
+    } catch {
+      // If popup is blocked, we still proceed with the rest of the flow.
+    }
+
     // IMPORTANT: per requirements, "Invite user" only mutates `public.organization_members`.
     // We do NOT create tokens or write to invitation tables here.
     const optimisticId = `optimistic-member-${Date.now()}`
@@ -299,7 +313,10 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
 
       if (profileError) throw profileError
       if (!profile?.id) {
-        throw new Error('No user found for that email yet. Ask them to sign up first, then add them.')
+        // They don't exist yet; the email link is enough. Roll back optimistic row and show a helpful message.
+        setMembersList((prev) => prev.filter((m) => m.id !== optimisticId))
+        setError(`Invite link prepared for ${email}. Ask them to sign up using: ${signupUrl}`)
+        return
       }
 
       const { data: inserted, error: insertError } = await supabase
