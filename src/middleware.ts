@@ -192,7 +192,7 @@ export async function middleware(req: NextRequest) {
   if (tenantSlug && user && (isProtectedRoute || isOnboardingRoute || pathname === '/')) {
     const { data: org, error: orgError } = await supabase
       .from('organizations')
-      .select('id')
+      .select('id,owner_id')
       .eq('slug', tenantSlug)
       .maybeSingle()
 
@@ -205,6 +205,23 @@ export async function middleware(req: NextRequest) {
         orgError: orgError ? { message: orgError.message, code: (orgError as any).code } : null,
       })
       return baseDomainRedirect(req, '/onboarding', tenantSlug)
+    }
+
+    // Enforce membership: owners or organization_members only.
+    if (org.owner_id !== user.id) {
+      const { data: membership } = await supabase
+        .from('organization_members')
+        .select('id')
+        .eq('organization_id', org.id)
+        .eq('user_id', user.id)
+        .limit(1)
+        .maybeSingle()
+
+      if (!membership?.id) {
+        const redirectUrl = new URL('/auth/login', req.url)
+        redirectUrl.searchParams.set('error', 'not_a_member')
+        return baseDomainRedirect(req, redirectUrl.pathname + redirectUrl.search, tenantSlug)
+      }
     }
   }
 
