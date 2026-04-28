@@ -35,7 +35,16 @@ type OrganizationRoleRow = {
   permissions: unknown
 }
 
-type RolePermission = 'members.manage'
+type RolePermission =
+  | 'account.members.manage'
+  | 'sdlc.sprints.create'
+  | 'sdlc.backlog.manage'
+  | 'projects.archive'
+  | 'dev.repo.access'
+  | 'dev.cicd.trigger'
+  | 'dev.env.manage'
+  | 'system.api_tokens.generate'
+  | 'system.integrations.manage'
 
 const ROLE_PERMISSION_CATALOG: Array<{
   id: RolePermission
@@ -43,9 +52,49 @@ const ROLE_PERMISSION_CATALOG: Array<{
   description: string
 }> = [
   {
-    id: 'members.manage',
+    id: 'account.members.manage',
     label: 'Manage members',
     description: 'Can add/remove members and update member roles for this organization.',
+  },
+  {
+    id: 'sdlc.sprints.create',
+    label: 'Create sprints',
+    description: 'Can create sprints and plan sprint work.',
+  },
+  {
+    id: 'sdlc.backlog.manage',
+    label: 'Backlog management',
+    description: 'Can create, edit, and prioritize backlog items.',
+  },
+  {
+    id: 'projects.archive',
+    label: 'Archive projects',
+    description: 'Can archive projects in this organization.',
+  },
+  {
+    id: 'dev.repo.access',
+    label: 'Repository access',
+    description: 'Can view and access connected repositories.',
+  },
+  {
+    id: 'dev.cicd.trigger',
+    label: 'Trigger CI/CD pipelines',
+    description: 'Can trigger CI/CD workflows and pipeline runs.',
+  },
+  {
+    id: 'dev.env.manage',
+    label: 'Manage environment variables',
+    description: 'Can manage environment variables for deployments.',
+  },
+  {
+    id: 'system.api_tokens.generate',
+    label: 'Generate API tokens',
+    description: 'Can generate and manage API tokens.',
+  },
+  {
+    id: 'system.integrations.manage',
+    label: 'Integration setup',
+    description: 'Can configure and manage integrations.',
   },
 ]
 
