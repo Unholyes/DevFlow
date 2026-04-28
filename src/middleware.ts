@@ -181,6 +181,10 @@ export async function middleware(req: NextRequest) {
     // which causes login bounce loops.
     if (!configuredBaseDomain && host === 'localhost') return res
 
+    // On the default Vercel domain (*.vercel.app), tenant subdomains like {slug}.{project}.vercel.app
+    // are NOT automatically routed unless explicitly configured. Avoid redirecting users to dead hosts.
+    if (!configuredBaseDomain && host.endsWith('.vercel.app')) return res
+
     const primaryOrg = await resolveUsersPrimaryTenantSlug()
     if (primaryOrg?.slug) {
       const { data: project } = await supabase
