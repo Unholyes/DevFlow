@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
+import { resolveTenantSlugFromHost } from "@/lib/tenant/resolve"
 
 const signupSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -38,7 +39,7 @@ export function SignupForm() {
     setError(null)
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data: signUpData, error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
       })
@@ -46,8 +47,19 @@ export function SignupForm() {
       if (error) {
         setError(error.message)
       } else {
-        // For now, just redirect to login or show success message
-        // In a real app, you might want to verify email first
+        const tenantSlug = resolveTenantSlugFromHost({ host: window.location.host })
+
+        // If the tenant allows immediate sessions (email confirmation disabled),
+        // join the org right away. Otherwise, user will join on first login.
+        if (tenantSlug && signUpData.session) {
+          const res = await fetch("/api/tenant/ensure-membership", { method: "POST" })
+          if (!res.ok) {
+            const body = await res.json().catch(() => null)
+            setError(body?.error ?? "Failed to join organization.")
+            return
+          }
+        }
+
         window.location.href = "/auth/login?message=Check your email to verify your account"
       }
     } catch (err) {

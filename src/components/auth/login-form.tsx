@@ -7,6 +7,7 @@ import * as z from "zod"
 import { supabase } from "@/lib/supabase/client"
 import { Eye, EyeOff } from "lucide-react"
 import Link from "next/link"
+import { resolveTenantSlugFromHost } from "@/lib/tenant/resolve"
 
 const loginSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
@@ -41,6 +42,17 @@ export function LoginForm() {
       if (error) {
         setError(error.message)
       } else if (authData.user) {
+        const tenantSlug = resolveTenantSlugFromHost({ host: window.location.host })
+        if (tenantSlug) {
+          const res = await fetch("/api/tenant/ensure-membership", { method: "POST" })
+          if (!res.ok) {
+            const body = await res.json().catch(() => null)
+            await supabase.auth.signOut()
+            setError(body?.error ?? "You don't have access to this organization.")
+            return
+          }
+        }
+
         // Get user role to determine redirect
         const { data: profile } = await supabase
           .from('profiles')

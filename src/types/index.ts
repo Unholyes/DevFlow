@@ -13,6 +13,7 @@ export interface Profile {
   id: string
   full_name: string | null
   avatar_url: string | null
+  email?: string | null
   role: UserRole
   created_at: Date
   updated_at: Date
@@ -32,7 +33,7 @@ export interface OrganizationMember {
   id: string
   organization_id: string
   user_id: string
-  role: 'admin' | 'member'
+  role: 'admin' | 'member' | 'ai_assistant' | (string & { __customRoleBrand?: never })
   joined_at: Date
   profile?: Profile
 }
