@@ -45,12 +45,6 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
               >
                 {project.status}
               </Badge>
-              <Badge
-                variant="outline"
-                className={`${sdlcColors[project.sdlcMethodology]} text-sm capitalize`}
-              >
-                {project.sdlcMethodology}
-              </Badge>
             </div>
             <p className="text-gray-600 mb-4">{project.description}</p>
             <div className="flex items-center gap-6 text-sm text-gray-500">

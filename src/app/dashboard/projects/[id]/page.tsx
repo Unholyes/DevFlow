@@ -13,6 +13,7 @@ import type { ProjectStatus } from '@/types'
 const sdlcBadgeColors = {
   Scrum: 'bg-blue-100 text-blue-700 border-blue-200',
   Kanban: 'bg-orange-100 text-orange-700 border-orange-200',
+  Hybrid: 'bg-green-100 text-green-700 border-green-200',
 };
 
 export default async function ProjectPage({ params }: { params: { id: string } }) {
@@ -108,7 +109,8 @@ export default async function ProjectPage({ params }: { params: { id: string } }
   }
 
   const mappedPhases = (phases ?? []).map((p) => {
-    const sdlcType = p.methodology === 'scrum' ? 'Scrum' : 'Kanban'
+    const sdlcType = 'Hybrid'
+
     return {
       id: p.id,
       name: p.title,
