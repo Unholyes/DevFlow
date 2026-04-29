@@ -35,7 +35,16 @@ type OrganizationRoleRow = {
   permissions: unknown
 }
 
-type RolePermission = 'members.manage'
+type RolePermission =
+  | 'account.members.manage'
+  | 'sdlc.sprints.create'
+  | 'sdlc.backlog.manage'
+  | 'projects.archive'
+  | 'dev.repo.access'
+  | 'dev.cicd.trigger'
+  | 'dev.env.manage'
+  | 'system.api_tokens.generate'
+  | 'system.integrations.manage'
 
 const ROLE_PERMISSION_CATALOG: Array<{
   id: RolePermission
@@ -43,9 +52,49 @@ const ROLE_PERMISSION_CATALOG: Array<{
   description: string
 }> = [
   {
-    id: 'members.manage',
+    id: 'account.members.manage',
     label: 'Manage members',
     description: 'Can add/remove members and update member roles for this organization.',
+  },
+  {
+    id: 'sdlc.sprints.create',
+    label: 'Create sprints',
+    description: 'Can create sprints and plan sprint work.',
+  },
+  {
+    id: 'sdlc.backlog.manage',
+    label: 'Backlog management',
+    description: 'Can create, edit, and prioritize backlog items.',
+  },
+  {
+    id: 'projects.archive',
+    label: 'Archive projects',
+    description: 'Can archive projects in this organization.',
+  },
+  {
+    id: 'dev.repo.access',
+    label: 'Repository access',
+    description: 'Can view and access connected repositories.',
+  },
+  {
+    id: 'dev.cicd.trigger',
+    label: 'Trigger CI/CD pipelines',
+    description: 'Can trigger CI/CD workflows and pipeline runs.',
+  },
+  {
+    id: 'dev.env.manage',
+    label: 'Manage environment variables',
+    description: 'Can manage environment variables for deployments.',
+  },
+  {
+    id: 'system.api_tokens.generate',
+    label: 'Generate API tokens',
+    description: 'Can generate and manage API tokens.',
+  },
+  {
+    id: 'system.integrations.manage',
+    label: 'Integration setup',
+    description: 'Can configure and manage integrations.',
   },
 ]
 
@@ -223,80 +272,48 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
     if (!email) return
 
     setError(null)
-    // IMPORTANT: per requirements, "Invite user" only mutates `public.organization_members`.
-    // We do NOT create tokens or write to invitation tables here.
-    const optimisticId = `optimistic-member-${Date.now()}`
-    setMembersList((prev) => [
-      ...prev,
-      {
-        id: optimisticId,
-        userId: optimisticId,
-        fullName: 'Adding…',
-        email,
-        role: 'member',
-        joinedAt: '—',
-        projects: [],
-      },
-    ])
+
+    // IMPORTANT: This action creates a Pending Invite (team_invitations),
+    // not an immediate organization_members row.
+    const optimisticId = `optimistic-invite-${Date.now()}`
+    setInvitesList((prev) => [{ id: optimisticId, email, sentAt: 'Just now' }, ...prev])
     setInviteEmail('')
     setIsInviteModalOpen(false)
 
     try {
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('id,full_name,email')
-        .eq('email', email)
-        .maybeSingle()
-
-      if (profileError) throw profileError
-      if (!profile?.id) {
-        throw new Error('No user found for that email yet. Ask them to sign up first, then add them.')
+      // Fast client-side guard (server enforces too).
+      if (invitesList.some((i) => i.email.toLowerCase() === email)) {
+        throw new Error('An invite is already pending for this email.')
       }
 
-      const { data: inserted, error: insertError } = await supabase
-        .from('organization_members')
-        .insert({
-          organization_id: organizationId,
-          user_id: profile.id,
-          role: 'member',
-        })
-        .select(
-          `
-          id,
-          user_id,
-          role,
-          joined_at,
-          profiles:user_id (
-            full_name,
-            email
-          )
-        `,
-        )
-        .single()
+      const res = await fetch('/api/tenant/invite', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
 
-      if (insertError) throw insertError
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error(payload?.error ?? 'Failed to create invite.')
+      }
 
-      const fullName = (inserted as any).profiles?.full_name ?? profile.full_name ?? 'Unknown User'
-      const insertedEmail = (inserted as any).profiles?.email ?? profile.email ?? email
+      const inserted = payload?.invite
+      if (!inserted?.id) throw new Error(payload?.error ?? payload?.warning ?? 'Failed to create invite.')
 
-      setMembersList((prev) =>
-        prev.map((m) =>
-          m.id === optimisticId
-            ? {
-                id: inserted.id,
-                userId: inserted.user_id,
-                fullName,
-                email: insertedEmail ?? email,
-                role: inserted.role as WorkspaceRole,
-                joinedAt: formatRelativeDate(inserted.joined_at),
-                projects: [],
-              }
-            : m,
+      setInvitesList((prev) =>
+        prev.map((i) =>
+          i.id === optimisticId
+            ? { id: inserted.id, email: inserted.email, sentAt: formatRelativeDate(inserted.created_at) }
+            : i,
         ),
       )
+
+      if (payload?.warning) {
+        setError(String(payload.warning))
+      }
     } catch (e: any) {
-      setMembersList((prev) => prev.filter((m) => m.id !== optimisticId))
-      setError(e?.message ?? 'Failed to add member.')
+      setInvitesList((prev) => prev.filter((i) => i.id !== optimisticId))
+      setError(e?.message ?? 'Failed to create invite.')
     }
   }
 
