@@ -113,8 +113,19 @@ function formatRelativeDate(value: string | Date) {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-export function AccountsPageContent({ organizationId }: { organizationId: string }) {
+type AccessibleOrg = { id: string; slug: string; name: string; created_at: string }
+
+export function AccountsPageContent({
+  organizationId,
+  currentUserId,
+  organizations,
+}: {
+  organizationId: string
+  currentUserId: string
+  organizations: AccessibleOrg[]
+}) {
   const [query, setQuery] = useState('')
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState<string>(organizationId)
   const [membersList, setMembersList] = useState<WorkspaceMember[]>([])
   const [invitesList, setInvitesList] = useState<PendingInvite[]>([])
   const [customRoles, setCustomRoles] = useState<OrganizationRoleRow[]>([])
@@ -124,6 +135,7 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
   const [inviteEmail, setInviteEmail] = useState('')
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
   const [newRole, setNewRole] = useState<WorkspaceRole>('member')
+
 
   const [isAddRoleModalOpen, setIsAddRoleModalOpen] = useState(false)
   const [roleName, setRoleName] = useState('')
@@ -168,7 +180,7 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
             supabase
               .from('organization_roles')
               .select('id,name,permissions')
-              .eq('organization_id', organizationId)
+              .eq('organization_id', selectedOrganizationId)
               .order('created_at', { ascending: true }),
             supabase
               .from('organization_members')
@@ -185,12 +197,12 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
                 )
               `,
               )
-              .eq('organization_id', organizationId)
+              .eq('organization_id', selectedOrganizationId)
               .order('joined_at', { ascending: true }),
             supabase
               .from('team_invitations')
               .select('id,email,created_at,status')
-              .eq('organization_id', organizationId)
+              .eq('organization_id', selectedOrganizationId)
               .eq('status', 'pending')
               .order('created_at', { ascending: false }),
           ])
@@ -212,7 +224,7 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
             )
           `,
           )
-          .eq('organization_id', organizationId)
+          .eq('organization_id', selectedOrganizationId)
           .in('user_id', memberUserIds.length > 0 ? memberUserIds : ['00000000-0000-0000-0000-000000000000'])
 
         if (projectMembersError) throw projectMembersError
@@ -265,7 +277,7 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
     return () => {
       cancelled = true
     }
-  }, [organizationId])
+  }, [selectedOrganizationId])
 
   const handleInvite = async () => {
     const email = inviteEmail.trim().toLowerCase()
@@ -289,7 +301,7 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
       const res = await fetch('/api/tenant/invite', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, organizationId: selectedOrganizationId }),
       })
 
       const payload = await res.json().catch(() => null)
@@ -321,6 +333,10 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
     const member = membersList.find((m) => m.id === memberId)
     if (!member) return
     if (member.role === 'ai_assistant') return
+    if (member.userId === currentUserId) {
+      setError('You cannot remove your own account from the organization.')
+      return
+    }
     if (!window.confirm(`Remove ${member.fullName} from this organization? This cannot be undone.`)) return
 
     setError(null)
@@ -332,7 +348,7 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
         .from('organization_members')
         .delete()
         .eq('id', memberId)
-        .eq('organization_id', organizationId)
+        .eq('organization_id', selectedOrganizationId)
 
       if (delError) throw delError
     } catch (e: any) {
@@ -353,7 +369,7 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
         .from('team_invitations')
         .update({ status: 'expired' })
         .eq('id', inviteId)
-        .eq('organization_id', organizationId)
+        .eq('organization_id', selectedOrganizationId)
 
       if (revokeError) throw revokeError
     } catch (e: any) {
@@ -366,6 +382,10 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
     const member = membersList.find((m) => m.id === memberId)
     if (!member) return
     if (member.role === 'ai_assistant') return
+    if (member.userId === currentUserId) {
+      setError('You cannot change your own role.')
+      return
+    }
 
     setError(null)
     const prev = membersList
@@ -377,7 +397,7 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
         .from('organization_members')
         .update({ role })
         .eq('id', memberId)
-        .eq('organization_id', organizationId)
+        .eq('organization_id', selectedOrganizationId)
 
       if (updateError) throw updateError
     } catch (e: any) {
@@ -415,7 +435,7 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
       const { data, error: insertError } = await supabase
         .from('organization_roles')
         .insert({
-          organization_id: organizationId,
+          organization_id: selectedOrganizationId,
           name,
           permissions,
         })
@@ -463,6 +483,23 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
           <p className="mt-2 text-gray-600 max-w-2xl">
             Tenant admin view for managing workspace members and invitations.
           </p>
+          {organizations.length > 1 ? (
+            <div className="mt-4 max-w-sm">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Workspace</label>
+              <Select value={selectedOrganizationId} onValueChange={(v) => setSelectedOrganizationId(v)}>
+                <SelectTrigger className="bg-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {organizations.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.name} ({o.slug})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Dialog open={isAddRoleModalOpen} onOpenChange={setIsAddRoleModalOpen}>
@@ -711,11 +748,12 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
                         variant="ghost"
                         onClick={() => {
                           if (m.role === 'ai_assistant') return
+                          if (m.userId === currentUserId) return
                           setEditingMemberId(m.id)
                           setNewRole(m.role)
                         }}
                         className="h-7 px-2 text-xs"
-                        disabled={m.role === 'ai_assistant'}
+                        disabled={m.role === 'ai_assistant' || m.userId === currentUserId}
                       >
                         Edit Role
                       </Button>
@@ -724,7 +762,7 @@ export function AccountsPageContent({ organizationId }: { organizationId: string
                         variant="ghost"
                         onClick={() => void handleRemoveMember(m.id)}
                         className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                        disabled={m.role === 'ai_assistant'}
+                        disabled={m.role === 'ai_assistant' || m.userId === currentUserId}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>

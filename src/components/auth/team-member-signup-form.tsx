@@ -48,49 +48,18 @@ export function TeamMemberSignupForm({ token }: TeamMemberSignupFormProps) {
       }
 
       try {
-        // TEMPORARY: Using mock data for testing
-        // In production, this would verify the token with the backend
-        if (token === "test-token-123") {
-          setInvitationData({
-            email: "john.doe@example.com",
-            organizationName: "Acme Corp",
-            inviterName: "Jane Smith",
-          })
-        } else {
-          // In a real app, you'd verify the token with your backend
-          const { data, error } = await supabase
-            .from('team_invitations')
-            .select(`
-              email,
-              organization_id,
-              organizations:organization_id (name),
-              inviter_id,
-              profiles:inviter_id (full_name)
-            `)
-            .eq('token', token)
-            .eq('status', 'pending')
-            .single()
-
-          if (error || !data) {
-            setError("Invalid or expired invitation")
-            return
-          }
-
-          // Type assertion for the joined data
-          const orgData = (data.organizations as { name: string }[])[0]
-          const profileData = (data.profiles as { full_name: string }[])[0]
-
-          if (!orgData || !profileData) {
-            setError("Invalid invitation data")
-            return
-          }
-
-          setInvitationData({
-            email: data.email,
-            organizationName: orgData.name,
-            inviterName: profileData.full_name,
-          })
+        const res = await fetch(`/api/invite/${encodeURIComponent(token)}`, { method: 'GET' })
+        const payload = await res.json().catch(() => null)
+        if (!res.ok) {
+          setError(payload?.error ?? "Invalid or expired invitation")
+          return
         }
+
+        setInvitationData({
+          email: payload.email,
+          organizationName: payload.organizationName,
+          inviterName: payload.inviterName,
+        })
       } catch (err) {
         setError("Failed to verify invitation")
       }
@@ -106,16 +75,6 @@ export function TeamMemberSignupForm({ token }: TeamMemberSignupFormProps) {
     setError(null)
 
     try {
-      // TEMPORARY: Skip actual signup for test token
-      if (token === "test-token-123") {
-        // Simulate successful signup for testing
-        setTimeout(() => {
-          alert("Test signup successful! Password: " + data.password)
-          setIsLoading(false)
-        }, 1000)
-        return
-      }
-
       // Sign up the team member with the invited email
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: invitationData.email,
@@ -132,30 +91,21 @@ export function TeamMemberSignupForm({ token }: TeamMemberSignupFormProps) {
         return
       }
 
-      // Update invitation status and link user to organization
-      if (authData.user) {
-        // Mark invitation as accepted
-        await supabase
-          .from('team_invitations')
-          .update({ status: 'accepted', accepted_at: new Date().toISOString() })
-          .eq('token', token)
-
-        // Add user to organization members
-        await supabase
-          .from('organization_members')
-          .insert({
-            organization_id: (await supabase
-              .from('team_invitations')
-              .select('organization_id')
-              .eq('token', token)
-              .single()).data?.organization_id,
-            user_id: authData.user.id,
-            role: 'member',
-            joined_at: new Date().toISOString(),
-          })
+      // If signup produced a session immediately (email confirmation disabled),
+      // accept the invite on the server (updates invite + inserts membership).
+      if (authData.session) {
+        const res = await fetch(`/api/invite/${encodeURIComponent(token)}`, { method: 'POST' })
+        const payload = await res.json().catch(() => null)
+        if (!res.ok) {
+          setError(payload?.error ?? 'Failed to accept invitation')
+          return
+        }
+        window.location.href = "/dashboard?message=Welcome to the team!"
+        return
       }
 
-      window.location.href = "/dashboard?message=Welcome to the team!"
+      // Otherwise, user must confirm email first. After login, they can open the invite link again to join.
+      window.location.href = "/auth/login?message=Check your email to verify your account, then open the invite link again."
     } catch (err) {
       setError("An unexpected error occurred")
     } finally {

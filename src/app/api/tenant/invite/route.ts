@@ -19,14 +19,10 @@ export async function POST(request: Request) {
   const admin = createAdminClient()
 
   try {
-    const tenantSlug = request.headers.get(TENANT_SLUG_HEADER)
-    if (!tenantSlug) {
-      return NextResponse.json({ error: 'Missing tenant context' }, { status: 400 })
-    }
-
     const body = await request.json().catch(() => null)
     const email = String(body?.email ?? '').trim().toLowerCase()
     if (!email) return NextResponse.json({ error: 'Email is required' }, { status: 400 })
+    const organizationIdFromBody = String(body?.organizationId ?? '').trim() || null
 
     const {
       data: { user },
@@ -36,12 +32,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Resolve org by slug (service role)
-    const { data: org, error: orgError } = await admin
-      .from('organizations')
-      .select('id,owner_id')
-      .eq('slug', tenantSlug)
-      .maybeSingle()
+    const tenantSlug = request.headers.get(TENANT_SLUG_HEADER)
+
+    // Resolve org (service role) either via tenantSlug (preferred) or explicit organizationId from body.
+    const orgQuery = admin.from('organizations').select('id,owner_id,slug').limit(1)
+    const { data: org, error: orgError } = tenantSlug
+      ? await orgQuery.eq('slug', tenantSlug).maybeSingle()
+      : organizationIdFromBody
+        ? await orgQuery.eq('id', organizationIdFromBody).maybeSingle()
+        : { data: null as any, error: null as any }
+
+    if (!tenantSlug && !organizationIdFromBody) {
+      return NextResponse.json(
+        { error: 'Missing tenant context (provide tenant subdomain or organizationId).' },
+        { status: 400 },
+      )
+    }
 
     if (orgError) return NextResponse.json({ error: 'Failed to resolve organization' }, { status: 500 })
     if (!org?.id) return NextResponse.json({ error: 'Invalid tenant context' }, { status: 400 })
@@ -72,6 +78,50 @@ export async function POST(request: Request) {
 
     if (existing?.id) {
       return NextResponse.json({ error: 'An invite is already pending for this email.' }, { status: 409 })
+    }
+
+    // Enforce one-org-per-user:
+    // If the invited email already maps to an existing user (profiles.email) who is attached to ANY org,
+    // block the invite to prevent cross-org membership.
+    const { data: invitedProfile } = await admin
+      .from('profiles')
+      .select('id')
+      .ilike('email', email)
+      .maybeSingle()
+
+    const invitedUserId = invitedProfile?.id ?? null
+
+    if (invitedUserId) {
+      const { data: owned } = await admin
+        .from('organizations')
+        .select('id,slug')
+        .eq('owner_id', invitedUserId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (owned?.id && owned.id !== org.id) {
+        return NextResponse.json(
+          { error: `That user already belongs to organization "${owned.slug}".` },
+          { status: 409 },
+        )
+      }
+
+      const { data: existingMembership } = await admin
+        .from('organization_members')
+        .select('organization_id,organizations:organization_id ( id,slug )')
+        .eq('user_id', invitedUserId)
+        .order('joined_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (existingMembership?.organization_id && existingMembership.organization_id !== org.id) {
+        const slug = (existingMembership as any)?.organizations?.slug as string | undefined
+        return NextResponse.json(
+          { error: `That user already belongs to organization "${slug ?? existingMembership.organization_id}".` },
+          { status: 409 },
+        )
+      }
     }
 
     // Create our own pending invite record (drives the UI list)

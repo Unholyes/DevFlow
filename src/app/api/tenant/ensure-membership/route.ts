@@ -41,6 +41,38 @@ export async function POST(request: Request) {
       return NextResponse.json({ organizationId: org.id, status: 'owner' })
     }
 
+    // Enforce one-org-per-user: user cannot join a different organization once attached.
+    const { data: existingOwned } = await admin
+      .from('organizations')
+      .select('id,slug')
+      .eq('owner_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (existingOwned?.id && existingOwned.id !== org.id) {
+      return NextResponse.json(
+        { error: `User already belongs to organization "${existingOwned.slug}".` },
+        { status: 409 },
+      )
+    }
+
+    const { data: existingAnyMembership } = await admin
+      .from('organization_members')
+      .select('organization_id,organizations:organization_id ( id,slug )')
+      .eq('user_id', user.id)
+      .order('joined_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (existingAnyMembership?.organization_id && existingAnyMembership.organization_id !== org.id) {
+      const slug = (existingAnyMembership as any)?.organizations?.slug as string | undefined
+      return NextResponse.json(
+        { error: `User already belongs to organization "${slug ?? existingAnyMembership.organization_id}".` },
+        { status: 409 },
+      )
+    }
+
     const { data: existing, error: existingError } = await admin
       .from('organization_members')
       .select('id,role')

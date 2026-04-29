@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
 import type { UserRole } from '@/types'
 import { getTenantSlug } from '@/lib/tenant/server'
+import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
 
 export default async function DashboardRouteLayout({ children }: { children: ReactNode }) {
   const supabase = createClient()
@@ -22,12 +23,13 @@ export default async function DashboardRouteLayout({ children }: { children: Rea
     .eq('id', user.id)
     .single()
 
-  const role = (profile?.role ?? 'team_member') as UserRole
-
-  // Redirect super admins to their dashboard
-  if (role === 'super_admin') {
+  // Redirect super admins to their dashboard (global role).
+  if (profile?.role === 'super_admin') {
     redirect('/super-admin/dashboard')
   }
+
+  const ws = await resolveWorkspaceContext({ supabase: supabase as any, userId: user.id })
+  const role = ws.role as UserRole
 
   // Tenant-domain onboarding wizard gate:
   // if we're on a tenant subdomain and the org has no projects yet, force the setup wizard.
