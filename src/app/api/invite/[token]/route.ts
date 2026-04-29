@@ -11,38 +11,51 @@ export async function GET(
   const token = String(params.token ?? '').trim()
   if (!token) return NextResponse.json({ error: 'Invalid invitation token' }, { status: 400 })
 
-  const { data, error } = await admin
+  // Fetch the invite row first (avoid nested selects which can fail if relationships
+  // aren't introspected the way we expect).
+  const { data: invite, error: inviteError } = await admin
     .from('team_invitations')
-    .select(
-      `
-      email,
-      status,
-      expires_at,
-      organizations:organization_id ( name ),
-      profiles:inviter_id ( full_name )
-    `,
-    )
+    .select('email,status,expires_at,organization_id,inviter_id')
     .eq('token', token)
     .limit(1)
     .maybeSingle()
 
-  if (error || !data || data.status !== 'pending') {
+  if (inviteError) {
+    console.error('Error fetching invitation:', inviteError)
+    return NextResponse.json({ error: 'Failed to verify invitation' }, { status: 500 })
+  }
+
+  if (!invite) {
     return NextResponse.json({ error: 'Invalid or expired invitation' }, { status: 404 })
   }
 
-  const expiresAt = data.expires_at ? new Date(data.expires_at as any) : null
+  const expiresAt = invite.expires_at ? new Date(invite.expires_at as any) : null
   if (expiresAt && expiresAt.getTime() < Date.now()) {
-    return NextResponse.json({ error: 'Invalid or expired invitation' }, { status: 404 })
+    return NextResponse.json({ error: 'Invitation has expired' }, { status: 410 })
   }
 
-  const org = (data.organizations as any)?.[0]
-  const inviter = (data.profiles as any)?.[0]
+  if (invite.status === 'accepted') {
+    return NextResponse.json({ error: 'Invitation has already been accepted' }, { status: 409 })
+  }
+  if (invite.status === 'expired') {
+    return NextResponse.json({ error: 'Invitation has been revoked or expired' }, { status: 410 })
+  }
+  if (invite.status !== 'pending') {
+    return NextResponse.json({ error: 'Invalid invitation status' }, { status: 400 })
+  }
+
+  const [{ data: org }, { data: inviterProfile }] = await Promise.all([
+    admin.from('organizations').select('name').eq('id', invite.organization_id).maybeSingle(),
+    invite.inviter_id
+      ? admin.from('profiles').select('full_name').eq('id', invite.inviter_id).maybeSingle()
+      : Promise.resolve({ data: null } as any),
+  ])
 
   return NextResponse.json(
     {
-      email: data.email,
+      email: invite.email,
       organizationName: org?.name ?? 'Organization',
-      inviterName: inviter?.full_name ?? 'A teammate',
+      inviterName: inviterProfile?.full_name ?? 'A teammate',
     },
     { status: 200 },
   )
