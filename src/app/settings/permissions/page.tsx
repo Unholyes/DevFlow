@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { PermissionsPageContent } from '@/components/settings/permissions-page-content'
+import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
 
 export default async function PermissionsSettingsPage() {
   const supabase = createClient()
@@ -16,7 +17,12 @@ export default async function PermissionsSettingsPage() {
   }
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'tenant_admin') {
+  if (profile?.role === 'super_admin') {
+    redirect('/super-admin/dashboard')
+  }
+
+  const ws = await resolveWorkspaceContext({ supabase: supabase as any, userId: user.id })
+  if (ws.role !== 'tenant_admin') {
     redirect('/settings')
   }
 

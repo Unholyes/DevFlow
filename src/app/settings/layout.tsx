@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
 import type { UserRole } from '@/types'
+import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
 
 interface SettingsLayoutProps {
   children: ReactNode
@@ -25,12 +26,13 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
     .eq('id', user.id)
     .single()
 
-  const role = (profile?.role ?? 'team_member') as UserRole
-
   // Redirect super admins to their dashboard
-  if (role === 'super_admin') {
+  if (profile?.role === 'super_admin') {
     redirect('/super-admin/dashboard')
   }
+
+  const ws = await resolveWorkspaceContext({ supabase: supabase as any, userId: user.id })
+  const role = ws.role as UserRole
 
   return <DashboardLayout role={role}>{children}</DashboardLayout>
 }

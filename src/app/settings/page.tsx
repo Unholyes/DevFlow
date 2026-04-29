@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { User, Building, Settings as SettingsIcon, Shield } from 'lucide-react'
+import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
 
 export default async function SettingsPage() {
   const supabase = createClient()
@@ -18,7 +19,12 @@ export default async function SettingsPage() {
     .eq('id', user.id)
     .single()
 
-  const isTenantAdmin = profile?.role === 'tenant_admin'
+  if (profile?.role === 'super_admin') {
+    redirect('/super-admin/dashboard')
+  }
+
+  const ws = await resolveWorkspaceContext({ supabase: supabase as any, userId: user.id })
+  const isTenantAdmin = ws.role === 'tenant_admin'
 
   return (
     <div className="max-w-4xl mx-auto p-6">
@@ -96,7 +102,7 @@ export default async function SettingsPage() {
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">Role:</span>
-            <span className="font-medium capitalize">{profile?.role?.replace('_', ' ') || 'Team Member'}</span>
+            <span className="font-medium capitalize">{ws.role.replace('_', ' ')}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">Member since:</span>
