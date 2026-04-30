@@ -4,7 +4,13 @@ import { getTenantSlug } from '@/lib/tenant/server'
 import { SprintsPageClient, type SprintWithStats } from '@/components/sprints/sprints-page-client'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 
-export default async function SprintsPage({ params }: { params: { id: string; phaseId: string } }) {
+export default async function SprintsPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string; phaseId: string }
+  searchParams?: { process?: string; method?: string }
+}) {
   const tenantSlug = getTenantSlug()
   const supabase = createClient()
 
@@ -74,5 +80,22 @@ export default async function SprintsPage({ params }: { params: { id: string; ph
     } as SprintWithStats
   })
 
-  return <SprintsPageClient projectId={project.id} phaseId={phase.id} sprints={sprintsWithStats} />
+  const selectedProcessName =
+    typeof searchParams?.process === 'string' && searchParams.process.trim().length > 0
+      ? decodeURIComponent(searchParams.process)
+      : null
+  const selectedMethod =
+    typeof searchParams?.method === 'string' && searchParams.method.trim().length > 0
+      ? decodeURIComponent(searchParams.method)
+      : null
+
+  return (
+    <SprintsPageClient
+      projectId={project.id}
+      phaseId={phase.id}
+      sprints={sprintsWithStats}
+      selectedProcessName={selectedProcessName}
+      selectedMethod={selectedMethod}
+    />
+  )
 }

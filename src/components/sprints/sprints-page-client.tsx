@@ -23,6 +23,8 @@ export function SprintsPageClient(props: {
   projectId: string
   phaseId: string
   sprints: SprintWithStats[]
+  selectedProcessName?: string | null
+  selectedMethod?: string | null
 }) {
   // Treat "planned" as active for MVP until we add a dedicated planned view.
   const activeSprints = props.sprints.filter((s) => s.status === 'active' || s.status === 'planned')
@@ -57,6 +59,17 @@ export function SprintsPageClient(props: {
           </Link>
         </div>
       </div>
+
+      {props.selectedProcessName ? (
+        <Card className="border-blue-200 bg-blue-50 shadow-sm">
+          <CardContent className="py-4">
+            <p className="text-xs uppercase tracking-wide text-blue-700">Active process</p>
+            <p className="mt-1 text-sm font-semibold text-blue-900">
+              {props.selectedProcessName} {props.selectedMethod ? `(${props.selectedMethod})` : ''}
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="border-gray-200 shadow-sm">

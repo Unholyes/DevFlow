@@ -5,8 +5,12 @@ import { NextResponse } from 'next/server'
 
 type PhaseInput = {
   title: string
-  methodology: 'scrum' | 'kanban'
   is_gated: boolean
+  methodology?: 'scrum' | 'kanban' | 'waterfall' | 'devops'
+  processes?: {
+    name: string
+    methodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
+  }[]
 }
 
 function defaultStagesForMethodology(methodology: PhaseInput['methodology']) {
@@ -20,12 +24,52 @@ function defaultStagesForMethodology(methodology: PhaseInput['methodology']) {
     ]
   }
 
+  if (methodology === 'devops') {
+    return [
+      { name: 'To Do', is_backlog: false, is_done: false },
+      { name: 'Build', is_backlog: false, is_done: false },
+      { name: 'Test', is_backlog: false, is_done: false },
+      { name: 'Deploy', is_backlog: false, is_done: false },
+      { name: 'Released', is_backlog: false, is_done: true },
+    ]
+  }
+
+  if (methodology === 'waterfall') {
+    return [
+      { name: 'Planned', is_backlog: false, is_done: false },
+      { name: 'In Progress', is_backlog: false, is_done: false },
+      { name: 'Validation', is_backlog: false, is_done: false },
+      { name: 'Completed', is_backlog: false, is_done: true },
+    ]
+  }
+
   return [
     { name: 'To Do', is_backlog: false, is_done: false },
     { name: 'In Progress', is_backlog: false, is_done: false },
     { name: 'In Review', is_backlog: false, is_done: false },
     { name: 'Completed', is_backlog: false, is_done: true },
   ]
+}
+
+const ALLOWED_METHODS = new Set(['scrum', 'kanban', 'waterfall', 'devops'])
+
+function normalizeMethodology(value: unknown): PhaseInput['methodology'] {
+  if (typeof value !== 'string') return 'kanban'
+  return ALLOWED_METHODS.has(value) ? (value as PhaseInput['methodology']) : 'kanban'
+}
+
+function normalizeProcesses(phase: PhaseInput) {
+  const processRows =
+    Array.isArray(phase.processes) && phase.processes.length > 0
+      ? phase.processes
+      : [{ name: 'Default Process', methodology: normalizeMethodology(phase.methodology) }]
+
+  return processRows
+    .map((process) => ({
+      name: typeof process?.name === 'string' ? process.name.trim() : '',
+      methodology: normalizeMethodology(process?.methodology),
+    }))
+    .filter((process) => process.name.length > 0)
 }
 
 export async function POST(request: Request) {
@@ -115,11 +159,13 @@ export async function POST(request: Request) {
     for (let i = 0; i < phases.length; i++) {
       const p = phases[i]
       if (!p?.title?.trim()) continue
+      const processes = normalizeProcesses(p)
+      const primaryMethodology = processes[0]?.methodology ?? 'kanban'
 
       const phaseInsertBase = {
         organization_id: orgId,
         project_id: project.id,
-        methodology: p.methodology,
+        methodology: primaryMethodology,
         order_index: i,
         title: p.title.trim(),
         status: 'active',
@@ -147,7 +193,20 @@ export async function POST(request: Request) {
 
       if (phaseError) throw phaseError
       if (!phase?.id) throw new Error('Failed to create phase')
-      createdPhaseIds.push({ id: phase.id, methodology: p.methodology })
+      createdPhaseIds.push({ id: phase.id, methodology: primaryMethodology })
+
+      if (processes.length > 0) {
+        const processRows = processes.map((process, processIndex) => ({
+          organization_id: orgId,
+          phase_id: phase.id,
+          name: process.name,
+          methodology: process.methodology,
+          order_index: processIndex,
+        }))
+
+        const { error: processError } = await supabase.from('phase_processes').insert(processRows)
+        if (processError && processError.code !== 'PGRST204') throw processError
+      }
     }
 
     for (const phase of createdPhaseIds) {

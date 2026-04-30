@@ -14,7 +14,7 @@ export default async function NewProjectPage() {
   return (
     <SetupProjectWizard
       title="Create Project"
-      description="Set up your project and choose the execution method for each phase."
+      description="Set up your project, define phases, and configure one or more processes with execution methods per phase."
       submitEndpoint="/api/projects/bootstrap"
       submitLabel="Create project"
     />

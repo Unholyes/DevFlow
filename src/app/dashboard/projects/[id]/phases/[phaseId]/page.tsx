@@ -5,6 +5,16 @@ import { getTenantSlug } from '@/lib/tenant/server'
 import { CompletePhaseButton } from '@/components/phases/complete-phase-button'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 
+function processDestination(projectId: string, phaseId: string, processName: string, methodology: string) {
+  const encodedName = encodeURIComponent(processName)
+  const encodedMethod = encodeURIComponent(methodology)
+  const base =
+    methodology === 'scrum'
+      ? `/dashboard/projects/${projectId}/phases/${phaseId}/sprints`
+      : `/dashboard/projects/${projectId}/phases/${phaseId}/board`
+  return `${base}?process=${encodedName}&method=${encodedMethod}`
+}
+
 export default async function PhasePage({ params }: { params: { id: string; phaseId: string } }) {
   const tenantSlug = getTenantSlug()
   const supabase = createClient()
@@ -45,6 +55,34 @@ export default async function PhasePage({ params }: { params: { id: string; phas
   const phase = (phases ?? []).find((p) => p.id === params.phaseId)
   if (!phase) notFound()
 
+  let processes:
+    | {
+        name: string
+        methodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
+        order_index: number
+      }[]
+    | null = null
+
+  {
+    const attempt = await supabase
+      .from('phase_processes')
+      .select('name,methodology,order_index')
+      .eq('phase_id', phase.id)
+      .order('order_index', { ascending: true })
+
+    if (attempt.error?.code === 'PGRST204') {
+      processes = []
+    } else {
+      processes = (attempt.data as any[]) ?? []
+    }
+  }
+
+  const primaryMethodology = (processes?.[0]?.methodology ?? phase.methodology) as
+    | 'scrum'
+    | 'kanban'
+    | 'waterfall'
+    | 'devops'
+
   const phaseIndex = (phases ?? []).findIndex((p) => p.id === phase.id)
   const prev = phaseIndex > 0 ? (phases ?? [])[phaseIndex - 1] : null
 
@@ -74,9 +112,16 @@ export default async function PhasePage({ params }: { params: { id: string; phas
     )
   }
 
-  const processLabel = phase.methodology === 'scrum' ? 'Scrum' : 'Kanban'
+  const processLabel =
+    primaryMethodology === 'scrum'
+      ? 'Scrum'
+      : primaryMethodology === 'kanban'
+        ? 'Kanban'
+        : primaryMethodology === 'waterfall'
+          ? 'Waterfall'
+          : 'DevOps'
 
-  if (phase.methodology === 'scrum') {
+  if (primaryMethodology === 'scrum') {
     const { data: sprints } = await supabase
       .from('sprints')
       .select('id,status')
@@ -120,6 +165,35 @@ export default async function PhasePage({ params }: { params: { id: string; phas
                     : undefined
               }
             />
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">Processes in this phase</h3>
+            <span className="text-xs text-gray-500">{(processes ?? []).length} configured</span>
+          </div>
+          <p className="mt-1 text-sm text-gray-600">Select a process to open its SDLC workspace.</p>
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+            {(processes ?? []).length > 0 ? (
+              (processes ?? []).map((process, index) => (
+                <Link
+                  key={`${process.name}-${index}`}
+                  href={processDestination(project.id, phase.id, process.name, process.methodology)}
+                  className="group rounded-lg border border-gray-200 bg-white p-3 hover:border-blue-300 hover:shadow-sm transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-gray-900">{process.name}</p>
+                    <span className="text-[11px] uppercase tracking-wide text-gray-500">{process.methodology}</span>
+                  </div>
+                  <p className="mt-2 text-xs text-blue-600 font-medium group-hover:text-blue-700">
+                    Open {process.methodology === 'scrum' ? 'Scrum workspace' : 'Board workspace'}
+                  </p>
+                </Link>
+              ))
+            ) : (
+              <span className="text-sm text-gray-500">No processes configured for this phase.</span>
+            )}
           </div>
         </div>
 
@@ -213,10 +287,39 @@ export default async function PhasePage({ params }: { params: { id: string; phas
         </div>
       </div>
 
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900">Processes in this phase</h3>
+          <span className="text-xs text-gray-500">{(processes ?? []).length} configured</span>
+        </div>
+        <p className="mt-1 text-sm text-gray-600">Select a process to open its SDLC workspace.</p>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          {(processes ?? []).length > 0 ? (
+            (processes ?? []).map((process, index) => (
+              <Link
+                key={`${process.name}-${index}`}
+                href={processDestination(project.id, phase.id, process.name, process.methodology)}
+                className="group rounded-lg border border-gray-200 bg-white p-3 hover:border-blue-300 hover:shadow-sm transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-gray-900">{process.name}</p>
+                  <span className="text-[11px] uppercase tracking-wide text-gray-500">{process.methodology}</span>
+                </div>
+                <p className="mt-2 text-xs text-blue-600 font-medium group-hover:text-blue-700">
+                  Open {process.methodology === 'scrum' ? 'Scrum workspace' : 'Board workspace'}
+                </p>
+              </Link>
+            ))
+          ) : (
+            <span className="text-sm text-gray-500">No processes configured for this phase.</span>
+          )}
+        </div>
+      </div>
+
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900">Kanban Board</h3>
+        <h3 className="text-lg font-semibold text-gray-900">{processLabel} board</h3>
         <p className="text-sm text-gray-600 mt-1">
-          This phase uses Kanban. Use the board to move tasks across workflow stages (WIP limits apply if configured).
+          Use the board to move tasks across workflow stages (WIP limits apply if configured on active stages).
         </p>
         <div className="mt-4">
           <Link

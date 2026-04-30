@@ -7,7 +7,13 @@ import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 
-export default async function PhaseBoardPage({ params }: { params: { id: string; phaseId: string } }) {
+export default async function PhaseBoardPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string; phaseId: string }
+  searchParams?: { process?: string; method?: string }
+}) {
   const tenantSlug = getTenantSlug()
   const supabase = createClient()
 
@@ -47,6 +53,34 @@ export default async function PhaseBoardPage({ params }: { params: { id: string;
   const phase = (phases ?? []).find((p) => p.id === params.phaseId)
   if (!phase) notFound()
 
+  let processes:
+    | {
+        name: string
+        methodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
+        order_index: number
+      }[]
+    | null = null
+
+  {
+    const attempt = await supabase
+      .from('phase_processes')
+      .select('name,methodology,order_index')
+      .eq('phase_id', phase.id)
+      .order('order_index', { ascending: true })
+
+    if (attempt.error?.code === 'PGRST204') {
+      processes = []
+    } else {
+      processes = (attempt.data as any[]) ?? []
+    }
+  }
+
+  const primaryMethodology = (processes?.[0]?.methodology ?? phase.methodology) as
+    | 'scrum'
+    | 'kanban'
+    | 'waterfall'
+    | 'devops'
+
   const phaseIndex = (phases ?? []).findIndex((p) => p.id === phase.id)
   const prev = phaseIndex > 0 ? (phases ?? [])[phaseIndex - 1] : null
 
@@ -56,6 +90,15 @@ export default async function PhaseBoardPage({ params }: { params: { id: string;
   if (isLocked) {
     return redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}`)
   }
+
+  const selectedProcessName =
+    typeof searchParams?.process === 'string' && searchParams.process.trim().length > 0
+      ? decodeURIComponent(searchParams.process)
+      : null
+  const selectedMethod =
+    typeof searchParams?.method === 'string' && searchParams.method.trim().length > 0
+      ? decodeURIComponent(searchParams.method)
+      : null
 
   const { data: stages } = await supabase
     .from('workflow_stages')
@@ -108,8 +151,35 @@ export default async function PhaseBoardPage({ params }: { params: { id: string;
         Back to Phase Overview
       </Link>
 
-      {/* Phase Board (Scrum or Kanban) */}
-      {phase.methodology === 'scrum' ? (
+      {processes && processes.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {processes.map((process, index) => (
+            <Link
+              key={`${process.name}-${index}`}
+              href={
+                process.methodology === 'scrum'
+                  ? `/dashboard/projects/${params.id}/phases/${params.phaseId}/sprints`
+                  : `/dashboard/projects/${params.id}/phases/${params.phaseId}/board`
+              }
+              className="inline-flex items-center rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700"
+            >
+              {process.name} ({process.methodology})
+            </Link>
+          ))}
+        </div>
+      ) : null}
+
+      {selectedProcessName ? (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+          <p className="text-xs uppercase tracking-wide text-blue-700">Active process</p>
+          <p className="mt-1 text-sm font-semibold text-blue-900">
+            {selectedProcessName} {selectedMethod ? `(${selectedMethod})` : ''}
+          </p>
+        </div>
+      ) : null}
+
+      {/* Phase Board (driven by primary process method) */}
+      {primaryMethodology === 'scrum' ? (
         <ScrumView
           projectId={project.id}
           phaseId={phase.id}

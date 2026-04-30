@@ -13,6 +13,8 @@ import type { ProjectStatus } from '@/types'
 const sdlcBadgeColors = {
   Scrum: 'bg-blue-100 text-blue-700 border-blue-200',
   Kanban: 'bg-orange-100 text-orange-700 border-orange-200',
+  Waterfall: 'bg-purple-100 text-purple-700 border-purple-200',
+  DevOps: 'bg-emerald-100 text-emerald-700 border-emerald-200',
   Hybrid: 'bg-green-100 text-green-700 border-green-200',
 };
 
@@ -95,7 +97,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     | {
         id: string
         title: string
-        methodology: 'scrum' | 'kanban'
+        methodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
         status: string
         order_index: number
         is_gated?: boolean | null
@@ -121,8 +123,64 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     }
   }
 
+  let phaseProcesses:
+    | {
+        phase_id: string
+        name: string
+        methodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
+        order_index: number
+      }[]
+    | null = null
+
+  {
+    const phaseIds = (phases ?? []).map((phase) => phase.id)
+    if (phaseIds.length === 0) {
+      phaseProcesses = []
+    } else {
+      const attempt = await supabase
+        .from('phase_processes')
+        .select('phase_id,name,methodology,order_index')
+        .in('phase_id', phaseIds)
+        .order('order_index', { ascending: true })
+
+      if (attempt.error?.code === 'PGRST204') {
+        phaseProcesses = []
+      } else {
+        phaseProcesses = (attempt.data as any[]) ?? []
+      }
+    }
+  }
+
   const mappedPhases = (phases ?? []).map((p) => {
-    const sdlcType = 'Hybrid'
+    const processes = (phaseProcesses ?? [])
+      .filter((process) => process.phase_id === p.id)
+      .map((process) => ({
+        name: process.name,
+        methodology: process.methodology,
+      }))
+    const fallbackMethod =
+      p.methodology === 'scrum'
+        ? 'Scrum'
+        : p.methodology === 'kanban'
+          ? 'Kanban'
+          : p.methodology === 'waterfall'
+            ? 'Waterfall'
+            : p.methodology === 'devops'
+              ? 'DevOps'
+              : 'Hybrid'
+    const methodSet = new Set(processes.map((process) => process.methodology))
+    const sdlcType =
+      methodSet.size > 1
+        ? 'Hybrid'
+        : methodSet.has('scrum')
+          ? 'Scrum'
+          : methodSet.has('kanban')
+            ? 'Kanban'
+            : methodSet.has('waterfall')
+              ? 'Waterfall'
+              : methodSet.has('devops')
+                ? 'DevOps'
+                : fallbackMethod
 
     return {
       id: p.id,
@@ -130,6 +188,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       sdlcType,
       dbStatus: p.status as 'active' | 'completed' | 'archived',
       isGated: !!p.is_gated,
+      processes,
     }
   })
 
@@ -222,9 +281,13 @@ export default async function ProjectPage({ params }: { params: { id: string } }
                   className={`group relative p-4 rounded-lg border-2 transition-all ${locked ? 'cursor-not-allowed opacity-70' : 'hover:shadow-md hover:border-blue-300'} ${statusBg}`}
                 >
                   {!locked ? (
-                    <Link href={`/dashboard/projects/${project.id}/phases/${phase.id}`} className="absolute inset-0 rounded-lg" aria-label={`Open phase ${phase.name}`} />
+                    <Link
+                      href={`/dashboard/projects/${project.id}/phases/${phase.id}`}
+                      className="absolute inset-0 rounded-lg"
+                      aria-label={`Open phase ${phase.name}`}
+                    />
                   ) : null}
-                  <div className="flex items-start justify-between mb-3">
+                  <div className="relative z-10 flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2 flex-1">
                       <StatusIcon className={`h-5 w-5 flex-shrink-0 ${statusTextColor}`} />
                       <h3 className="font-semibold text-sm text-gray-900 line-clamp-1">{phase.name}</h3>
@@ -245,11 +308,34 @@ export default async function ProjectPage({ params }: { params: { id: string } }
                     </div>
                   </div>
 
-                  <div className={`text-xs font-medium mb-3 ${statusTextColor}`}>
+                  <div className={`relative z-10 text-xs font-medium mb-3 ${statusTextColor}`}>
                     {statusLabel}
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="relative z-10 mb-3 space-y-1">
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Processes</p>
+                    {phase.processes.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {phase.processes.map((process, processIndex) => (
+                          <Link
+                            key={`${process.name}-${processIndex}`}
+                            href={
+                              process.methodology === 'scrum'
+                                ? `/dashboard/projects/${project.id}/phases/${phase.id}/sprints?process=${encodeURIComponent(process.name)}&method=${encodeURIComponent(process.methodology)}`
+                                : `/dashboard/projects/${project.id}/phases/${phase.id}/board?process=${encodeURIComponent(process.name)}&method=${encodeURIComponent(process.methodology)}`
+                            }
+                            className="inline-flex items-center rounded border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-700"
+                          >
+                            {process.name} ({process.methodology})
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500">No processes configured yet.</p>
+                    )}
+                  </div>
+
+                  <div className="relative z-10 space-y-2">
                     <div className="flex justify-between text-xs text-gray-600">
                       <span>Progress</span>
                       <span className="font-semibold text-gray-900">{progress}%</span>
