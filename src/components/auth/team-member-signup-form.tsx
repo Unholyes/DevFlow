@@ -25,6 +25,7 @@ export function TeamMemberSignupForm({ token }: TeamMemberSignupFormProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [invitationData, setInvitationData] = useState<{
     email: string
     organizationName: string
@@ -244,14 +245,29 @@ export function TeamMemberSignupForm({ token }: TeamMemberSignupFormProps) {
               </div>
             </div>
 
-            <div className="flex items-start justify-center px-4 py-3.5 relative self-stretch w-full flex-[0_0_auto] bg-white rounded-xl overflow-hidden border border-solid border-slate-200">
+            <div className="relative flex items-center px-4 py-3.5 bg-white rounded-xl border border-slate-200">
               <input
                 {...register("confirmPassword")}
-                className="relative grow border-[none] bg-transparent self-stretch mt-[-1.00px] font-normal text-slate-900 text-base tracking-[0] leading-[normal] p-0 placeholder:text-slate-400 focus:outline-none"
+                className="relative grow border-[none] bg-transparent self-stretch mt-[-1.00px] font-normal text-slate-900 text-base tracking-[0] leading-[normal] p-0 placeholder:text-slate-400 focus:outline-none pr-10"
                 id="confirmPassword"
                 placeholder="Confirm your password"
-                type="password"
+                type={showConfirmPassword ? "text" : "password"}
               />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setShowConfirmPassword(!showConfirmPassword)
+                }}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors duration-200 z-10 bg-transparent border-none cursor-pointer"
+              >
+                {showConfirmPassword ? (
+                  <EyeOff className="h-5 w-5" />
+                ) : (
+                  <Eye className="h-5 w-5" />
+                )}
+              </button>
             </div>
             {errors.confirmPassword && (
               <p className="text-sm text-red-600 mt-1">{errors.confirmPassword.message}</p>

@@ -119,3 +119,18 @@ html {
     animation: marquee-vertical-reverse var(--duration, 20s) linear infinite;
   }
 }
+
+/* Hide native password reveal icons (Edge/Chrome) to avoid double "eye" buttons */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
+input[type="password"]::-webkit-credentials-auto-fill-button,
+input[type="password"]::-webkit-contacts-auto-fill-button,
+input[type="password"]::-webkit-password-toggle-button {
+  visibility: hidden;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+}
