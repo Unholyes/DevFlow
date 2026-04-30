@@ -129,9 +129,11 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
           )}
 
           {/* Quick Actions */}
-          <Button size="sm" className="flex items-center space-x-2">
-            <Plus className="h-4 w-4" />
-            <span>Create</span>
+          <Button asChild size="sm" className="flex items-center space-x-2">
+            <Link href="/dashboard/projects/new">
+              <Plus className="h-4 w-4" />
+              <span>Create</span>
+            </Link>
           </Button>
 
           {/* Notifications */}

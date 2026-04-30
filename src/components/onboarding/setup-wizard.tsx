@@ -23,6 +23,35 @@ const DEFAULT_PHASES: Phase[] = [
 ]
 
 export function SetupWizard(props: { tenantSlug: string }) {
+  return (
+    <SetupProjectWizard
+      title="Tenant Setup Wizard"
+      description="Configure your first project. This is where “Hybrid SDLC” becomes real: phases are sequential milestones, and each phase can run Scrum or Kanban."
+      submitEndpoint="/api/onboarding/bootstrap"
+      submitLabel="Finish setup"
+      tenantSlug={props.tenantSlug}
+      showSignOut
+    />
+  )
+}
+
+type SetupProjectWizardProps = {
+  title: string
+  description: string
+  submitEndpoint: string
+  submitLabel?: string
+  tenantSlug?: string | null
+  showSignOut?: boolean
+}
+
+export function SetupProjectWizard({
+  title,
+  description,
+  submitEndpoint,
+  submitLabel = 'Finish setup',
+  tenantSlug,
+  showSignOut = false,
+}: SetupProjectWizardProps) {
   const router = useRouter()
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [saving, setSaving] = useState(false)
@@ -41,7 +70,7 @@ export function SetupWizard(props: { tenantSlug: string }) {
     if (!isValid) return
     setSaving(true)
     try {
-      const res = await fetch('/api/onboarding/bootstrap', {
+      const res = await fetch(submitEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -83,18 +112,19 @@ export function SetupWizard(props: { tenantSlug: string }) {
       <div className="mx-auto w-full max-w-4xl space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Tenant Setup Wizard</h1>
-            <p className="mt-2 text-gray-600">
-              Configure your first project. This is where “Hybrid SDLC” becomes real: phases are sequential milestones,
-              and each phase can run Scrum or Kanban.
-            </p>
-            <div className="mt-3 text-xs text-gray-500">
-              Tenant: <Badge variant="outline">{props.tenantSlug}</Badge>
-            </div>
+            <h1 className="text-3xl font-bold text-gray-900">{title}</h1>
+            <p className="mt-2 text-gray-600">{description}</p>
+            {tenantSlug ? (
+              <div className="mt-3 text-xs text-gray-500">
+                Tenant: <Badge variant="outline">{tenantSlug}</Badge>
+              </div>
+            ) : null}
           </div>
-          <Button type="button" variant="outline" onClick={handleSignOut} disabled={isSigningOut}>
-            {isSigningOut ? 'Signing out...' : 'Sign out'}
-          </Button>
+          {showSignOut ? (
+            <Button type="button" variant="outline" onClick={handleSignOut} disabled={isSigningOut}>
+              {isSigningOut ? 'Signing out...' : 'Sign out'}
+            </Button>
+          ) : null}
         </div>
 
         <div className="flex gap-2">
@@ -199,7 +229,10 @@ export function SetupWizard(props: { tenantSlug: string }) {
               </div>
 
               <div className="flex items-center justify-between">
-                <Button variant="outline" onClick={() => setPhases((p) => [...p, { title: 'New Phase', methodology: 'kanban', is_gated: true }])}>
+                <Button
+                  variant="outline"
+                  onClick={() => setPhases((p) => [...p, { title: 'New Phase', methodology: 'kanban', is_gated: true }])}
+                >
                   Add phase
                 </Button>
                 <div className="flex gap-2">
@@ -238,7 +271,9 @@ export function SetupWizard(props: { tenantSlug: string }) {
                     .map((p, idx) => (
                       <div key={idx} className="flex items-center justify-between">
                         <div>
-                          <span className="font-medium">{idx + 1}. {p.title}</span>{' '}
+                          <span className="font-medium">
+                            {idx + 1}. {p.title}
+                          </span>{' '}
                           <span className="text-gray-500">({p.methodology})</span>
                         </div>
                         <Badge variant="outline">{p.is_gated ? 'gated' : 'not gated'}</Badge>
@@ -246,7 +281,8 @@ export function SetupWizard(props: { tenantSlug: string }) {
                     ))}
                 </div>
                 <div className="mt-3 text-xs text-gray-500">
-                  Default workflow stages will be created automatically per phase (Scrum includes a Backlog stage and a Done stage).
+                  Default workflow stages will be created automatically per phase (Scrum includes a Backlog stage and a
+                  Done stage).
                 </div>
               </div>
 
@@ -255,7 +291,7 @@ export function SetupWizard(props: { tenantSlug: string }) {
                   Back
                 </Button>
                 <Button onClick={submit} disabled={!isValid || saving}>
-                  {saving ? 'Creating…' : 'Finish setup'}
+                  {saving ? 'Creating…' : submitLabel}
                 </Button>
               </div>
             </CardContent>
