@@ -1,4 +1,5 @@
 import { LoginForm } from "@/components/auth/login-form"
+import { LoginSdlcCarousel } from "@/components/auth/login-sdlc-carousel"
 
 export default function LoginPage() {
   return (
@@ -22,16 +23,7 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="relative self-stretch w-full rounded-lg shadow-[0px_20px_13px_#00000008,0px_8px_5px_#00000014] aspect-[1.69] bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
-            <div className="text-center text-slate-400">
-              <div className="w-24 h-24 mx-auto mb-4 bg-slate-200 rounded-lg flex items-center justify-center">
-                <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M3 3h18v18H3V3zm16 16V5H5v14h14zM9 7h6v2H9V7zm0 4h6v2H9v-2zm0 4h4v2H9v-2z"/>
-                </svg>
-              </div>
-              <p className="text-sm">Kanban Board Preview</p>
-            </div>
-          </div>
+          <LoginSdlcCarousel />
         </div>
       </div>
 

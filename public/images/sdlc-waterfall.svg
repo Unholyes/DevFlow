@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="710" viewBox="0 0 1200 710" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="710" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FAFC"/>
+      <stop offset="1" stop-color="#E2E8F0"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="710" rx="32" fill="url(#bg)"/>
+
+  <text x="70" y="110" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="44" font-weight="700" fill="#0F172A">
+    Waterfall
+  </text>
+  <text x="70" y="155" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="20" font-weight="500" fill="#475569">
+    Sequential phases with clear handoffs
+  </text>
+
+  <g transform="translate(70,210)">
+    <rect x="0" y="0" width="1060" height="440" rx="18" fill="rgba(255,255,255,0.70)" stroke="rgba(148,163,184,0.40)"/>
+
+    <g transform="translate(44,52)">
+      <rect x="0" y="0" width="720" height="84" rx="16" fill="#DBEAFE" stroke="rgba(59,130,246,0.25)"/>
+      <text x="28" y="52" font-family="ui-sans-serif, system-ui" font-size="20" font-weight="700" fill="#1E3A8A">Requirements</text>
+      <rect x="760" y="20" width="220" height="44" rx="22" fill="#93C5FD"/>
+      <text x="780" y="50" font-family="ui-sans-serif, system-ui" font-size="16" font-weight="700" fill="#0F172A">Sign-off</text>
+    </g>
+
+    <g transform="translate(44,160)">
+      <rect x="0" y="0" width="760" height="84" rx="16" fill="#E9D5FF" stroke="rgba(168,85,247,0.22)"/>
+      <text x="28" y="52" font-family="ui-sans-serif, system-ui" font-size="20" font-weight="700" fill="#5B21B6">Design</text>
+      <rect x="804" y="0" width="176" height="84" rx="16" fill="#F3E8FF" stroke="rgba(168,85,247,0.22)"/>
+    </g>
+
+    <g transform="translate(44,268)">
+      <rect x="0" y="0" width="800" height="84" rx="16" fill="#FDE68A" stroke="rgba(245,158,11,0.25)"/>
+      <text x="28" y="52" font-family="ui-sans-serif, system-ui" font-size="20" font-weight="700" fill="#92400E">Implementation</text>
+      <rect x="840" y="0" width="140" height="84" rx="16" fill="#FEF3C7" stroke="rgba(245,158,11,0.25)"/>
+    </g>
+
+    <g transform="translate(44,376)">
+      <rect x="0" y="0" width="840" height="84" rx="16" fill="#BBF7D0" stroke="rgba(34,197,94,0.22)"/>
+      <text x="28" y="52" font-family="ui-sans-serif, system-ui" font-size="20" font-weight="700" fill="#14532D">Testing</text>
+      <rect x="900" y="0" width="80" height="84" rx="16" fill="#DCFCE7" stroke="rgba(34,197,94,0.22)"/>
+    </g>
+  </g>
+</svg>
+

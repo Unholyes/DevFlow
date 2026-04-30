@@ -8,25 +8,25 @@ const sdlcItems = [
     name: "Kanban",
     description: "Visual workflow management with continuous delivery",
     icon: KanbanSquare,
-    image: "/images/kanban-placeholder.png"
+    image: "/images/sdlc-kanban.svg"
   },
   {
     name: "DevOps",
     description: "Culture and practices for seamless development",
     icon: Cog,
-    image: "/images/devops-placeholder.png"
+    image: "/images/sdlc-devops.svg"
   },
   {
     name: "Waterfall",
     description: "Sequential development with defined phases",
     icon: Layers,
-    image: "/images/waterfall-placeholder.png"
+    image: "/images/sdlc-waterfall.svg"
   },
   {
     name: "Scrum",
     description: "Agile framework that emphasizes incremental delivery.",
     icon: Target,
-    image: "/images/scrum-placeholder.png"
+    image: "/images/sdlc-scrum.svg"
   }
 ]
 
