@@ -12,10 +12,6 @@ export function Header() {
           </Link>
         </div>
         <nav className="hidden md:flex space-x-8">
-          <a href="#home" className="text-slate-700 hover:text-slate-900">Home</a>
-          <a href="#features" className="text-slate-700 hover:text-slate-900">Features</a>
-          <a href="#pricing" className="text-slate-700 hover:text-slate-900">Pricing</a>
-          <a href="#contact" className="text-slate-700 hover:text-slate-900">Contact</a>
         </nav>
         <div className="flex items-center space-x-4">
           <Link href="/auth/login">
