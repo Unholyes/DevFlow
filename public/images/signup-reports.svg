@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="710" viewBox="0 0 1200 710" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="710" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ECFDF5"/>
+      <stop offset="1" stop-color="#D1FAE5"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="710" rx="32" fill="url(#bg)"/>
+
+  <text x="70" y="120" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="44" font-weight="700" fill="#0F172A">
+    Reports &amp; Analytics
+  </text>
+  <text x="70" y="165" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="20" font-weight="500" fill="#475569">
+    Track progress, velocity, and outcomes
+  </text>
+
+  <g transform="translate(70,220)">
+    <rect x="0" y="0" width="1060" height="420" rx="18" fill="rgba(255,255,255,0.75)" stroke="rgba(148,163,184,0.35)"/>
+
+    <g transform="translate(52,64)">
+      <circle cx="44" cy="44" r="44" fill="#10B981" opacity="0.16"/>
+      <path d="M28 64V34" stroke="#059669" stroke-width="8" stroke-linecap="round"/>
+      <path d="M44 64V26" stroke="#059669" stroke-width="8" stroke-linecap="round"/>
+      <path d="M60 64V44" stroke="#059669" stroke-width="8" stroke-linecap="round"/>
+      <text x="110" y="52" font-family="ui-sans-serif, system-ui" font-size="26" font-weight="800" fill="#0F172A">Reports &amp; Analytics</text>
+    </g>
+
+    <!-- Simple chart -->
+    <g transform="translate(52,160)">
+      <rect x="0" y="0" width="956" height="220" rx="16" fill="#FFFFFF" stroke="rgba(148,163,184,0.35)"/>
+      <rect x="28" y="28" width="240" height="16" rx="8" fill="#CBD5E1"/>
+
+      <g transform="translate(28,70)">
+        <rect x="0" y="0" width="900" height="120" rx="14" fill="#F8FAFC"/>
+        <path d="M40 92 C 120 40, 210 108, 300 60 C 380 18, 470 72, 560 44 C 650 18, 740 64, 820 36"
+              stroke="#10B981" stroke-width="8" fill="none" stroke-linecap="round"/>
+        <circle cx="40" cy="92" r="7" fill="#059669"/>
+        <circle cx="300" cy="60" r="7" fill="#059669"/>
+        <circle cx="560" cy="44" r="7" fill="#059669"/>
+        <circle cx="820" cy="36" r="7" fill="#059669"/>
+      </g>
+
+      <!-- KPI chips -->
+      <g transform="translate(28,198)">
+        <rect x="0" y="0" width="150" height="38" rx="19" fill="#D1FAE5"/>
+        <text x="18" y="25" font-family="ui-sans-serif, system-ui" font-size="14" font-weight="800" fill="#065F46">Velocity</text>
+        <rect x="170" y="0" width="170" height="38" rx="19" fill="#ECFDF5"/>
+        <text x="188" y="25" font-family="ui-sans-serif, system-ui" font-size="14" font-weight="800" fill="#065F46">Cycle time</text>
+        <rect x="360" y="0" width="170" height="38" rx="19" fill="#D1FAE5"/>
+        <text x="378" y="25" font-family="ui-sans-serif, system-ui" font-size="14" font-weight="800" fill="#065F46">Throughput</text>
+      </g>
+    </g>
+  </g>
+</svg>
+

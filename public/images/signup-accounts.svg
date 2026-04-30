@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="710" viewBox="0 0 1200 710" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="710" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ECFDF5"/>
+      <stop offset="1" stop-color="#D1FAE5"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="710" rx="32" fill="url(#bg)"/>
+
+  <text x="70" y="120" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="44" font-weight="700" fill="#0F172A">
+    Accounts
+  </text>
+  <text x="70" y="165" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto" font-size="20" font-weight="500" fill="#475569">
+    Manage members, roles, and access
+  </text>
+
+  <g transform="translate(70,220)">
+    <rect x="0" y="0" width="1060" height="420" rx="18" fill="rgba(255,255,255,0.75)" stroke="rgba(148,163,184,0.35)"/>
+
+    <!-- Sidebar icon + label mock -->
+    <g transform="translate(52,64)">
+      <circle cx="44" cy="44" r="44" fill="#10B981" opacity="0.16"/>
+      <path d="M44 26a12 12 0 1 0 0 24a12 12 0 0 0 0-24Z" fill="#059669"/>
+      <path d="M24 68c4-10 14-16 20-16s16 6 20 16" stroke="#059669" stroke-width="6" stroke-linecap="round"/>
+      <text x="110" y="52" font-family="ui-sans-serif, system-ui" font-size="26" font-weight="800" fill="#0F172A">Accounts</text>
+    </g>
+
+    <!-- Table/cards -->
+    <g transform="translate(52,160)">
+      <rect x="0" y="0" width="956" height="220" rx="16" fill="#FFFFFF" stroke="rgba(148,163,184,0.35)"/>
+      <rect x="28" y="28" width="240" height="16" rx="8" fill="#CBD5E1"/>
+      <rect x="28" y="60" width="190" height="12" rx="6" fill="#E2E8F0"/>
+
+      <g transform="translate(28,100)">
+        <rect x="0" y="0" width="900" height="52" rx="12" fill="#F1F5F9"/>
+        <circle cx="26" cy="26" r="14" fill="#A7F3D0"/>
+        <rect x="56" y="18" width="160" height="12" rx="6" fill="#CBD5E1"/>
+        <rect x="260" y="18" width="120" height="12" rx="6" fill="#CBD5E1"/>
+        <rect x="420" y="18" width="92" height="12" rx="6" fill="#CBD5E1"/>
+        <rect x="800" y="14" width="84" height="24" rx="12" fill="#D1FAE5"/>
+      </g>
+
+      <g transform="translate(28,160)">
+        <rect x="0" y="0" width="900" height="52" rx="12" fill="#F8FAFC"/>
+        <circle cx="26" cy="26" r="14" fill="#86EFAC"/>
+        <rect x="56" y="18" width="140" height="12" rx="6" fill="#CBD5E1"/>
+        <rect x="260" y="18" width="140" height="12" rx="6" fill="#CBD5E1"/>
+        <rect x="420" y="18" width="110" height="12" rx="6" fill="#CBD5E1"/>
+        <rect x="800" y="14" width="84" height="24" rx="12" fill="#ECFDF5"/>
+      </g>
+    </g>
+  </g>
+</svg>
+
