@@ -106,7 +106,13 @@ const ORDERED_PERMISSION_GROUPS: Array<[PermissionCategory, typeof PERMISSIONS]>
   return [c, perms] as [PermissionCategory, typeof PERMISSIONS]
 }).filter((entry) => entry[1].length > 0)
 
-export function PermissionsPageContent({ organizationId }: { organizationId: string }) {
+export function PermissionsPageContent({
+  organizationId,
+  embedded = false,
+}: {
+  organizationId: string
+  embedded?: boolean
+}) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -290,20 +296,30 @@ export function PermissionsPageContent({ organizationId }: { organizationId: str
   }
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-6">
+    <div className={embedded ? 'w-full' : 'mx-auto w-full max-w-6xl px-6 py-6'}>
       <div className="flex items-start justify-between gap-6">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Permissions</h1>
-          <p className="mt-1 text-sm text-slate-500">Define the default account-level permissions for your users.</p>
+          <h1 className={embedded ? 'text-lg font-semibold text-slate-900' : 'text-2xl font-semibold text-slate-900'}>
+            {embedded ? 'Roles & permissions' : 'Permissions'}
+          </h1>
+          <p className={embedded ? 'mt-1 text-sm text-slate-500' : 'mt-1 text-sm text-slate-500'}>
+            {embedded
+              ? 'Manage default roles and custom roles for this workspace.'
+              : 'Define the default account-level permissions for your users.'}
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <a href="#" className="text-sm text-slate-500 hover:text-slate-700">
-            Documentation
-          </a>
-          <a href="#" className="text-sm text-slate-500 hover:text-slate-700">
-            Feedback
-          </a>
+          {embedded ? null : (
+            <>
+              <a href="#" className="text-sm text-slate-500 hover:text-slate-700">
+                Documentation
+              </a>
+              <a href="#" className="text-sm text-slate-500 hover:text-slate-700">
+                Feedback
+              </a>
+            </>
+          )}
 
           <Dialog open={isNewRoleOpen} onOpenChange={setIsNewRoleOpen}>
             <DialogTrigger asChild>

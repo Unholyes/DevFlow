@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Bot, Mail, Search, Shield, UserPlus, Users, Trash2, X, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -17,6 +17,8 @@ import {
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { supabase } from '@/lib/supabase/client'
+import { PermissionsPageContent } from '@/components/settings/permissions-page-content'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
 type BuiltInWorkspaceRole = 'admin' | 'member' | 'ai_assistant'
 type WorkspaceRole = BuiltInWorkspaceRole | (string & { __customRoleBrand?: never })
@@ -127,13 +129,18 @@ export function AccountsPageContent({
   organizationId,
   currentUserId,
   organizations,
-  headerActions,
 }: {
   organizationId: string
   currentUserId: string
   organizations: AccessibleOrg[]
-  headerActions?: ReactNode
 }) {
+  const [activeTab, setActiveTab] = useState<'members' | 'teams' | 'roles'>('members')
+  const [teamsQuery, setTeamsQuery] = useState('')
+
+  const [isAssignRoleOpen, setIsAssignRoleOpen] = useState(false)
+  const [assignRoleName, setAssignRoleName] = useState('Member')
+  const [assignQuery, setAssignQuery] = useState('')
+  const [assignSelectedUserIds, setAssignSelectedUserIds] = useState<string[]>([])
   const [query, setQuery] = useState('')
   const [selectedOrganizationId, setSelectedOrganizationId] = useState<string>(organizationId)
   const [membersList, setMembersList] = useState<WorkspaceMember[]>([])
@@ -160,6 +167,35 @@ export function AccountsPageContent({
       return m.fullName.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)
     })
   }, [query, membersList])
+
+  const assignCandidates = useMemo(() => {
+    const q = assignQuery.trim().toLowerCase()
+    const base = membersList
+      .map((m) => ({ id: m.userId, name: m.fullName, email: m.email }))
+      .filter((m) => m.id && !assignSelectedUserIds.includes(m.id))
+    if (!q) return base.slice(0, 8)
+    return base
+      .filter((m) => m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q))
+      .slice(0, 8)
+  }, [assignQuery, assignSelectedUserIds, membersList])
+
+  const assignSelectedUsers = useMemo(() => {
+    const byId = new Map(membersList.map((m) => [m.userId, m] as const))
+    return assignSelectedUserIds
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((m) => ({
+        id: m!.userId,
+        name: m!.fullName,
+      }))
+  }, [assignSelectedUserIds, membersList])
+
+  function initials(name: string) {
+    const parts = name.trim().split(/\s+/).filter(Boolean)
+    const a = parts[0]?.[0] ?? 'U'
+    const b = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? '' : ''
+    return (a + b).toUpperCase()
+  }
 
   const roleOptions = useMemo(() => {
     const builtIns: Array<{ value: BuiltInWorkspaceRole; label: string }> = [
@@ -513,163 +549,240 @@ export function AccountsPageContent({
           ) : null}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {headerActions}
-          <Dialog open={isAddRoleModalOpen} onOpenChange={setIsAddRoleModalOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="shrink-0">
-                <Plus className="mr-2 h-4 w-4" />
-                Add role
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-3xl p-0">
-              <DialogHeader className="space-y-1 border-b border-slate-200 px-6 py-5 text-left">
-                <div className="flex items-start justify-between gap-6">
-                  <div className="min-w-0">
-                    <DialogTitle className="text-xl">Create custom role</DialogTitle>
-                    <DialogDescription className="mt-1">
-                      Define a role name and select the permissions you want this custom role to have.
-                    </DialogDescription>
+          {activeTab === 'members' ? (
+            <Dialog open={isInviteModalOpen} onOpenChange={setIsInviteModalOpen}>
+              <DialogTrigger asChild>
+                <Button className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white">
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Invite user
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Invite Team Member</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-1 block">Email address</label>
+                    <Input
+                      placeholder="colleague@example.com"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                    />
                   </div>
-                  <div className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                    {selectedRolePermissions.length} selected
-                  </div>
-                </div>
-              </DialogHeader>
-
-              <div className="space-y-5 px-6 py-5">
-                <div>
-                  <label className="text-sm font-medium text-slate-700">Role name</label>
-                  <Input
-                    className="mt-1"
-                    placeholder="e.g. QA Lead"
-                    value={roleName}
-                    onChange={(e) => setRoleName(e.target.value)}
-                    disabled={isSubmittingRole}
-                  />
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between gap-4">
-                    <label className="text-sm font-medium text-slate-700">Permissions</label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-8 px-2 text-xs text-slate-600 hover:text-slate-900"
-                      disabled={isSubmittingRole || selectedRolePermissions.length === 0}
-                      onClick={() => setSelectedRolePermissions([])}
-                    >
-                      Clear selection
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleInvite} className="bg-blue-600 hover:bg-blue-700">
+                      Send Invite
                     </Button>
                   </div>
-
-                  <div className="mt-2">
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <Input
-                        value={rolePermissionQuery}
-                        onChange={(e) => setRolePermissionQuery(e.target.value)}
-                        placeholder="Search permissions…"
-                        className="pl-9"
-                        disabled={isSubmittingRole}
-                      />
-                    </div>
-
-                    <div className="mt-3 max-h-[420px] overflow-auto rounded-md border border-slate-200 bg-white">
-                      {ROLE_PERMISSION_CATALOG.filter((p) => {
-                        const q = rolePermissionQuery.trim().toLowerCase()
-                        if (!q) return true
-                        return p.label.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || p.description.toLowerCase().includes(q)
-                      }).map((p) => {
-                        const checked = selectedRolePermissions.includes(p.id)
-                        return (
-                          <label key={p.id} className="flex items-start gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
-                            <input
-                              type="checkbox"
-                              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600"
-                              checked={checked}
-                              onChange={(e) => {
-                                const next = e.target.checked
-                                  ? [...selectedRolePermissions, p.id]
-                                  : selectedRolePermissions.filter((id) => id !== p.id)
-                                setSelectedRolePermissions(next)
-                              }}
-                              disabled={isSubmittingRole}
-                            />
-                            <span className="min-w-0">
-                              <span className="block font-medium text-slate-900">{p.label}</span>
-                              <span className="block text-xs text-slate-500">{p.description}</span>
-                            </span>
-                          </label>
-                        )
-                      })}
-                    </div>
-                  </div>
                 </div>
-              </div>
-
-              <DialogFooter className="border-t border-slate-200 px-6 py-4">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsAddRoleModalOpen(false)
-                    setRoleName('')
-                    setSelectedRolePermissions([])
-                    setRolePermissionQuery('')
-                  }}
-                  disabled={isSubmittingRole}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleCreateRole}
-                  className="bg-[#7a2233] text-white hover:bg-[#651c2a]"
-                  disabled={isSubmittingRole}
-                >
-                  Create role
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={isInviteModalOpen} onOpenChange={setIsInviteModalOpen}>
-            <DialogTrigger asChild>
-              <Button className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white">
-                <UserPlus className="mr-2 h-4 w-4" />
-                Invite user
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Invite Team Member</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">Email address</label>
-                  <Input
-                    placeholder="colleague@example.com"
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button onClick={handleInvite} className="bg-blue-600 hover:bg-blue-700">
-                    Send Invite
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+          ) : null}
         </div>
       </div>
 
-      {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
+      <div className="border-b border-gray-200">
+        <div className="flex items-center gap-6">
+          <button
+            type="button"
+            onClick={() => setActiveTab('members')}
+            className={[
+              'pb-3 text-sm font-medium',
+              activeTab === 'members' ? 'text-gray-900 border-b-2 border-[#7a2233]' : 'text-gray-500 hover:text-gray-700',
+            ].join(' ')}
+          >
+            Members
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('teams')}
+            className={[
+              'pb-3 text-sm font-medium',
+              activeTab === 'teams' ? 'text-gray-900 border-b-2 border-[#7a2233]' : 'text-gray-500 hover:text-gray-700',
+            ].join(' ')}
+          >
+            Teams
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('roles')}
+            className={[
+              'pb-3 text-sm font-medium',
+              activeTab === 'roles' ? 'text-gray-900 border-b-2 border-[#7a2233]' : 'text-gray-500 hover:text-gray-700',
+            ].join(' ')}
+          >
+            Roles
+          </button>
         </div>
-      )}
+      </div>
+
+      {activeTab === 'roles' ? (
+        <div className="pt-2">
+          <div className="mb-3 flex items-center justify-end">
+            <Dialog
+              open={isAssignRoleOpen}
+              onOpenChange={(v) => {
+                setIsAssignRoleOpen(v)
+                if (!v) {
+                  setAssignQuery('')
+                  setAssignSelectedUserIds([])
+                }
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="h-9"
+                  onClick={() => {
+                    setAssignRoleName('Member')
+                  }}
+                >
+                  Assign role
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg p-0">
+                <DialogHeader className="space-y-1 border-b border-slate-200 px-6 py-5 text-left">
+                  <div className="flex items-start gap-4">
+                    <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700">
+                      <Users className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <DialogTitle className="text-lg">Assign this role</DialogTitle>
+                      <DialogDescription className="mt-1">
+                        Select one or multiple employees to assign to this role{' '}
+                        <span className="font-medium text-[#7a2233]">“{assignRoleName}”</span>.
+                      </DialogDescription>
+                    </div>
+                  </div>
+                </DialogHeader>
+
+                <div className="space-y-4 px-6 py-5">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3">
+                    <div className="flex flex-wrap gap-2">
+                      {assignSelectedUsers.length === 0 ? (
+                        <div className="text-sm text-slate-500">No one selected yet.</div>
+                      ) : (
+                        assignSelectedUsers.map((u) => (
+                          <span
+                            key={u.id}
+                            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700"
+                          >
+                            <Avatar className="h-5 w-5">
+                              <AvatarFallback className="bg-white text-[10px] text-slate-600">
+                                {initials(u.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="max-w-[180px] truncate">{u.name}</span>
+                            <button
+                              type="button"
+                              className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-slate-500 hover:text-slate-700"
+                              onClick={() => setAssignSelectedUserIds((cur) => cur.filter((id) => id !== u.id))}
+                              aria-label={`Remove ${u.name}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <Input
+                        value={assignQuery}
+                        onChange={(e) => setAssignQuery(e.target.value)}
+                        placeholder="Search for an individual or team"
+                        className="pl-9"
+                      />
+                    </div>
+
+                    {assignCandidates.length > 0 ? (
+                      <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                        {assignCandidates.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                            onClick={() => setAssignSelectedUserIds((cur) => [...cur, c.id])}
+                          >
+                            <Avatar className="h-7 w-7">
+                              <AvatarFallback className="bg-slate-100 text-xs text-slate-700">
+                                {initials(c.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="min-w-0">
+                              <span className="block truncate font-medium text-slate-900">{c.name}</span>
+                              <span className="block truncate text-xs text-slate-500">{c.email}</span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                <DialogFooter className="border-t border-slate-200 px-6 py-5">
+                  <Button
+                    className="w-full bg-[#7a2233] text-white hover:bg-[#651c2a]"
+                    disabled={assignSelectedUserIds.length === 0}
+                    onClick={() => setIsAssignRoleOpen(false)}
+                  >
+                    Assign
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          <PermissionsPageContent organizationId={selectedOrganizationId} embedded />
+        </div>
+      ) : activeTab === 'teams' ? (
+        <div className="pt-6">
+          <Card className="border-gray-200 shadow-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg text-gray-900">Teams</CardTitle>
+              <CardDescription>Group members into teams for easier management.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Input
+                  placeholder="Search teams…"
+                  value={teamsQuery}
+                  onChange={(e) => setTeamsQuery(e.target.value)}
+                  className="pl-9 border-gray-200 bg-white"
+                />
+              </div>
+
+              <div className="flex min-h-[360px] items-center justify-center">
+                <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50">
+                    <Users className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div className="mt-4 text-base font-semibold text-gray-900">No teams created yet.</div>
+                  <div className="mt-1 text-sm text-gray-500">Start by creating a team!</div>
+                  <Button className="mt-5 bg-blue-600 text-white hover:bg-blue-700">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create Team
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        <>
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="border-gray-200 shadow-sm">
@@ -742,6 +855,11 @@ export function AccountsPageContent({
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-1">
+                    <Avatar className="h-7 w-7">
+                      <AvatarFallback className="bg-slate-100 text-xs text-slate-700">
+                        {initials(m.fullName)}
+                      </AvatarFallback>
+                    </Avatar>
                     <p className="font-semibold text-gray-900 truncate">{m.fullName}</p>
                     {editingMemberId === m.id ? (
                       <Select value={newRole} onValueChange={(value) => setNewRole(value as WorkspaceRole)}>
@@ -874,6 +992,8 @@ export function AccountsPageContent({
           )}
         </CardContent>
       </Card>
+        </>
+      )}
     </div>
   )
 }
