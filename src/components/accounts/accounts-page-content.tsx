@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Bot, Mail, Search, Shield, UserPlus, Users, Trash2, X, Plus } from 'lucide-react'
+import { Mail, Search, Shield, UserPlus, Users, Trash2, X, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,16 +19,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/lib/supabase/client'
 import { PermissionsPageContent } from '@/components/settings/permissions-page-content'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
-type BuiltInWorkspaceRole = 'admin' | 'member' | 'ai_assistant'
-type WorkspaceRole = BuiltInWorkspaceRole | (string & { __customRoleBrand?: never })
+type WorkspaceRole = 'Admin' | 'Project Manager' | 'Member'
 
 type WorkspaceMember = {
   id: string
   userId: string
   fullName: string
   email: string
-  role: WorkspaceRole
+  roles: WorkspaceRole[]
   joinedAt: string
   projects: string[]
 }
@@ -151,7 +157,7 @@ export function AccountsPageContent({
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
-  const [newRole, setNewRole] = useState<WorkspaceRole>('member')
+  const [draftRoles, setDraftRoles] = useState<WorkspaceRole[]>(['Member'])
 
 
   const [isAddRoleModalOpen, setIsAddRoleModalOpen] = useState(false)
@@ -198,20 +204,12 @@ export function AccountsPageContent({
   }
 
   const roleOptions = useMemo(() => {
-    const builtIns: Array<{ value: BuiltInWorkspaceRole; label: string }> = [
-      { value: 'admin', label: 'Admin' },
-      { value: 'member', label: 'Member' },
-      { value: 'ai_assistant', label: 'AI Assistant' },
+    const builtIns: Array<{ value: WorkspaceRole; label: string }> = [
+      { value: 'Admin', label: 'Admin' },
+      { value: 'Project Manager', label: 'Project Manager' },
+      { value: 'Member', label: 'Member' },
     ]
-
-    const custom = customRoles
-      .map((r) => normalizeRoleName(r.name))
-      .filter(Boolean)
-      .filter((name, idx, all) => all.findIndex((x) => x.toLowerCase() === name.toLowerCase()) === idx)
-      .filter((name) => !builtIns.some((b) => b.value.toLowerCase() === name.toLowerCase()))
-      .map((name) => ({ value: name as WorkspaceRole, label: name }))
-
-    return { builtIns, custom }
+    return { builtIns }
   }, [customRoles])
 
   useEffect(() => {
@@ -237,6 +235,7 @@ export function AccountsPageContent({
                 organization_id,
                 user_id,
                 role,
+                roles,
                 joined_at,
                 profiles:user_id (
                   full_name,
@@ -289,12 +288,17 @@ export function AccountsPageContent({
         const normalizedMembers: WorkspaceMember[] = (members ?? []).map((m: any) => {
           const fullName = (m.profiles?.full_name as string | null) ?? 'Unknown User'
           const email = (m.profiles?.email as string | null) ?? '—'
+          const roles = Array.isArray(m.roles)
+            ? (m.roles.filter((x: any) => typeof x === 'string') as string[])
+            : typeof m.role === 'string'
+              ? [m.role]
+              : ['Member']
           return {
             id: m.id,
             userId: m.user_id,
             fullName,
             email,
-            role: (m.role ?? 'member') as WorkspaceRole,
+            roles: (roles.length > 0 ? roles : ['Member']) as WorkspaceRole[],
             joinedAt: formatRelativeDate(m.joined_at),
             projects: projectsByUserId.get(m.user_id) ?? [],
           }
@@ -379,7 +383,6 @@ export function AccountsPageContent({
   const handleRemoveMember = async (memberId: string) => {
     const member = membersList.find((m) => m.id === memberId)
     if (!member) return
-    if (member.role === 'ai_assistant') return
     if (member.userId === currentUserId) {
       setError('You cannot remove your own account from the organization.')
       return
@@ -425,24 +428,24 @@ export function AccountsPageContent({
     }
   }
 
-  const handleRoleChange = async (memberId: string, role: WorkspaceRole) => {
+  const handleRolesChange = async (memberId: string, roles: WorkspaceRole[]) => {
     const member = membersList.find((m) => m.id === memberId)
     if (!member) return
-    if (member.role === 'ai_assistant') return
-    if (member.userId === currentUserId) {
-      setError('You cannot change your own role.')
+    if (!roles || roles.length === 0) {
+      setError('Select at least one role.')
       return
     }
 
     setError(null)
     const prev = membersList
-    setMembersList((cur) => cur.map((m) => (m.id === memberId ? { ...m, role } : m)))
+    setMembersList((cur) => cur.map((m) => (m.id === memberId ? { ...m, roles } : m)))
     setEditingMemberId(null)
 
     try {
+      const primary = roles[0]
       const { error: updateError } = await supabase
         .from('organization_members')
-        .update({ role })
+        .update({ role: primary, roles })
         .eq('id', memberId)
         .eq('organization_id', selectedOrganizationId)
 
@@ -466,10 +469,7 @@ export function AccountsPageContent({
       return
     }
 
-    const allExisting = [
-      ...roleOptions.builtIns.map((r) => r.value),
-      ...roleOptions.custom.map((r) => r.value),
-    ].map((r) => r.toLowerCase())
+    const allExisting = [...roleOptions.builtIns.map((r) => r.value)].map((r) => r.toLowerCase())
     if (allExisting.includes(name.toLowerCase())) {
       setError('That role already exists.')
       return
@@ -499,26 +499,6 @@ export function AccountsPageContent({
       setError(e?.message ?? 'Failed to create role.')
     } finally {
       setIsSubmittingRole(false)
-    }
-  }
-
-  const getRoleBadge = (role: WorkspaceRole) => {
-    switch (role) {
-      case 'admin':
-        return <Badge className="border-0 bg-blue-600 text-white">Admin</Badge>
-      case 'ai_assistant':
-        return (
-          <Badge className="border border-emerald-200 bg-emerald-50 text-emerald-700">
-            <span className="inline-flex items-center gap-1">
-              <Bot className="h-3.5 w-3.5" />
-              AI Assistant
-            </span>
-          </Badge>
-        )
-      case 'member':
-        return <Badge className="border border-gray-200 bg-gray-50 text-gray-700">Member</Badge>
-      default:
-        return <Badge className="border border-purple-200 bg-purple-50 text-purple-700">{role}</Badge>
     }
   }
 
@@ -807,7 +787,7 @@ export function AccountsPageContent({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-gray-900">
-              {membersList.filter((m) => m.role === 'admin').length}
+              {membersList.filter((m) => m.roles.includes('Admin')).length}
             </div>
             <p className="text-xs text-gray-500 mt-1">Tenant administrators</p>
           </CardContent>
@@ -861,31 +841,13 @@ export function AccountsPageContent({
                       </AvatarFallback>
                     </Avatar>
                     <p className="font-semibold text-gray-900 truncate">{m.fullName}</p>
-                    {editingMemberId === m.id ? (
-                      <Select value={newRole} onValueChange={(value) => setNewRole(value as WorkspaceRole)}>
-                        <SelectTrigger className="h-6 w-32 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {roleOptions.builtIns.map((r) => (
-                            <SelectItem key={r.value} value={r.value}>
-                              {r.label}
-                            </SelectItem>
-                          ))}
-                          {roleOptions.custom.length > 0 && (
-                            <>
-                              {roleOptions.custom.map((r) => (
-                                <SelectItem key={r.value} value={r.value}>
-                                  {r.label}
-                                </SelectItem>
-                              ))}
-                            </>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      getRoleBadge(m.role)
-                    )}
+                    <div className="flex flex-wrap items-center gap-1">
+                      {(editingMemberId === m.id ? draftRoles : m.roles).map((r) => (
+                        <Badge key={r} className="border border-slate-200 bg-slate-50 text-slate-700 text-[11px] px-2 py-0.5">
+                          {r}
+                        </Badge>
+                      ))}
+                    </div>
                   </div>
                   <p className="text-sm text-gray-500 truncate">{m.email}</p>
                   <div className="flex items-center gap-2 mt-2">
@@ -905,15 +867,52 @@ export function AccountsPageContent({
                   <span className="text-xs text-gray-500">Joined {m.joinedAt}</span>
                   {editingMemberId === m.id ? (
                     <div className="flex gap-1">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
+                            Select roles
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="min-w-[220px]">
+                          {roleOptions.builtIns.map((opt) => {
+                            const checked = draftRoles.includes(opt.value)
+                            return (
+                              <DropdownMenuCheckboxItem
+                                key={opt.value}
+                                checked={checked}
+                                onCheckedChange={(next) => {
+                                  setDraftRoles((cur) => {
+                                    if (next) return Array.from(new Set([...cur, opt.value]))
+                                    const filtered = cur.filter((x) => x !== opt.value)
+                                    return filtered.length > 0 ? filtered : ['Member']
+                                  })
+                                }}
+                              >
+                                {opt.label}
+                              </DropdownMenuCheckboxItem>
+                            )
+                          })}
+                          <DropdownMenuSeparator />
+                          <div className="px-2 py-1 text-[11px] text-slate-500">Select one or more roles.</div>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => void handleRoleChange(m.id, newRole)}
+                        onClick={() => void handleRolesChange(m.id, draftRoles)}
                         className="h-7 px-2 text-xs"
                       >
                         Save
                       </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingMemberId(null)} className="h-7 px-2 text-xs">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setEditingMemberId(null)
+                          setDraftRoles(m.roles)
+                        }}
+                        className="h-7 px-2 text-xs"
+                      >
                         <X className="h-3 w-3" />
                       </Button>
                     </div>
@@ -923,22 +922,19 @@ export function AccountsPageContent({
                         size="sm"
                         variant="ghost"
                         onClick={() => {
-                          if (m.role === 'ai_assistant') return
-                          if (m.userId === currentUserId) return
                           setEditingMemberId(m.id)
-                          setNewRole(m.role)
+                          setDraftRoles(m.roles.length > 0 ? m.roles : ['Member'])
                         }}
                         className="h-7 px-2 text-xs"
-                        disabled={m.role === 'ai_assistant' || m.userId === currentUserId}
                       >
-                        Edit Role
+                        Edit Roles
                       </Button>
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => void handleRemoveMember(m.id)}
                         className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                        disabled={m.role === 'ai_assistant' || m.userId === currentUserId}
+                        disabled={m.userId === currentUserId}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>

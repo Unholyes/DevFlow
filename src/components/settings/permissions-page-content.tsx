@@ -15,7 +15,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
-type DefaultRole = 'admin' | 'member' | 'viewer' | 'guest'
+type DefaultRole = 'Admin' | 'Project Manager' | 'Member'
 
 type RoleKind = 'default' | 'custom'
 
@@ -25,12 +25,19 @@ type RoleListItem =
 
 type PermissionCategory =
   | 'Account'
+  | 'Project Management'
   | 'SDLC Management'
   | 'Development'
   | 'System'
 
 type PermissionId =
   | 'account.members.manage'
+  | 'pm.projects.create'
+  | 'pm.sprints.manage'
+  | 'pm.phase_gates.approve'
+  | 'pm.timelines.modify'
+  | 'pm.db_schemas.manage'
+  | 'pm.issues.assign_transition'
   | 'sdlc.sprints.create'
   | 'sdlc.backlog.manage'
   | 'projects.archive'
@@ -40,7 +47,7 @@ type PermissionId =
   | 'system.api_tokens.generate'
   | 'system.integrations.manage'
 
-const CATEGORY_ORDER: PermissionCategory[] = ['Account', 'SDLC Management', 'Development', 'System']
+const CATEGORY_ORDER: PermissionCategory[] = ['Account', 'Project Management', 'SDLC Management', 'Development', 'System']
 
 const PERMISSIONS: Array<{
   id: PermissionId
@@ -50,6 +57,14 @@ const PERMISSIONS: Array<{
 }> = [
   // Account
   { id: 'account.members.manage', category: 'Account', label: 'Manage members' },
+
+  // Project Management (hybrid SDLC perms)
+  { id: 'pm.projects.create', category: 'Project Management', label: 'Create new project' },
+  { id: 'pm.sprints.manage', category: 'Project Management', label: 'Manage sprint cycles' },
+  { id: 'pm.phase_gates.approve', category: 'Project Management', label: 'Approve phase gate transitions' },
+  { id: 'pm.timelines.modify', category: 'Project Management', label: 'Modify project timelines/Gantt charts' },
+  { id: 'pm.db_schemas.manage', category: 'Project Management', label: 'Manage database schemas' },
+  { id: 'pm.issues.assign_transition', category: 'Project Management', label: 'Assign and transition issue tickets' },
 
   // SDLC Management (the granular SDLC workflow perms you requested)
   { id: 'sdlc.sprints.create', category: 'SDLC Management', label: 'Create sprints' },
@@ -67,10 +82,9 @@ const PERMISSIONS: Array<{
 ]
 
 const DEFAULT_ROLES: Array<{ role: DefaultRole; label: string }> = [
-  { role: 'admin', label: 'Admin' },
-  { role: 'member', label: 'Member' },
-  { role: 'viewer', label: 'Viewer' },
-  { role: 'guest', label: 'Guest' },
+  { role: 'Admin', label: 'Admin' },
+  { role: 'Project Manager', label: 'Project Manager' },
+  { role: 'Member', label: 'Member' },
 ]
 
 function uniqueLower(values: string[]) {
@@ -118,15 +132,14 @@ export function PermissionsPageContent({
 
   const [customRoles, setCustomRoles] = useState<Array<{ id: string; name: string; permissions: unknown }>>([])
   const [defaultRolePerms, setDefaultRolePerms] = useState<Record<DefaultRole, string[]>>({
-    admin: [],
-    member: [],
-    viewer: [],
-    guest: [],
+    Admin: [],
+    'Project Manager': [],
+    Member: [],
   })
 
   const [selected, setSelected] = useState<RoleListItem>({
     kind: 'default',
-    role: 'admin',
+    role: 'Admin',
     label: 'Admin',
   })
 
@@ -142,11 +155,16 @@ export function PermissionsPageContent({
     return [...defaults, ...customs]
   }, [customRoles])
 
+  const allPermissionIds = useMemo(() => PERMISSIONS.map((p) => p.id), [])
+
+  const isAdminSelected = useMemo(() => selected.kind === 'default' && selected.role === 'Admin', [selected])
+
   const selectedPermissions = useMemo(() => {
+    if (isAdminSelected) return allPermissionIds
     if (selected.kind === 'default') return defaultRolePerms[selected.role]
     const role = customRoles.find((r) => r.id === selected.id)
     return uniqueLower(asStringArray(role?.permissions ?? []))
-  }, [customRoles, defaultRolePerms, selected])
+  }, [allPermissionIds, customRoles, defaultRolePerms, isAdminSelected, selected])
 
   const selectedTitle = useMemo(() => {
     const label = selected.label
@@ -184,7 +202,7 @@ export function PermissionsPageContent({
         if (defaultsError) throw defaultsError
         if (customsError) throw customsError
 
-        const nextDefault: Record<DefaultRole, string[]> = { admin: [], member: [], viewer: [], guest: [] }
+        const nextDefault: Record<DefaultRole, string[]> = { Admin: [], 'Project Manager': [], Member: [] }
         for (const row of defaults ?? []) {
           const role = row.role as DefaultRole
           nextDefault[role] = uniqueLower(asStringArray((row as any).permissions))
@@ -245,6 +263,7 @@ export function PermissionsPageContent({
   }
 
   function togglePermission(id: PermissionId, checked: boolean) {
+    if (isAdminSelected) return
     const next = checked
       ? uniqueLower([...selectedPermissions, id])
       : selectedPermissions.filter((p) => p.toLowerCase() !== id.toLowerCase())
@@ -539,7 +558,7 @@ export function PermissionsPageContent({
                           className="h-4 w-4 rounded border-slate-300 text-blue-600"
                           checked={checked}
                           onChange={(e) => togglePermission(p.id, e.target.checked)}
-                          disabled={isLoading}
+                          disabled={isLoading || isAdminSelected}
                         />
                         <span className="truncate">{p.label}</span>
                       </label>
