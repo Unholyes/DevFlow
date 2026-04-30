@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Bot, Mail, Search, Shield, UserPlus, Users, Trash2, X, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -127,10 +127,12 @@ export function AccountsPageContent({
   organizationId,
   currentUserId,
   organizations,
+  headerActions,
 }: {
   organizationId: string
   currentUserId: string
   organizations: AccessibleOrg[]
+  headerActions?: ReactNode
 }) {
   const [query, setQuery] = useState('')
   const [selectedOrganizationId, setSelectedOrganizationId] = useState<string>(organizationId)
@@ -511,6 +513,7 @@ export function AccountsPageContent({
           ) : null}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          {headerActions}
           <Dialog open={isAddRoleModalOpen} onOpenChange={setIsAddRoleModalOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="shrink-0">

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { AccountsPageContent } from '@/components/accounts/accounts-page-content'
+import { AccountsPageClient } from './accounts-page-client'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
 
@@ -116,7 +116,7 @@ export default async function AccountsPage({
   const organizations = tenantSlug ? accessibleOrgs.filter((o) => o.id === organizationId) : accessibleOrgs
 
   return (
-    <AccountsPageContent
+    <AccountsPageClient
       organizationId={organizationId}
       currentUserId={user.id}
       organizations={organizations as any}
