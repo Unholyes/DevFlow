@@ -14,7 +14,7 @@ interface ProjectHeaderProps {
     progress: number
     tasksCount: number
     completedTasks: number
-    dueDate: Date
+    dueDate: Date | null
     teamMembers: number
   }
 }
@@ -55,7 +55,7 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
               </div>
               <div className="flex items-center gap-1">
                 <CalendarDays className="h-4 w-4" />
-                <span>Due {project.dueDate.toLocaleDateString()}</span>
+                <span>{project.dueDate ? `Due ${project.dueDate.toLocaleDateString()}` : 'No deadline set'}</span>
               </div>
             </div>
           </div>

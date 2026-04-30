@@ -31,6 +31,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       description?: string
       status?: 'active' | 'completed' | 'archived'
       phaseGatingEnabled?: boolean
+      dueDate?: string | null
     }
 
     if (!body.name?.trim()) {
@@ -43,37 +44,75 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       status: body.status ?? 'active',
     } as Record<string, unknown>
 
-    const updatesWithGating = {
+    const updatesWithDueDate = {
+      ...updatesBase,
+      due_date: body.dueDate || null,
+    }
+
+    const updatesWithGatingOnly = {
       ...updatesBase,
       phase_gating_enabled: !!body.phaseGatingEnabled,
     }
 
-    const updateWithGatingAttempt = await supabase
+    const updatesWithAll = {
+      ...updatesWithDueDate,
+      phase_gating_enabled: !!body.phaseGatingEnabled,
+    }
+
+    const updateWithAllAttempt = await supabase
       .from('projects')
-      .update(updatesWithGating)
+      .update(updatesWithAll)
       .eq('id', params.id)
       .eq('organization_id', orgId)
       .select('id')
       .maybeSingle()
 
-    if (updateWithGatingAttempt.error?.code === 'PGRST204') {
-      const fallback = await supabase
+    if (updateWithAllAttempt.error?.code === 'PGRST204') {
+      const fallbackWithDueDate = await supabase
         .from('projects')
-        .update(updatesBase)
+        .update(updatesWithDueDate)
         .eq('id', params.id)
         .eq('organization_id', orgId)
         .select('id')
         .maybeSingle()
 
-      if (fallback.error) throw fallback.error
-      if (!fallback.data?.id) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-      return NextResponse.json({ data: { id: fallback.data.id } })
+      if (fallbackWithDueDate.error?.code === 'PGRST204') {
+        const fallbackWithGating = await supabase
+          .from('projects')
+          .update(updatesWithGatingOnly)
+          .eq('id', params.id)
+          .eq('organization_id', orgId)
+          .select('id')
+          .maybeSingle()
+
+        if (fallbackWithGating.error?.code === 'PGRST204') {
+          const fallbackBase = await supabase
+            .from('projects')
+            .update(updatesBase)
+            .eq('id', params.id)
+            .eq('organization_id', orgId)
+            .select('id')
+            .maybeSingle()
+
+          if (fallbackBase.error) throw fallbackBase.error
+          if (!fallbackBase.data?.id) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+          return NextResponse.json({ data: { id: fallbackBase.data.id } })
+        }
+
+        if (fallbackWithGating.error) throw fallbackWithGating.error
+        if (!fallbackWithGating.data?.id) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+        return NextResponse.json({ data: { id: fallbackWithGating.data.id } })
+      }
+
+      if (fallbackWithDueDate.error) throw fallbackWithDueDate.error
+      if (!fallbackWithDueDate.data?.id) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+      return NextResponse.json({ data: { id: fallbackWithDueDate.data.id } })
     }
 
-    if (updateWithGatingAttempt.error) throw updateWithGatingAttempt.error
-    if (!updateWithGatingAttempt.data?.id) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    if (updateWithAllAttempt.error) throw updateWithAllAttempt.error
+    if (!updateWithAllAttempt.data?.id) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
-    return NextResponse.json({ data: { id: updateWithGatingAttempt.data.id } })
+    return NextResponse.json({ data: { id: updateWithAllAttempt.data.id } })
   } catch (error) {
     console.error('Error updating project:', error)
     return NextResponse.json({ error: 'Failed to update project' }, { status: 500 })

@@ -49,32 +49,45 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         status: string
         progress_percent: number | null
         phase_gating_enabled?: boolean | null
+      due_date?: string | null
       }
     | null = null
 
   {
     const attempt = await supabase
       .from('projects')
-      .select('id,name,description,status,progress_percent,phase_gating_enabled')
+      .select('id,name,description,status,progress_percent,phase_gating_enabled,due_date')
       .eq('id', params.id)
       .eq('organization_id', orgId)
       .maybeSingle()
 
     if (attempt.error?.code === 'PGRST204') {
-      const fallback = await supabase
+      const fallbackWithDueDate = await supabase
         .from('projects')
-        .select('id,name,description,status,progress_percent')
+        .select('id,name,description,status,progress_percent,due_date')
         .eq('id', params.id)
         .eq('organization_id', orgId)
         .maybeSingle()
 
-      project = fallback.data as any
+      if (fallbackWithDueDate.error?.code === 'PGRST204') {
+        const fallback = await supabase
+          .from('projects')
+          .select('id,name,description,status,progress_percent')
+          .eq('id', params.id)
+          .eq('organization_id', orgId)
+          .maybeSingle()
+
+        project = fallback.data as any
+      } else {
+        project = fallbackWithDueDate.data as any
+      }
     } else {
       project = attempt.data as any
     }
   }
 
   if (!project) notFound()
+  const projectDueDate = project.due_date ? new Date(project.due_date) : null
 
   // `is_gated` was introduced in `migrations/add_phase_gating.sql`.
   // Retry without it if needed.
@@ -151,7 +164,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           progress: project.progress_percent ?? 0,
           tasksCount: 0,
           completedTasks: 0,
-          dueDate: new Date(),
+          dueDate: projectDueDate,
           teamMembers: 0,
         }}
       />
@@ -165,7 +178,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           progress: project.progress_percent ?? 0,
           tasksCount: 0,
           completedTasks: 0,
-          dueDate: new Date(),
+          dueDate: projectDueDate,
           teamMembers: 0,
         }}
       />

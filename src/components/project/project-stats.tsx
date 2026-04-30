@@ -13,7 +13,7 @@ interface ProjectStatsProps {
     progress: number
     tasksCount: number
     completedTasks: number
-    dueDate: Date
+    dueDate: Date | null
     teamMembers: number
   }
 }
@@ -27,7 +27,7 @@ export function ProjectStats({ project }: ProjectStatsProps) {
   // Calculate days remaining
   const today = new Date()
   const dueDate = project.dueDate
-  const daysRemaining = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+  const daysRemaining = dueDate ? Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : null
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -82,10 +82,10 @@ export function ProjectStats({ project }: ProjectStatsProps) {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">
-            {daysRemaining > 0 ? `${daysRemaining}d` : 'Overdue'}
+            {daysRemaining === null ? 'N/A' : daysRemaining > 0 ? `${daysRemaining}d` : 'Overdue'}
           </div>
           <p className="text-xs text-muted-foreground">
-            {dueDate.toLocaleDateString()}
+            {dueDate ? dueDate.toLocaleDateString() : 'No deadline set'}
           </p>
         </CardContent>
       </Card>

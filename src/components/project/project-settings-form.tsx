@@ -1,11 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { CheckCircle2 } from 'lucide-react'
 
 type ProjectSettingsFormProps = {
   project: {
@@ -14,6 +23,7 @@ type ProjectSettingsFormProps = {
     description: string
     status: 'active' | 'completed' | 'archived'
     phaseGatingEnabled: boolean
+    dueDate: string | null
   }
 }
 
@@ -23,15 +33,29 @@ export function ProjectSettingsForm({ project }: ProjectSettingsFormProps) {
   const [description, setDescription] = useState(project.description)
   const [status, setStatus] = useState<ProjectSettingsFormProps['project']['status']>(project.status)
   const [phaseGatingEnabled, setPhaseGatingEnabled] = useState(project.phaseGatingEnabled)
+  const [dueDate, setDueDate] = useState(project.dueDate ?? '')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false)
+
+  useEffect(() => {
+    if (!showSuccessDialog) return
+    const timeout = window.setTimeout(() => {
+      router.push(`/dashboard/projects/${project.id}`)
+      router.refresh()
+    }, 1600)
+
+    return () => window.clearTimeout(timeout)
+  }, [showSuccessDialog, router])
 
   const saveSettings = async () => {
     if (!name.trim()) {
-      alert('Project name is required.')
+      setSaveError('Project name is required.')
       return
     }
 
+    setSaveError(null)
     setSaving(true)
     try {
       const res = await fetch(`/api/projects/${project.id}`, {
@@ -42,6 +66,7 @@ export function ProjectSettingsForm({ project }: ProjectSettingsFormProps) {
           description,
           status,
           phaseGatingEnabled,
+          dueDate: dueDate || null,
         }),
       })
 
@@ -50,11 +75,10 @@ export function ProjectSettingsForm({ project }: ProjectSettingsFormProps) {
         throw new Error(json?.error || 'Failed to save settings')
       }
 
-      alert('Project settings saved.')
-      router.refresh()
+      setShowSuccessDialog(true)
     } catch (error) {
       console.error(error)
-      alert(error instanceof Error ? error.message : 'Failed to save settings')
+      setSaveError(error instanceof Error ? error.message : 'Failed to save settings')
     } finally {
       setSaving(false)
     }
@@ -105,6 +129,12 @@ export function ProjectSettingsForm({ project }: ProjectSettingsFormProps) {
           <CardTitle>Project settings</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {saveError ? (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {saveError}
+            </div>
+          ) : null}
+
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">Project name</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -126,6 +156,11 @@ export function ProjectSettingsForm({ project }: ProjectSettingsFormProps) {
               <option value="completed">Completed</option>
               <option value="archived">Archived</option>
             </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">Deadline</label>
+            <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>
 
           <label className="flex items-center gap-2 text-sm text-gray-700">
@@ -158,6 +193,30 @@ export function ProjectSettingsForm({ project }: ProjectSettingsFormProps) {
           </Button>
         </CardContent>
       </Card>
+
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-700">
+              <CheckCircle2 className="h-5 w-5" />
+              Project settings saved
+            </DialogTitle>
+            <DialogDescription>
+              Your changes were updated successfully. Redirecting you back to this project...
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                router.push(`/dashboard/projects/${project.id}`)
+                router.refresh()
+              }}
+            >
+              Go now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

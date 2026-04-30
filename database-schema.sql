@@ -436,6 +436,7 @@ CREATE TABLE IF NOT EXISTS public.projects (
   description TEXT,
   status public.project_status_enum NOT NULL DEFAULT 'active',
   progress_percent INTEGER NOT NULL DEFAULT 0,
+  due_date DATE,
   -- Waterfall-style governance toggle: if enabled, phases can be locked sequentially
   phase_gating_enabled BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

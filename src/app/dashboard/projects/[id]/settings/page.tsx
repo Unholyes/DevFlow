@@ -33,25 +33,37 @@ export default async function ProjectSettingsPage({ params }: { params: { id: st
         description: string | null
         status: 'active' | 'completed' | 'archived'
         phase_gating_enabled?: boolean | null
+        due_date?: string | null
       }
     | null = null
 
   {
     const attempt = await supabase
       .from('projects')
-      .select('id,name,description,status,phase_gating_enabled')
+      .select('id,name,description,status,phase_gating_enabled,due_date')
       .eq('organization_id', orgId)
       .eq('id', params.id)
       .maybeSingle()
 
     if (attempt.error?.code === 'PGRST204') {
-      const fallback = await supabase
+      const fallbackWithDueDate = await supabase
         .from('projects')
-        .select('id,name,description,status')
+        .select('id,name,description,status,due_date')
         .eq('organization_id', orgId)
         .eq('id', params.id)
         .maybeSingle()
-      project = fallback.data as any
+
+      if (fallbackWithDueDate.error?.code === 'PGRST204') {
+        const fallback = await supabase
+          .from('projects')
+          .select('id,name,description,status')
+          .eq('organization_id', orgId)
+          .eq('id', params.id)
+          .maybeSingle()
+        project = fallback.data as any
+      } else {
+        project = fallbackWithDueDate.data as any
+      }
     } else {
       project = attempt.data as any
     }
@@ -67,6 +79,7 @@ export default async function ProjectSettingsPage({ params }: { params: { id: st
         description: project.description ?? '',
         status: project.status,
         phaseGatingEnabled: !!project.phase_gating_enabled,
+        dueDate: project.due_date ?? null,
       }}
     />
   )
