@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CalendarDays, Settings, Users } from 'lucide-react'
 import { Project } from '@/types'
+import Link from 'next/link'
 
 interface ProjectHeaderProps {
   project: {
@@ -63,9 +64,11 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
               <Users className="h-4 w-4 mr-2" />
               Manage Team
             </Button>
-            <Button variant="outline" size="sm">
-              <Settings className="h-4 w-4 mr-2" />
-              Settings
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/dashboard/projects/${project.id}/settings`}>
+                <Settings className="h-4 w-4 mr-2" />
+                Settings
+              </Link>
             </Button>
           </div>
         </div>
