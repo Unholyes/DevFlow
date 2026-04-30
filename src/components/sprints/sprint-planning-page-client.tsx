@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowRight, ArrowLeft, Save, Play, Target } from 'lucide-react'
+import { ArrowRight, ArrowLeft, Save, Play, Target, Minus, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -20,15 +20,42 @@ type Task = {
   position: number | null
 }
 
-const historicalVelocity = 42
+const defaultCapacity = 42
 
 function normalizePriority(p: Task['priority']): 'low' | 'medium' | 'high' {
   return p === 'critical' ? 'high' : p
 }
 
-export function SprintPlanningPageClient(props: { projectId: string; phaseId: string; backlogTasks: Task[] }) {
+function uniqueById<T extends { id: string }>(items: T[]) {
+  const map = new Map<string, T>()
+  for (const item of items) map.set(item.id, item)
+  return Array.from(map.values())
+}
+
+export function SprintPlanningPageClient(props: {
+  projectId: string
+  phaseId: string
+  processId?: string
+  initialCapacityPoints?: number
+  backlogStageId?: string
+  sprintStartStageId?: string
+  backlogTasks: Task[]
+}) {
   const router = useRouter()
   const searchParams = useSearchParams()
+
+  const [capacityPoints, setCapacityPoints] = useState<number>(() => {
+    const n = props.initialCapacityPoints
+    return Number.isFinite(n) && (n as number) > 0 ? Math.floor(n as number) : defaultCapacity
+  })
+  const [savingCapacity, setSavingCapacity] = useState(false)
+  const [capacitySaveError, setCapacitySaveError] = useState<string | null>(null)
+
+  const [isCreating, setIsCreating] = useState(false)
+  const [createTitle, setCreateTitle] = useState('')
+  const [createPriority, setCreatePriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium')
+  const [createStoryPoints, setCreateStoryPoints] = useState<string>('0')
+  const [createLoading, setCreateLoading] = useState(false)
 
   const [sprintName, setSprintName] = useState('Sprint 1')
   const [startDate, setStartDate] = useState('')
@@ -47,15 +74,99 @@ export function SprintPlanningPageClient(props: { projectId: string; phaseId: st
     () => backlogTasks.filter((t) => selectedTasks.has(t.id)),
     [backlogTasks, selectedTasks]
   )
-  const totalStoryPoints = selectedTaskObjects.reduce((sum, t) => sum + (t.story_points || 0), 0)
+  const selectedStoryPoints = selectedTaskObjects.reduce((sum, t) => sum + (t.story_points || 0), 0)
   const remainingBacklog = backlogTasks.filter((t) => !selectedTasks.has(t.id))
 
+  const capacity = Math.max(1, capacityPoints || defaultCapacity)
+  const sprintBacklogStoryPoints = sprintTasks.reduce((sum, t) => sum + (t.story_points || 0), 0)
   const capacityStatus =
-    totalStoryPoints > historicalVelocity
+    sprintBacklogStoryPoints > capacity
       ? 'over'
-      : totalStoryPoints < historicalVelocity * 0.8
+      : sprintBacklogStoryPoints < capacity * 0.8
         ? 'under'
         : 'optimal'
+
+  useEffect(() => {
+    if (!props.processId) return
+    setCapacitySaveError(null)
+
+    const handle = window.setTimeout(async () => {
+      setSavingCapacity(true)
+      try {
+        const res = await fetch('/api/phase-processes', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: props.processId, sprint_capacity_points: capacity }),
+        })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json?.error || 'Failed to save capacity')
+      } catch (e) {
+        setCapacitySaveError(e instanceof Error ? e.message : 'Failed to save capacity')
+      } finally {
+        setSavingCapacity(false)
+      }
+    }, 450)
+
+    return () => window.clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capacity, props.processId])
+
+  const canCreate = !!props.processId && !!props.backlogStageId
+
+  const handleCreateTask = async () => {
+    if (!canCreate) return
+    const title = createTitle.trim()
+    if (!title) return
+
+    const storyPoints = Number(createStoryPoints)
+    const safeStoryPoints = Number.isFinite(storyPoints) && storyPoints >= 0 ? Math.floor(storyPoints) : 0
+
+    setCreateLoading(true)
+    try {
+      const res = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: props.projectId,
+          process_id: props.processId,
+          workflow_stage_id: props.backlogStageId,
+          title,
+          priority: createPriority,
+          story_points: safeStoryPoints,
+          description: null,
+          sprint_id: null,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || 'Failed to create task')
+
+      const created = json?.data as Partial<Task> | undefined
+      if (created?.id) {
+        setBacklogTasks((prev) => [
+          {
+            id: String(created.id),
+            title: String(created.title ?? title),
+            description: (created.description ?? null) as any,
+            priority: (created.priority ?? createPriority) as any,
+            story_points: (created.story_points ?? safeStoryPoints) as any,
+            assignee_id: (created.assignee_id ?? null) as any,
+            position: (created.position ?? null) as any,
+          } as Task,
+          ...prev.filter((t) => t.id !== created.id),
+        ])
+      }
+
+      setCreateTitle('')
+      setCreatePriority('medium')
+      setCreateStoryPoints('0')
+      setIsCreating(false)
+      router.refresh()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to create task')
+    } finally {
+      setCreateLoading(false)
+    }
+  }
 
   const toggleTaskSelection = (taskId: string) => {
     setSelectedTasks((prev) => {
@@ -68,17 +179,27 @@ export function SprintPlanningPageClient(props: { projectId: string; phaseId: st
 
   const handleAddToSprint = () => {
     const tasksToAdd = backlogTasks.filter((t) => selectedTasks.has(t.id))
-    setSprintTasks((prev) => [...prev, ...tasksToAdd])
-    setBacklogTasks(remainingBacklog)
+    setSprintTasks((prev) => uniqueById([...prev, ...tasksToAdd]))
+    // Remove the added tasks from backlog (even if there were duplicates).
+    setBacklogTasks((prev) => prev.filter((t) => !selectedTasks.has(t.id)))
     setSelectedTasks(new Set())
   }
 
   const handleRemoveFromSprint = (taskId: string) => {
-    setSprintTasks((prev) => {
-      const taskToRemove = prev.find((t) => t.id === taskId)
-      if (!taskToRemove) return prev
-      setBacklogTasks((b) => [...b, taskToRemove])
-      return prev.filter((t) => t.id !== taskId)
+    // Move task back to backlog (no duplicates).
+    setSprintTasks((prevSprint) => {
+      const taskToMove = prevSprint.find((t) => t.id === taskId)
+      if (!taskToMove) return prevSprint
+
+      setBacklogTasks((prevBacklog) => uniqueById([...prevBacklog, taskToMove]))
+      setSelectedTasks((prevSelected) => {
+        if (!prevSelected.has(taskId)) return prevSelected
+        const next = new Set(prevSelected)
+        next.delete(taskId)
+        return next
+      })
+
+      return prevSprint.filter((t) => t.id !== taskId)
     })
   }
 
@@ -101,6 +222,7 @@ export function SprintPlanningPageClient(props: { projectId: string; phaseId: st
         body: JSON.stringify({
           project_id: props.projectId,
           phase_id: props.phaseId,
+          process_id: props.processId,
           name: sprintName,
           start_date: startDate,
           end_date: endDate,
@@ -120,12 +242,26 @@ export function SprintPlanningPageClient(props: { projectId: string; phaseId: st
           fetch('/api/tasks', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: t.id, sprint_id: sprintId }),
+            body: JSON.stringify({
+              id: t.id,
+              sprint_id: sprintId,
+              // Ensure sprint tasks show on the Scrum board by moving them out of the backlog stage.
+              ...(props.sprintStartStageId ? { workflow_stage_id: props.sprintStartStageId } : {}),
+            }),
           })
         )
       )
 
-      router.push(`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`)
+      // After starting a sprint, drop users into the Scrum board for that sprint.
+      if (props.processId) {
+        router.push(
+          `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/board?sprintId=${encodeURIComponent(
+            sprintId
+          )}`
+        )
+      } else {
+        router.push(`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`)
+      }
       router.refresh()
     } catch (e) {
       console.error(e)
@@ -232,7 +368,7 @@ export function SprintPlanningPageClient(props: { projectId: string; phaseId: st
               <div>
                 <h3 className="font-semibold text-gray-900">Sprint Capacity</h3>
                 <p className="text-sm text-gray-600">
-                  {totalStoryPoints} / {historicalVelocity} story points
+                  {sprintBacklogStoryPoints} / {capacity} story points
                 </p>
               </div>
             </div>
@@ -248,7 +384,35 @@ export function SprintPlanningPageClient(props: { projectId: string; phaseId: st
               >
                 {capacityStatus === 'over' ? 'Over Capacity' : capacityStatus === 'under' ? 'Under Capacity' : 'Optimal'}
               </Badge>
-              <p className="text-xs text-gray-500 mt-1">Based on historical velocity</p>
+              <div className="mt-2 flex items-center justify-end gap-2">
+                <label className="text-xs text-gray-600">Capacity</label>
+                <div className="inline-flex items-center rounded-md border border-gray-200 bg-white overflow-hidden">
+                  <button
+                    type="button"
+                    className="h-8 w-8 grid place-items-center text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                    onClick={() => setCapacityPoints((v) => Math.max(1, (v || defaultCapacity) - 1))}
+                    disabled={savingCapacity}
+                    aria-label="Decrease capacity"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <div className="h-8 min-w-[56px] px-3 grid place-items-center text-xs font-semibold text-gray-900">
+                    {capacity}
+                  </div>
+                  <button
+                    type="button"
+                    className="h-8 w-8 grid place-items-center text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                    onClick={() => setCapacityPoints((v) => Math.max(1, (v || defaultCapacity) + 1))}
+                    disabled={savingCapacity}
+                    aria-label="Increase capacity"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-1">
+                {savingCapacity ? 'Saving…' : capacitySaveError ? capacitySaveError : 'Saved per process'}
+              </p>
             </div>
           </div>
         </CardContent>
@@ -259,10 +423,70 @@ export function SprintPlanningPageClient(props: { projectId: string; phaseId: st
           <CardHeader>
             <div className="flex justify-between items-center">
               <CardTitle className="text-lg">Product Backlog</CardTitle>
-              <Badge variant="outline">{remainingBacklog.length} tasks</Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">{remainingBacklog.length} tasks</Badge>
+                <Button
+                  size="sm"
+                  variant={isCreating ? 'default' : 'outline'}
+                  disabled={!canCreate}
+                  onClick={() => setIsCreating((v) => !v)}
+                  title={canCreate ? 'Create a new backlog task' : 'Backlog stage / process not resolved yet'}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Create
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
+            {isCreating ? (
+              <div className="mb-4 rounded-lg border border-gray-200 bg-white p-3">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                  <div className="md:col-span-7">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                    <Input
+                      placeholder="e.g. Create API contract"
+                      value={createTitle}
+                      onChange={(e) => setCreateTitle(e.target.value)}
+                    />
+                  </div>
+                  <div className="md:col-span-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                    <select
+                      className="w-full h-10 rounded-md border border-gray-200 bg-white px-3 text-sm"
+                      value={createPriority}
+                      onChange={(e) => setCreatePriority(e.target.value as any)}
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Story points</label>
+                    <Input
+                      inputMode="numeric"
+                      value={createStoryPoints}
+                      onChange={(e) => setCreateStoryPoints(e.target.value)}
+                    />
+                  </div>
+                  <div className="md:col-span-12 flex justify-end gap-2 pt-2">
+                    <Button variant="outline" onClick={() => setIsCreating(false)} disabled={createLoading}>
+                      Cancel
+                    </Button>
+                    <Button
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={handleCreateTask}
+                      disabled={createLoading || !createTitle.trim()}
+                    >
+                      {createLoading ? 'Creating…' : 'Create task'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             {remainingBacklog.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <p>All tasks selected for sprint</p>

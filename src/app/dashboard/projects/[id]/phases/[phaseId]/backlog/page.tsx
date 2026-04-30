@@ -4,7 +4,13 @@ import { getTenantSlug } from '@/lib/tenant/server'
 import { ProductBacklogPageClient } from '@/components/backlog/product-backlog-page-client'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 
-export default async function ProductBacklogPage({ params }: { params: { id: string; phaseId: string } }) {
+export default async function ProductBacklogPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string; phaseId: string }
+  searchParams?: { process?: string; method?: string }
+}) {
   const tenantSlug = getTenantSlug()
   const supabase = createClient()
 
@@ -37,15 +43,37 @@ export default async function ProductBacklogPage({ params }: { params: { id: str
 
   const { data: phase } = await supabase
     .from('sdlc_phases')
-    .select('id,title,methodology')
+    .select('id,title')
     .eq('id', params.phaseId)
     .eq('project_id', project.id)
     .maybeSingle()
 
   if (!phase) notFound()
 
-  if (phase.methodology !== 'scrum') {
-    return redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}`)
+  const selectedProcessName =
+    typeof searchParams?.process === 'string' && searchParams.process.trim().length > 0
+      ? decodeURIComponent(searchParams.process)
+      : null
+  const selectedMethod =
+    typeof searchParams?.method === 'string' && searchParams.method.trim().length > 0
+      ? decodeURIComponent(searchParams.method)
+      : null
+
+  const { data: processes } = await supabase
+    .from('phase_processes')
+    .select('id,name,methodology,order_index')
+    .eq('phase_id', phase.id)
+    .order('order_index', { ascending: true })
+
+  const process =
+    selectedProcessName
+      ? (processes ?? []).find(
+          (p) => p.name === selectedProcessName && (selectedMethod ? p.methodology === selectedMethod : true)
+        ) ?? (processes ?? []).find((p) => p.name === selectedProcessName)
+      : (processes ?? [])[0] ?? null
+
+  if (process?.id) {
+    return redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${process.id}/backlog`)
   }
 
   const { data: backlogStage } = await supabase
@@ -73,6 +101,7 @@ export default async function ProductBacklogPage({ params }: { params: { id: str
     .from('tasks')
     .select('id,title,description,priority,story_points,assignee_id,position')
     .eq('project_id', project.id)
+    .eq('organization_id', orgId)
     .eq('workflow_stage_id', backlogStage.id)
     .is('sprint_id', null)
     .order('position', { ascending: true })

@@ -125,6 +125,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
 
   let phaseProcesses:
     | {
+        id: string
         phase_id: string
         name: string
         methodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
@@ -139,7 +140,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     } else {
       const attempt = await supabase
         .from('phase_processes')
-        .select('phase_id,name,methodology,order_index')
+        .select('id,phase_id,name,methodology,order_index')
         .in('phase_id', phaseIds)
         .order('order_index', { ascending: true })
 
@@ -155,6 +156,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     const processes = (phaseProcesses ?? [])
       .filter((process) => process.phase_id === p.id)
       .map((process) => ({
+        id: process.id,
         name: process.name,
         methodology: process.methodology,
       }))
@@ -318,11 +320,11 @@ export default async function ProjectPage({ params }: { params: { id: string } }
                       <div className="flex flex-wrap gap-1">
                         {phase.processes.map((process, processIndex) => (
                           <Link
-                            key={`${process.name}-${processIndex}`}
+                            key={process.id ?? `${process.name}-${processIndex}`}
                             href={
                               process.methodology === 'scrum'
-                                ? `/dashboard/projects/${project.id}/phases/${phase.id}/sprints?process=${encodeURIComponent(process.name)}&method=${encodeURIComponent(process.methodology)}`
-                                : `/dashboard/projects/${project.id}/phases/${phase.id}/board?process=${encodeURIComponent(process.name)}&method=${encodeURIComponent(process.methodology)}`
+                                ? `/dashboard/projects/${project.id}/phases/${phase.id}/processes/${process.id}/sprints`
+                                : `/dashboard/projects/${project.id}/phases/${phase.id}/processes/${process.id}/board`
                             }
                             className="inline-flex items-center rounded border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-700"
                           >

@@ -1,8 +1,4 @@
-import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
-import ScrumView from '@/components/project/ScrumView'
-import KanbanView from '@/components/project/KanbanView'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
@@ -53,33 +49,14 @@ export default async function PhaseBoardPage({
   const phase = (phases ?? []).find((p) => p.id === params.phaseId)
   if (!phase) notFound()
 
-  let processes:
-    | {
-        name: string
-        methodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
-        order_index: number
-      }[]
-    | null = null
+  const attempt = await supabase
+    .from('phase_processes')
+    .select('id,name,methodology,order_index')
+    .eq('phase_id', phase.id)
+    .order('order_index', { ascending: true })
 
-  {
-    const attempt = await supabase
-      .from('phase_processes')
-      .select('name,methodology,order_index')
-      .eq('phase_id', phase.id)
-      .order('order_index', { ascending: true })
-
-    if (attempt.error?.code === 'PGRST204') {
-      processes = []
-    } else {
-      processes = (attempt.data as any[]) ?? []
-    }
-  }
-
-  const primaryMethodology = (processes?.[0]?.methodology ?? phase.methodology) as
-    | 'scrum'
-    | 'kanban'
-    | 'waterfall'
-    | 'devops'
+  const processes =
+    attempt.error?.code === 'PGRST204' ? ([] as any[]) : ((attempt.data as any[]) ?? [])
 
   const phaseIndex = (phases ?? []).findIndex((p) => p.id === phase.id)
   const prev = phaseIndex > 0 ? (phases ?? [])[phaseIndex - 1] : null
@@ -100,101 +77,21 @@ export default async function PhaseBoardPage({
       ? decodeURIComponent(searchParams.method)
       : null
 
-  const { data: stages } = await supabase
-    .from('workflow_stages')
-    .select('id,name,stage_order,is_done,is_backlog')
-    .eq('phase_id', phase.id)
-    .eq('organization_id', orgId)
-    .order('stage_order', { ascending: true })
+  const resolvedProcess =
+    selectedProcessName
+      ? (processes ?? []).find(
+          (p) =>
+            p.name === selectedProcessName && (selectedMethod ? p.methodology === selectedMethod : true)
+        ) ?? (processes ?? []).find((p) => p.name === selectedProcessName)
+      : (processes ?? [])[0] ?? null
 
-  const { data: sprint } = await supabase
-    .from('sprints')
-    .select('id,name,status')
-    .eq('project_id', project.id)
-    .eq('phase_id', phase.id)
-    .eq('organization_id', orgId)
-    .in('status', ['active', 'planned'])
-    .order('start_date', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  if (!resolvedProcess?.id) {
+    return redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}`)
+  }
 
-  const { data: sprintTasks } = sprint
-    ? await supabase
-        .from('tasks')
-        .select('id,title,priority,story_points,workflow_stage_id,completed_at,position')
-        .eq('project_id', project.id)
-        .eq('organization_id', orgId)
-        .eq('sprint_id', sprint.id)
-        .order('position', { ascending: true })
-    : { data: [] as any[] }
-
-  const stageIds = (stages ?? []).map((s) => s.id)
-  const { data: kanbanTasks } =
-    stageIds.length > 0
-      ? await supabase
-          .from('tasks')
-          .select('id,title,priority,story_points,workflow_stage_id,completed_at,position')
-          .eq('project_id', project.id)
-          .eq('organization_id', orgId)
-          .in('workflow_stage_id', stageIds)
-          .order('position', { ascending: true })
-      : { data: [] as any[] }
-
-  return (
-    <div className="space-y-6">
-      {/* Back Button */}
-      <Link 
-        href={`/dashboard/projects/${params.id}/phases/${params.phaseId}`}
-        className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors"
-      >
-        <ArrowLeft className="h-4 w-4 mr-1" />
-        Back to Phase Overview
-      </Link>
-
-      {processes && processes.length > 0 ? (
-        <div className="flex flex-wrap items-center gap-2">
-          {processes.map((process, index) => (
-            <Link
-              key={`${process.name}-${index}`}
-              href={
-                process.methodology === 'scrum'
-                  ? `/dashboard/projects/${params.id}/phases/${params.phaseId}/sprints`
-                  : `/dashboard/projects/${params.id}/phases/${params.phaseId}/board`
-              }
-              className="inline-flex items-center rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs text-gray-700"
-            >
-              {process.name} ({process.methodology})
-            </Link>
-          ))}
-        </div>
-      ) : null}
-
-      {selectedProcessName ? (
-        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-          <p className="text-xs uppercase tracking-wide text-blue-700">Active process</p>
-          <p className="mt-1 text-sm font-semibold text-blue-900">
-            {selectedProcessName} {selectedMethod ? `(${selectedMethod})` : ''}
-          </p>
-        </div>
-      ) : null}
-
-      {/* Phase Board (driven by primary process method) */}
-      {primaryMethodology === 'scrum' ? (
-        <ScrumView
-          projectId={project.id}
-          phaseId={phase.id}
-          sprint={(sprint as any) ?? null}
-          stages={(stages ?? []) as any}
-          tasks={(sprintTasks ?? []) as any}
-        />
-      ) : (
-        <KanbanView
-          projectId={project.id}
-          phaseId={phase.id}
-          stages={(stages ?? []) as any}
-          tasks={(kanbanTasks ?? []) as any}
-        />
-      )}
-    </div>
+  return redirect(
+    resolvedProcess.methodology === 'scrum'
+      ? `/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${resolvedProcess.id}/sprints`
+      : `/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${resolvedProcess.id}/board`
   )
 }

@@ -43,9 +43,9 @@ export const PROJECT_STATUSES = {
 
 // Sprint statuses
 export const SPRINT_STATUSES = {
-  PLANNING: 'planning',
+  PLANNED: 'planned',
   ACTIVE: 'active',
-  COMPLETED: 'completed',
+  CLOSED: 'closed',
 } as const
 
 // Default WIP limits for Kanban

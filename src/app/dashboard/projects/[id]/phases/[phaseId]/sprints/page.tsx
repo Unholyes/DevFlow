@@ -36,49 +36,11 @@ export default async function SprintsPage({
 
   const { data: phase } = await supabase
     .from('sdlc_phases')
-    .select('id,methodology')
+    .select('id')
     .eq('id', params.phaseId)
     .eq('project_id', project.id)
     .maybeSingle()
   if (!phase) notFound()
-  if (phase.methodology !== 'scrum') redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}`)
-
-  const { data: sprints } = await supabase
-    .from('sprints')
-    .select('id,name,start_date,end_date,status,story_points_total')
-    .eq('project_id', project.id)
-    .eq('phase_id', phase.id)
-    .order('start_date', { ascending: false })
-
-  const sprintIds = (sprints ?? []).map((s) => s.id)
-  let tasksBySprint: Record<string, { total: number; completed: number }> = {}
-
-  if (sprintIds.length) {
-    const { data: sprintTasks } = await supabase
-      .from('tasks')
-      .select('sprint_id,completed_at')
-      .in('sprint_id', sprintIds)
-
-    tasksBySprint = (sprintTasks ?? []).reduce(
-      (acc, t) => {
-        if (!t.sprint_id) return acc
-        acc[t.sprint_id] ||= { total: 0, completed: 0 }
-        acc[t.sprint_id].total += 1
-        if (t.completed_at) acc[t.sprint_id].completed += 1
-        return acc
-      },
-      {} as Record<string, { total: number; completed: number }>
-    )
-  }
-
-  const sprintsWithStats: SprintWithStats[] = (sprints ?? []).map((s) => {
-    const stats = tasksBySprint[s.id] || { total: 0, completed: 0 }
-    return {
-      ...s,
-      tasks_total: stats.total,
-      tasks_completed: stats.completed,
-    } as SprintWithStats
-  })
 
   const selectedProcessName =
     typeof searchParams?.process === 'string' && searchParams.process.trim().length > 0
@@ -89,11 +51,31 @@ export default async function SprintsPage({
       ? decodeURIComponent(searchParams.method)
       : null
 
+  // Back-compat: resolve process by name/method and redirect to process-scoped route.
+  const { data: processes } = await supabase
+    .from('phase_processes')
+    .select('id,name,methodology,order_index')
+    .eq('phase_id', phase.id)
+    .order('order_index', { ascending: true })
+
+  const process =
+    selectedProcessName
+      ? (processes ?? []).find(
+          (p) => p.name === selectedProcessName && (selectedMethod ? p.methodology === selectedMethod : true)
+        ) ?? (processes ?? []).find((p) => p.name === selectedProcessName)
+      : (processes ?? [])[0] ?? null
+
+  if (process?.id) {
+    return redirect(
+      `/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${process.id}/sprints`
+    )
+  }
+
   return (
     <SprintsPageClient
       projectId={project.id}
       phaseId={phase.id}
-      sprints={sprintsWithStats}
+      sprints={[] as SprintWithStats[]}
       selectedProcessName={selectedProcessName}
       selectedMethod={selectedMethod}
     />

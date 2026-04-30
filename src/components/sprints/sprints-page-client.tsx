@@ -10,7 +10,7 @@ type SprintRow = {
   name: string
   start_date: string
   end_date: string
-  status: 'planned' | 'active' | 'completed'
+  status: 'planned' | 'active' | 'closed'
   story_points_total: number
 }
 
@@ -22,13 +22,16 @@ export type SprintWithStats = SprintRow & {
 export function SprintsPageClient(props: {
   projectId: string
   phaseId: string
+  processId?: string
+  processName?: string
+  processMethod?: string
   sprints: SprintWithStats[]
   selectedProcessName?: string | null
   selectedMethod?: string | null
 }) {
   // Treat "planned" as active for MVP until we add a dedicated planned view.
   const activeSprints = props.sprints.filter((s) => s.status === 'active' || s.status === 'planned')
-  const completedSprints = props.sprints.filter((s) => s.status === 'completed')
+  const completedSprints = props.sprints.filter((s) => s.status === 'closed')
   const totalStoryPoints = props.sprints.reduce((sum, s) => sum + (s.story_points_total || 0), 0)
   const averageVelocity = props.sprints.length ? Math.round(totalStoryPoints / props.sprints.length) : 0
 
@@ -51,7 +54,11 @@ export function SprintsPageClient(props: {
         </div>
         <div className="flex gap-2">
           <Link
-            href={`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/plan`}
+            href={
+              props.processId
+                ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints/plan`
+                : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/plan`
+            }
             className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
           >
             <Plus className="h-4 w-4" />
@@ -60,12 +67,13 @@ export function SprintsPageClient(props: {
         </div>
       </div>
 
-      {props.selectedProcessName ? (
+      {props.processName || props.selectedProcessName ? (
         <Card className="border-blue-200 bg-blue-50 shadow-sm">
           <CardContent className="py-4">
             <p className="text-xs uppercase tracking-wide text-blue-700">Active process</p>
             <p className="mt-1 text-sm font-semibold text-blue-900">
-              {props.selectedProcessName} {props.selectedMethod ? `(${props.selectedMethod})` : ''}
+              {props.processName ?? props.selectedProcessName}{' '}
+              {props.processMethod || props.selectedMethod ? `(${props.processMethod ?? props.selectedMethod})` : ''}
             </p>
           </CardContent>
         </Card>
@@ -136,7 +144,13 @@ export function SprintsPageClient(props: {
                     <div className="flex items-center gap-3">
                       <Badge className="bg-blue-100 text-blue-700">Active</Badge>
                       <Link
-                        href={`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${sprint.id}`}
+                        href={
+                          props.processId
+                            ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/board?sprintId=${encodeURIComponent(
+                                sprint.id
+                              )}`
+                            : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${sprint.id}`
+                        }
                         className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                       >
                         View Details
@@ -204,7 +218,13 @@ export function SprintsPageClient(props: {
                     </div>
                   </div>
                   <Link
-                    href={`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${sprint.id}`}
+                    href={
+                      props.processId
+                        ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/board?sprintId=${encodeURIComponent(
+                            sprint.id
+                          )}`
+                        : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${sprint.id}`
+                    }
                     className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                   >
                     View Details

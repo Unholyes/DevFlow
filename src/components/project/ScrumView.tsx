@@ -40,19 +40,33 @@ function priorityBadge(priority: TaskRow['priority']) {
 export default function ScrumView(props: {
   projectId: string
   phaseId: string
-  sprint: { id: string; name: string; status: 'planned' | 'active' | 'completed' } | null
+  processId?: string
+  sprint: { id: string; name: string; status: 'planned' | 'active' | 'closed' } | null
   stages: Stage[]
   tasks: TaskRow[]
 }) {
   const router = useRouter()
   const [tasks, setTasks] = useState<TaskRow[]>(props.tasks)
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null)
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
+  const [dragOverStageId, setDragOverStageId] = useState<string | null>(null)
 
   const stages = useMemo(() => [...props.stages].sort((a, b) => a.stage_order - b.stage_order), [props.stages])
   const stageById = useMemo(() => Object.fromEntries(stages.map((s) => [s.id, s])), [stages])
 
   const totalPoints = tasks.reduce((sum, t) => sum + (t.story_points || 0), 0)
   const donePoints = tasks.reduce((sum, t) => sum + ((t.completed_at || stageById[t.workflow_stage_id]?.is_done) ? (t.story_points || 0) : 0), 0)
+
+  // If any sprint task is still in the backlog stage, show backlog as a column so tasks never "disappear".
+  const isTrueBacklogStage = (s: Stage | undefined) =>
+    !!s?.is_backlog && typeof s.name === 'string' && /backlog/i.test(s.name)
+
+  const hasBacklogTasks = tasks.some((t) => isTrueBacklogStage(stageById[t.workflow_stage_id]))
+  const boardStages = useMemo(() => {
+    // Only treat a stage as "Backlog" if it's flagged AND actually named backlog.
+    // This avoids hiding the "To Do" column if a phase was misconfigured (or auto-healed) incorrectly.
+    return stages.filter((s) => !isTrueBacklogStage(s) || hasBacklogTasks)
+  }, [stages, hasBacklogTasks])
 
   const moveTask = async (taskId: string, targetStageId: string) => {
     const stage = stageById[targetStageId]
@@ -84,13 +98,29 @@ export default function ScrumView(props: {
     }
   }
 
+  const handleDropToStage = (stageId: string) => {
+    if (!draggedTaskId) return
+    const current = tasks.find((t) => t.id === draggedTaskId)
+    if (!current) return
+    if (current.workflow_stage_id === stageId) return
+    void moveTask(draggedTaskId, stageId)
+  }
+
   if (!props.sprint) {
     return (
       <div className="bg-white border border-gray-200 rounded-lg p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-2">No active sprint</h2>
         <p className="text-sm text-gray-600">Create a sprint from the Sprints page to start working on tasks in a Scrum board.</p>
         <div className="mt-4">
-          <Button onClick={() => router.push(`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`)}>
+          <Button
+            onClick={() =>
+              router.push(
+                props.processId
+                  ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints`
+                  : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`
+              )
+            }
+          >
             Go to Sprints
           </Button>
         </div>
@@ -120,9 +150,27 @@ export default function ScrumView(props: {
           <div className="flex gap-2">
             <Button
               variant="outline"
-              onClick={() => router.push(`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${props.sprint!.id}`)}
+              onClick={() =>
+                router.push(
+                  props.processId
+                    ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints/${props.sprint!.id}`
+                    : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${props.sprint!.id}`
+                )
+              }
             >
               Sprint Details
+            </Button>
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              onClick={() =>
+                router.push(
+                  props.processId
+                    ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints/${props.sprint!.id}?complete=1`
+                    : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${props.sprint!.id}?complete=1`
+                )
+              }
+            >
+              Complete Sprint
             </Button>
           </div>
         </div>
@@ -132,8 +180,7 @@ export default function ScrumView(props: {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-start">
-        {stages
-          .filter((s) => !s.is_backlog) // backlog is handled in Product Backlog screen
+        {boardStages
           .map((stage) => {
             const stageTasks = tasks
               .filter((t) => t.workflow_stage_id === stage.id)
@@ -141,7 +188,23 @@ export default function ScrumView(props: {
             return (
               <div
                 key={stage.id}
-                className="bg-gray-50/50 rounded-2xl p-4 border border-gray-100 min-h-[600px] space-y-4"
+                className={[
+                  "bg-gray-50/50 rounded-2xl p-4 border min-h-[600px] space-y-4 transition-colors",
+                  dragOverStageId === stage.id ? "border-blue-300 bg-blue-50/40" : "border-gray-100",
+                ].join(" ")}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  if (dragOverStageId !== stage.id) setDragOverStageId(stage.id)
+                }}
+                onDragLeave={() => {
+                  if (dragOverStageId === stage.id) setDragOverStageId(null)
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  handleDropToStage(stage.id)
+                  setDraggedTaskId(null)
+                  setDragOverStageId(null)
+                }}
               >
                 <div className="flex justify-between items-center px-1">
                   <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">{stage.name}</span>
@@ -153,7 +216,24 @@ export default function ScrumView(props: {
                 {stageTasks.map((task) => (
                   <div
                     key={task.id}
-                    className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
+                    draggable={movingTaskId !== task.id}
+                    onDragStart={(e) => {
+                      setDraggedTaskId(task.id)
+                      e.dataTransfer.effectAllowed = "move"
+                      try {
+                        e.dataTransfer.setData("text/plain", task.id)
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    onDragEnd={() => {
+                      setDraggedTaskId(null)
+                      setDragOverStageId(null)
+                    }}
+                    className={[
+                      "bg-white p-4 rounded-xl border shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing",
+                      draggedTaskId === task.id ? "opacity-60 border-blue-200" : "border-gray-100",
+                    ].join(" ")}
                   >
                     <div className="flex justify-between items-center mb-3">
                       <span className="text-[11px] font-medium text-gray-400 font-mono tracking-tight">
@@ -169,23 +249,6 @@ export default function ScrumView(props: {
                     <div className="flex justify-between items-end">
                       <div className={`text-[11px] px-2 py-1 rounded-full font-bold capitalize ${priorityBadge(task.priority)}`}>
                         {task.priority === 'critical' ? 'high' : task.priority}
-                      </div>
-
-                      <div className="flex gap-2 items-center">
-                        <select
-                          value={task.workflow_stage_id}
-                          onChange={(e) => moveTask(task.id, e.target.value)}
-                          disabled={movingTaskId === task.id}
-                          className="text-xs border border-gray-200 rounded px-2 py-1 bg-white"
-                        >
-                          {stages
-                            .filter((s) => !s.is_backlog)
-                            .map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.name}
-                              </option>
-                            ))}
-                        </select>
                       </div>
                     </div>
                   </div>

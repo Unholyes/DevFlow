@@ -90,7 +90,8 @@ export interface Sprint {
   status: SprintStatus
 }
 
-export type SprintStatus = 'planning' | 'active' | 'completed'
+// Matches DB enum: planned | active | closed
+export type SprintStatus = 'planned' | 'active' | 'closed'
 
 // Kanban-specific types
 export interface KanbanColumn {

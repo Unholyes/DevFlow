@@ -1,6 +1,21 @@
 import { createClient } from '@/lib/supabase/server'
-import { TENANT_SLUG_HEADER } from '@/lib/tenant/resolve'
+import { getTenantSlug } from '@/lib/tenant/server'
+import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { NextResponse } from 'next/server'
+
+async function resolveOrgId(supabase: ReturnType<typeof createClient>) {
+  const tenantSlug = getTenantSlug()
+  if (tenantSlug) {
+    const { data: org } = await supabase.from('organizations').select('id').eq('slug', tenantSlug).maybeSingle()
+    return org?.id ?? null
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return null
+  return await resolvePrimaryOrgIdForUser(supabase as any, user.id)
+}
 
 export async function GET(request: Request) {
   const supabase = createClient()
@@ -8,9 +23,13 @@ export async function GET(request: Request) {
   const projectId = searchParams.get('projectId')
 
   try {
+    const orgId = await resolveOrgId(supabase)
+    if (!orgId) return NextResponse.json({ data: [] })
+
     let query = supabase
       .from('sprints')
       .select('*')
+      .eq('organization_id', orgId)
 
     if (projectId) {
       query = query.eq('project_id', projectId)
@@ -35,6 +54,7 @@ export async function POST(request: Request) {
     const { 
       project_id, 
       phase_id,
+      process_id,
       name, 
       start_date, 
       end_date,
@@ -42,28 +62,16 @@ export async function POST(request: Request) {
       status = 'active'
     } = body
 
-    const tenantSlug = request.headers.get(TENANT_SLUG_HEADER)
-    if (!tenantSlug) {
-      return NextResponse.json({ error: 'Missing tenant context' }, { status: 400 })
-    }
-
-    const { data: org, error: orgError } = await supabase
-      .from('organizations')
-      .select('id')
-      .eq('slug', tenantSlug)
-      .maybeSingle()
-
-    if (orgError) throw orgError
-    if (!org?.id) {
-      return NextResponse.json({ error: 'Invalid tenant context' }, { status: 400 })
-    }
+    const orgId = await resolveOrgId(supabase)
+    if (!orgId) return NextResponse.json({ error: 'Missing tenant context' }, { status: 400 })
 
     const { data, error } = await supabase
       .from('sprints')
       .insert({
-        organization_id: org.id,
+        organization_id: orgId,
         project_id,
         phase_id,
+        process_id: process_id ?? null,
         name,
         start_date,
         end_date,
@@ -86,6 +94,9 @@ export async function PATCH(request: Request) {
   const supabase = createClient()
   
   try {
+    const orgId = await resolveOrgId(supabase)
+    if (!orgId) return NextResponse.json({ error: 'Missing tenant context' }, { status: 400 })
+
     const body = await request.json()
     const { id, ...updates } = body
 
@@ -93,6 +104,7 @@ export async function PATCH(request: Request) {
       .from('sprints')
       .update(updates)
       .eq('id', id)
+      .eq('organization_id', orgId)
       .select()
       .single()
 
@@ -115,10 +127,14 @@ export async function DELETE(request: Request) {
   }
 
   try {
+    const orgId = await resolveOrgId(supabase)
+    if (!orgId) return NextResponse.json({ error: 'Missing tenant context' }, { status: 400 })
+
     const { error } = await supabase
       .from('sprints')
       .delete()
       .eq('id', sprintId)
+      .eq('organization_id', orgId)
 
     if (error) throw error
 

@@ -34,22 +34,28 @@ export default async function SprintDetailsPage({
 
   const { data: phase } = await supabase
     .from('sdlc_phases')
-    .select('id,methodology')
+    .select('id')
     .eq('id', params.phaseId)
     .eq('project_id', project.id)
     .maybeSingle()
   if (!phase) notFound()
-  if (phase.methodology !== 'scrum') redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}`)
 
   const { data: sprint } = await supabase
     .from('sprints')
-    .select('id,name,start_date,end_date,status,story_points_total')
+    .select('id,name,start_date,end_date,status,story_points_total,process_id')
     .eq('id', params.sprintId)
     .eq('project_id', project.id)
     .eq('phase_id', phase.id)
     .eq('organization_id', orgId)
     .maybeSingle()
   if (!sprint) notFound()
+
+  // Back-compat: redirect to process-scoped sprint details if process_id is present.
+  if ((sprint as any).process_id) {
+    return redirect(
+      `/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${(sprint as any).process_id}/sprints/${sprint.id}`
+    )
+  }
 
   const { data: tasks } = await supabase
     .from('tasks')

@@ -4,7 +4,13 @@ import { getTenantSlug } from '@/lib/tenant/server'
 import { SprintPlanningPageClient } from '@/components/sprints/sprint-planning-page-client'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 
-export default async function SprintPlanningPage({ params }: { params: { id: string; phaseId: string } }) {
+export default async function SprintPlanningPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string; phaseId: string }
+  searchParams?: { process?: string; method?: string }
+}) {
   const tenantSlug = getTenantSlug()
   const supabase = createClient()
 
@@ -30,12 +36,37 @@ export default async function SprintPlanningPage({ params }: { params: { id: str
 
   const { data: phase } = await supabase
     .from('sdlc_phases')
-    .select('id,methodology')
+    .select('id')
     .eq('id', params.phaseId)
     .eq('project_id', project.id)
     .maybeSingle()
   if (!phase) notFound()
-  if (phase.methodology !== 'scrum') redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}`)
+
+  const selectedProcessName =
+    typeof searchParams?.process === 'string' && searchParams.process.trim().length > 0
+      ? decodeURIComponent(searchParams.process)
+      : null
+  const selectedMethod =
+    typeof searchParams?.method === 'string' && searchParams.method.trim().length > 0
+      ? decodeURIComponent(searchParams.method)
+      : null
+
+  const { data: processes } = await supabase
+    .from('phase_processes')
+    .select('id,name,methodology,order_index')
+    .eq('phase_id', phase.id)
+    .order('order_index', { ascending: true })
+
+  const process =
+    selectedProcessName
+      ? (processes ?? []).find(
+          (p) => p.name === selectedProcessName && (selectedMethod ? p.methodology === selectedMethod : true)
+        ) ?? (processes ?? []).find((p) => p.name === selectedProcessName)
+      : (processes ?? [])[0] ?? null
+
+  if (process?.id) {
+    return redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${process.id}/sprints/plan`)
+  }
 
   const { data: backlogStage } = await supabase
     .from('workflow_stages')

@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { ArrowLeft, Calendar, CheckCircle2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -15,7 +16,7 @@ type Sprint = {
   name: string
   start_date: string
   end_date: string
-  status: 'planned' | 'active' | 'completed'
+  status: 'planned' | 'active' | 'closed'
   story_points_total: number
 }
 
@@ -36,14 +37,21 @@ function normalizePriority(p: Task['priority']): 'low' | 'medium' | 'high' {
 export function SprintDetailsPageClient(props: {
   projectId: string
   phaseId: string
+  processId?: string
+  backlogStageId?: string
+  sprintStartStageId?: string
   sprint: Sprint
   tasks: Task[]
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isCompleteOpen, setIsCompleteOpen] = useState(false)
+  useEffect(() => {
+    const shouldOpen = searchParams.get('complete') === '1'
+    if (shouldOpen) setIsCompleteOpen(true)
+  }, [searchParams])
   const [isCompleting, setIsCompleting] = useState(false)
   const [tasks, setTasks] = useState<Task[]>(props.tasks)
-  const [togglingTaskId, setTogglingTaskId] = useState<string | null>(null)
 
   const totalTasks = tasks.length
   const completedTasks = tasks.filter((t) => !!t.completed_at).length
@@ -67,44 +75,13 @@ export function SprintDetailsPageClient(props: {
     }
   }, [completedPoints, props.sprint.name, props.sprint.story_points_total, unfinishedTasks])
 
-  const toggleTaskDone = async (taskId: string) => {
-    const task = tasks.find((t) => t.id === taskId)
-    if (!task) return
-
-    const nextCompletedAt = task.completed_at ? null : new Date().toISOString()
-
-    setTogglingTaskId(taskId)
-    // Optimistic UI
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, completed_at: nextCompletedAt } : t)))
-
-    try {
-      const res = await fetch('/api/tasks', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: taskId, completed_at: nextCompletedAt }),
-      })
-
-      const json = await res.json()
-      if (!res.ok) throw new Error(json?.error || 'Failed to update task')
-
-      router.refresh()
-    } catch (e) {
-      console.error(e)
-      // Roll back if it failed
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, completed_at: task.completed_at } : t)))
-      alert(e instanceof Error ? e.message : 'Failed to update task')
-    } finally {
-      setTogglingTaskId(null)
-    }
-  }
-
   const handleCompleteSprint = async (data: { retrospective: string; unfinishedAction: 'backlog' | 'next_sprint' }) => {
     setIsCompleting(true)
     try {
       const sprintRes = await fetch('/api/sprints', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: props.sprint.id, status: 'completed' }),
+        body: JSON.stringify({ id: props.sprint.id, status: 'closed' }),
       })
 
       const sprintJson = await sprintRes.json()
@@ -141,7 +118,11 @@ export function SprintDetailsPageClient(props: {
             fetch('/api/tasks', {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: t.id, sprint_id: nextSprintId }),
+              body: JSON.stringify({
+                id: t.id,
+                sprint_id: nextSprintId,
+                ...(props.sprintStartStageId ? { workflow_stage_id: props.sprintStartStageId } : {}),
+              }),
             })
           )
         )
@@ -152,14 +133,22 @@ export function SprintDetailsPageClient(props: {
             fetch('/api/tasks', {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: t.id, sprint_id: null }),
+              body: JSON.stringify({
+                id: t.id,
+                sprint_id: null,
+                ...(props.backlogStageId ? { workflow_stage_id: props.backlogStageId } : {}),
+              }),
             })
           )
         )
       }
 
       setIsCompleteOpen(false)
-      router.push(`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`)
+      router.push(
+        props.processId
+          ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints`
+          : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`
+      )
       router.refresh()
     } catch (e) {
       console.error(e)
@@ -173,7 +162,11 @@ export function SprintDetailsPageClient(props: {
     <div className="space-y-6">
       <div className="flex items-center gap-4 mb-4">
         <Link
-          href={`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`}
+          href={
+            props.processId
+              ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints`
+              : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`
+          }
           className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
@@ -198,7 +191,7 @@ export function SprintDetailsPageClient(props: {
           <Button
             className="bg-green-600 hover:bg-green-700"
             onClick={() => setIsCompleteOpen(true)}
-            disabled={props.sprint.status === 'completed' || isCompleting}
+            disabled={props.sprint.status === 'closed' || isCompleting}
           >
             Complete Sprint
           </Button>
@@ -273,6 +266,8 @@ export function SprintDetailsPageClient(props: {
                     onSelect={() => {}}
                     onEdit={() => {}}
                     onDelete={() => {}}
+                    showCheckbox={false}
+                    showActions={false}
                   />
                   <div className="absolute right-4 top-4 flex items-center gap-2">
                     {task.completed_at ? (
@@ -281,14 +276,6 @@ export function SprintDetailsPageClient(props: {
                         Done
                       </div>
                     ) : null}
-                    <Button
-                      size="sm"
-                      variant={task.completed_at ? 'outline' : 'default'}
-                      onClick={() => toggleTaskDone(task.id)}
-                      disabled={togglingTaskId === task.id || isCompleting || props.sprint.status === 'completed'}
-                    >
-                      {task.completed_at ? 'Undo' : 'Mark Done'}
-                    </Button>
                   </div>
                 </div>
               ))}

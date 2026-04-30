@@ -16,6 +16,8 @@ interface BacklogTaskCardProps {
   onSelect: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  showCheckbox?: boolean;
+  showActions?: boolean;
 }
 
 const priorityColors = {
@@ -31,7 +33,15 @@ const getAvatarColor = (name: string) => {
   return avatarColors[index];
 };
 
-export function BacklogTaskCard({ task, isSelected, onSelect, onEdit, onDelete }: BacklogTaskCardProps) {
+export function BacklogTaskCard({
+  task,
+  isSelected,
+  onSelect,
+  onEdit,
+  onDelete,
+  showCheckbox = true,
+  showActions = true,
+}: BacklogTaskCardProps) {
   return (
     <div className={`group border rounded-lg p-4 transition-all hover:shadow-md ${
       isSelected ? 'border-blue-500 bg-blue-50/50' : 'border-gray-200 bg-white'
@@ -43,12 +53,14 @@ export function BacklogTaskCard({ task, isSelected, onSelect, onEdit, onDelete }
         </div>
 
         {/* Checkbox */}
-        <input
-          type="checkbox"
-          checked={isSelected}
-          onChange={onSelect}
-          className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-        />
+        {showCheckbox ? (
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={onSelect}
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+          />
+        ) : null}
 
         {/* Task Content */}
         <div className="flex-1 min-w-0">
@@ -79,24 +91,21 @@ export function BacklogTaskCard({ task, isSelected, onSelect, onEdit, onDelete }
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onEdit}
-            className="h-8 w-8 p-0"
-          >
-            <Edit2 className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onDelete}
-            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
+        {showActions ? (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Button variant="ghost" size="sm" onClick={onEdit} className="h-8 w-8 p-0">
+              <Edit2 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onDelete}
+              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
