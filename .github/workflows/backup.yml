@@ -1,4 +1,53 @@
+name: DB-Supabase-to-R2
+
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 2 * * *' # This will run every day at 2:00 AM UTC
+    - cron: '0 2 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  run_db_backup:
+    runs-on: ubuntu-latest
+    env:
+      supabase_db_url: ${{ secrets.SUPABASE_DB_URL }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.CF_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.CF_SECRET_ACCESS_KEY }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Create and compress backup
+        id: compress_backup
+        run: |
+          mkdir -p ./supabase_backups
+          supabase db dump --db-url "$supabase_db_url" -f ./supabase_backups/roles.sql --role-only
+          supabase db dump --db-url "$supabase_db_url" -f ./supabase_backups/schema.sql
+          supabase db dump --db-url "$supabase_db_url" -f ./supabase_backups/data.sql --data-only --use-copy
+          
+          FILE_NAME="backup-$(date +%Y-%m-%d).zip"
+          zip -r "${FILE_NAME}" ./supabase_backups
+          
+          # Safety Guard: Stop if file is over 500MB to stay in R2 free tier
+          FILE_SIZE=$(stat -c%s "$FILE_NAME")
+          if [ $FILE_SIZE -gt 524288000 ]; then
+            echo "Backup too large! Skipping upload."
+            exit 1
+          fi
+
+          echo "file_name=${FILE_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Upload to Cloudflare R2
+        run: |
+          aws s3 cp \
+            "${{ steps.compress_backup.outputs.file_name }}" \
+            "s3://${{ secrets.CF_BUCKET_NAME }}/${{ steps.compress_backup.outputs.file_name }}" \
+            --endpoint-url "${{ secrets.CF_BUCKET_ENDPOINT }}"
