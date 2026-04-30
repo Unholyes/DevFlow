@@ -34,7 +34,7 @@ export function Features() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
            {/* Top left: Card 1 */}
-           <Card className="bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-blue-50/30 transition-all duration-200 flex flex-col p-6 group">
+           <Card className="bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-blue-50/30 transition-all duration-200 flex flex-col p-6 group ring-2 ring-transparent hover:ring-blue-600">
              <CardHeader className="pb-4">
                 <CardTitle className="text-xl font-semibold text-blue-600">
                   {features[0].name}
@@ -51,7 +51,7 @@ export function Features() {
            </Card>
 
            {/* Top middle: Card 2 */}
-           <Card className="bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-green-50/30 transition-all duration-200 flex flex-col p-6 group">
+           <Card className="bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md transition-all duration-200 flex flex-col p-6 group hover:bg-blue-50/60 ring-2 ring-transparent hover:ring-blue-600">
              <CardHeader className="pb-4">
                 <CardTitle className="text-xl font-semibold text-blue-600">
                   {features[1].name}
@@ -68,7 +68,7 @@ export function Features() {
            </Card>
 
            {/* Right: Tall card spanning 2 rows */}
-           <Card className="row-span-2 bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-yellow-50/30 transition-all duration-200 flex flex-col p-6 group">
+           <Card className="row-span-2 bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-yellow-50/30 transition-all duration-200 flex flex-col p-6 group ring-2 ring-transparent hover:ring-blue-600">
              <CardHeader className="pb-4">
                <CardTitle className="text-xl font-semibold text-blue-600">
                  {features[3].name}
@@ -85,7 +85,7 @@ export function Features() {
            </Card>
 
             {/* Bottom left: Card 3 spanning 2 columns */}
-            <Card className="md:col-span-2 md:h-80 bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-red-50/30 transition-all duration-200 flex flex-col p-6 group">
+            <Card className="md:col-span-2 md:h-80 bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-red-50/30 transition-all duration-200 flex flex-col p-6 group ring-2 ring-transparent hover:ring-blue-600">
              <CardHeader className="pb-4">
                 <CardTitle className="text-xl font-semibold text-blue-600">
                   {features[2].name}
