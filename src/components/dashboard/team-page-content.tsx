@@ -47,7 +47,11 @@ const members: Member[] = []
 
 const pendingInvites: PendingInvite[] = []
 
-export function TeamPageContent() {
+interface TeamPageContentProps {
+  role?: 'tenant_admin' | 'team_member'
+}
+
+export function TeamPageContent({ role = 'team_member' }: TeamPageContentProps) {
   const [query, setQuery] = useState('')
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
 
@@ -81,10 +85,12 @@ export function TeamPageContent() {
             invitations. When your database is connected, this will sync from Supabase.
           </p>
         </div>
-        <Button className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white">
-          <UserPlus className="mr-2 h-4 w-4" />
-          Invite member
-        </Button>
+        {role === 'tenant_admin' && (
+          <Button className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white">
+            <UserPlus className="mr-2 h-4 w-4" />
+            Invite member
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -228,41 +234,43 @@ export function TeamPageContent() {
         </CardContent>
       </Card>
 
-      <Card className="border-gray-200 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg text-gray-900">Pending invitations</CardTitle>
-          <CardDescription>
-            Invites sent by workspace admins. Recipients join with the developer role until you
-            promote them.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {pendingInvites.map((inv) => (
-            <div
-              key={inv.email}
-              className="flex flex-col gap-3 rounded-lg border border-gray-100 bg-gray-50/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="flex items-start gap-3 min-w-0">
-                <div className="rounded-lg bg-white p-2 border border-gray-200">
-                  <Mail className="h-4 w-4 text-blue-600" />
+      {role === 'tenant_admin' && (
+        <Card className="border-gray-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg text-gray-900">Pending invitations</CardTitle>
+            <CardDescription>
+              Invites sent by workspace admins. Recipients join with the developer role until you
+              promote them.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {pendingInvites.map((inv) => (
+              <div
+                key={inv.email}
+                className="flex flex-col gap-3 rounded-lg border border-gray-100 bg-gray-50/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="rounded-lg bg-white p-2 border border-gray-200">
+                    <Mail className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900 truncate">{inv.email}</p>
+                    <p className="text-sm text-gray-500">Sent {inv.sent}</p>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="font-medium text-gray-900 truncate">{inv.email}</p>
-                  <p className="text-sm text-gray-500">Sent {inv.sent}</p>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge variant="outline" className="border-gray-200 bg-white text-gray-700">
+                    Team member
+                  </Badge>
+                  <Button variant="outline" size="sm" className="border-gray-200">
+                    Resend
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <Badge variant="outline" className="border-gray-200 bg-white text-gray-700">
-                  Team member
-                </Badge>
-                <Button variant="outline" size="sm" className="border-gray-200">
-                  Resend
-                </Button>
-              </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

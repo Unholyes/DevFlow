@@ -324,6 +324,11 @@ export async function middleware(req: NextRequest) {
 
   // Redirect authenticated users away from auth pages
   if (isAuthRoute && user) {
+    // Keep recovery flow reachable for authenticated sessions created from email reset links.
+    if (pathname === '/auth/reset-password') {
+      return res
+    }
+
     const { data: profile } = await supabase
       .from('profiles')
       .select('role')

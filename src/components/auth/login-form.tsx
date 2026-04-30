@@ -207,9 +207,12 @@ export function LoginForm() {
           {/* Forgot Password */}
           <div className="flex items-start justify-end relative self-stretch w-full flex-[0_0_auto]">
             <div className="inline-flex flex-col items-start relative self-stretch flex-[0_0_auto]">
-              <div className="relative flex items-center w-[119.95px] h-5 mt-[-1.00px] font-medium text-blue-600 text-sm tracking-[0] leading-5 whitespace-nowrap cursor-pointer hover:underline">
+              <Link
+                href="/auth/forgot-password"
+                className="relative flex items-center w-[119.95px] h-5 mt-[-1.00px] font-medium text-blue-600 text-sm tracking-[0] leading-5 whitespace-nowrap cursor-pointer hover:underline"
+              >
                 Forgot Password?
-              </div>
+              </Link>
             </div>
           </div>
 
