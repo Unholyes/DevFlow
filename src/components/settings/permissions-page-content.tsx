@@ -1,9 +1,17 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Search } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -120,6 +128,7 @@ export function PermissionsPageContent({ organizationId }: { organizationId: str
   const [newRoleName, setNewRoleName] = useState('')
   const [isCreating, setIsCreating] = useState(false)
   const [newRolePerms, setNewRolePerms] = useState<PermissionId[]>([])
+  const [newRolePermissionQuery, setNewRolePermissionQuery] = useState('')
 
   const roleList = useMemo<RoleListItem[]>(() => {
     const defaults: RoleListItem[] = DEFAULT_ROLES.map((r) => ({ kind: 'default', role: r.role, label: r.label }))
@@ -303,58 +312,140 @@ export function PermissionsPageContent({ organizationId }: { organizationId: str
                 New role
               </Button>
             </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>New role</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-2">
-                <div>
-                  <label className="text-sm font-medium text-slate-700">Role name</label>
-                  <Input className="mt-1" value={newRoleName} onChange={(e) => setNewRoleName(e.target.value)} placeholder="e.g. Resource Manager" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-slate-700">Permissions</label>
-                  <div className="mt-2 space-y-2">
-                    {PERMISSIONS.map((p) => {
-                      const checked = newRolePerms.includes(p.id)
-                      return (
-                        <label key={p.id} className="flex items-start gap-3 rounded-md border border-slate-200 bg-white px-3 py-2">
-                          <input
-                            type="checkbox"
-                            className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600"
-                            checked={checked}
-                            onChange={(e) => {
-                              setNewRolePerms((cur) => (e.target.checked ? [...cur, p.id] : cur.filter((x) => x !== p.id)))
-                            }}
-                            disabled={isCreating}
-                          />
-                          <span className="min-w-0">
-                            <span className="block text-sm font-medium text-slate-900">{p.label}</span>
-                            {p.description ? <span className="block text-xs text-slate-500">{p.description}</span> : null}
-                          </span>
-                        </label>
-                      )
-                    })}
+            <DialogContent className="max-w-3xl p-0">
+              <DialogHeader className="space-y-1 border-b border-slate-200 px-6 py-5 text-left">
+                <div className="flex items-start justify-between gap-6">
+                  <div className="min-w-0">
+                    <DialogTitle className="text-xl">Create custom role</DialogTitle>
+                    <DialogDescription className="mt-1">
+                      Define a role name and select the permissions you want this custom role to have.
+                    </DialogDescription>
+                  </div>
+                  <div className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                    {newRolePerms.length} selected
                   </div>
                 </div>
+              </DialogHeader>
 
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setIsNewRoleOpen(false)
-                      setNewRoleName('')
-                      setNewRolePerms([])
-                    }}
+              <div className="space-y-5 px-6 py-5">
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Role name</label>
+                  <Input
+                    className="mt-1"
+                    value={newRoleName}
+                    onChange={(e) => setNewRoleName(e.target.value)}
+                    placeholder="e.g. Resource Manager"
                     disabled={isCreating}
-                  >
-                    Cancel
-                  </Button>
-                  <Button onClick={() => void createRole()} className="bg-blue-600 hover:bg-blue-700 text-white" disabled={isCreating}>
-                    Create role
-                  </Button>
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between gap-4">
+                    <label className="text-sm font-medium text-slate-700">Permissions</label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-8 px-2 text-xs text-slate-600 hover:text-slate-900"
+                      disabled={isCreating || newRolePerms.length === 0}
+                      onClick={() => setNewRolePerms([])}
+                    >
+                      Clear selection
+                    </Button>
+                  </div>
+
+                  <div className="mt-2">
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <Input
+                        value={newRolePermissionQuery}
+                        onChange={(e) => setNewRolePermissionQuery(e.target.value)}
+                        placeholder="Search permissions…"
+                        className="pl-9"
+                        disabled={isCreating}
+                      />
+                    </div>
+
+                    <div className="mt-3 max-h-[420px] overflow-auto rounded-md border border-slate-200 bg-white">
+                      {ORDERED_PERMISSION_GROUPS.map(([category, perms]) => {
+                        const q = newRolePermissionQuery.trim().toLowerCase()
+                        const visiblePerms = q ? perms.filter((p) => p.label.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)) : perms
+                        if (visiblePerms.length === 0) return null
+
+                        const visibleIds = visiblePerms.map((p) => p.id)
+                        const selectedVisibleCount = visibleIds.filter((id) => newRolePerms.includes(id)).length
+                        const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length
+
+                        return (
+                          <div key={category} className="border-b border-slate-200 last:border-b-0">
+                            <div className="flex items-center justify-between gap-3 bg-white px-4 py-3">
+                              <div className="text-sm font-semibold text-slate-700">{category}</div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                className="h-8 px-2 text-xs text-slate-600 hover:text-slate-900"
+                                disabled={isCreating}
+                                onClick={() => {
+                                  setNewRolePerms((cur) => {
+                                    if (allVisibleSelected) return cur.filter((x) => !visibleIds.includes(x))
+                                    return uniqueLower([...cur, ...visibleIds]) as PermissionId[]
+                                  })
+                                }}
+                              >
+                                {allVisibleSelected ? 'Unselect all' : 'Select all'}
+                              </Button>
+                            </div>
+
+                            <div className="divide-y divide-slate-200">
+                              {visiblePerms.map((p) => {
+                                const checked = newRolePerms.includes(p.id)
+                                return (
+                                  <label key={p.id} className="flex items-start gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                                    <input
+                                      type="checkbox"
+                                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600"
+                                      checked={checked}
+                                      onChange={(e) => {
+                                        setNewRolePerms((cur) => (e.target.checked ? (uniqueLower([...cur, p.id]) as PermissionId[]) : cur.filter((x) => x !== p.id)))
+                                      }}
+                                      disabled={isCreating}
+                                    />
+                                    <span className="min-w-0">
+                                      <span className="block font-medium text-slate-900">{p.label}</span>
+                                      <span className="block text-xs text-slate-500">{p.id}</span>
+                                    </span>
+                                  </label>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
+
+              <DialogFooter className="border-t border-slate-200 px-6 py-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsNewRoleOpen(false)
+                    setNewRoleName('')
+                    setNewRolePerms([])
+                    setNewRolePermissionQuery('')
+                  }}
+                  disabled={isCreating}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => void createRole()}
+                  className="bg-[#7a2233] text-white hover:bg-[#651c2a]"
+                  disabled={isCreating}
+                >
+                  Create role
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
         </div>

@@ -6,7 +6,15 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { supabase } from '@/lib/supabase/client'
 
@@ -141,6 +149,7 @@ export function AccountsPageContent({
   const [roleName, setRoleName] = useState('')
   const [selectedRolePermissions, setSelectedRolePermissions] = useState<RolePermission[]>([])
   const [isSubmittingRole, setIsSubmittingRole] = useState(false)
+  const [rolePermissionQuery, setRolePermissionQuery] = useState('')
 
   const filteredMembers = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -509,67 +518,113 @@ export function AccountsPageContent({
                 Add role
               </Button>
             </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create custom role</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">Role name</label>
-                  <Input placeholder="e.g. QA Lead" value={roleName} onChange={(e) => setRoleName(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-1 block">Permissions</label>
-                  <div className="space-y-2">
-                    {ROLE_PERMISSION_CATALOG.map((p) => {
-                      const checked = selectedRolePermissions.includes(p.id)
-                      return (
-                        <label
-                          key={p.id}
-                          className="flex items-start gap-3 rounded-md border border-gray-200 bg-white px-3 py-2"
-                        >
-                          <input
-                            type="checkbox"
-                            className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600"
-                            checked={checked}
-                            onChange={(e) => {
-                              const next = e.target.checked
-                                ? [...selectedRolePermissions, p.id]
-                                : selectedRolePermissions.filter((id) => id !== p.id)
-                              setSelectedRolePermissions(next)
-                            }}
-                            disabled={isSubmittingRole}
-                          />
-                          <span className="min-w-0">
-                            <span className="block text-sm font-medium text-gray-900">{p.label}</span>
-                            <span className="block text-xs text-gray-500">{p.description}</span>
-                          </span>
-                        </label>
-                      )
-                    })}
+            <DialogContent className="max-w-3xl p-0">
+              <DialogHeader className="space-y-1 border-b border-slate-200 px-6 py-5 text-left">
+                <div className="flex items-start justify-between gap-6">
+                  <div className="min-w-0">
+                    <DialogTitle className="text-xl">Create custom role</DialogTitle>
+                    <DialogDescription className="mt-1">
+                      Define a role name and select the permissions you want this custom role to have.
+                    </DialogDescription>
+                  </div>
+                  <div className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                    {selectedRolePermissions.length} selected
                   </div>
                 </div>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setIsAddRoleModalOpen(false)
-                      setRoleName('')
-                      setSelectedRolePermissions([])
-                    }}
+              </DialogHeader>
+
+              <div className="space-y-5 px-6 py-5">
+                <div>
+                  <label className="text-sm font-medium text-slate-700">Role name</label>
+                  <Input
+                    className="mt-1"
+                    placeholder="e.g. QA Lead"
+                    value={roleName}
+                    onChange={(e) => setRoleName(e.target.value)}
                     disabled={isSubmittingRole}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleCreateRole}
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
-                    disabled={isSubmittingRole}
-                  >
-                    Create role
-                  </Button>
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between gap-4">
+                    <label className="text-sm font-medium text-slate-700">Permissions</label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-8 px-2 text-xs text-slate-600 hover:text-slate-900"
+                      disabled={isSubmittingRole || selectedRolePermissions.length === 0}
+                      onClick={() => setSelectedRolePermissions([])}
+                    >
+                      Clear selection
+                    </Button>
+                  </div>
+
+                  <div className="mt-2">
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <Input
+                        value={rolePermissionQuery}
+                        onChange={(e) => setRolePermissionQuery(e.target.value)}
+                        placeholder="Search permissions…"
+                        className="pl-9"
+                        disabled={isSubmittingRole}
+                      />
+                    </div>
+
+                    <div className="mt-3 max-h-[420px] overflow-auto rounded-md border border-slate-200 bg-white">
+                      {ROLE_PERMISSION_CATALOG.filter((p) => {
+                        const q = rolePermissionQuery.trim().toLowerCase()
+                        if (!q) return true
+                        return p.label.toLowerCase().includes(q) || p.id.toLowerCase().includes(q) || p.description.toLowerCase().includes(q)
+                      }).map((p) => {
+                        const checked = selectedRolePermissions.includes(p.id)
+                        return (
+                          <label key={p.id} className="flex items-start gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600"
+                              checked={checked}
+                              onChange={(e) => {
+                                const next = e.target.checked
+                                  ? [...selectedRolePermissions, p.id]
+                                  : selectedRolePermissions.filter((id) => id !== p.id)
+                                setSelectedRolePermissions(next)
+                              }}
+                              disabled={isSubmittingRole}
+                            />
+                            <span className="min-w-0">
+                              <span className="block font-medium text-slate-900">{p.label}</span>
+                              <span className="block text-xs text-slate-500">{p.description}</span>
+                            </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
               </div>
+
+              <DialogFooter className="border-t border-slate-200 px-6 py-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsAddRoleModalOpen(false)
+                    setRoleName('')
+                    setSelectedRolePermissions([])
+                    setRolePermissionQuery('')
+                  }}
+                  disabled={isSubmittingRole}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateRole}
+                  className="bg-[#7a2233] text-white hover:bg-[#651c2a]"
+                  disabled={isSubmittingRole}
+                >
+                  Create role
+                </Button>
+              </DialogFooter>
             </DialogContent>
           </Dialog>
 
