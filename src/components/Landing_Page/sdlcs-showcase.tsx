@@ -45,7 +45,7 @@ export function SDLCSShowcase() {
 
     let currentProgress = 0
     intervalRef.current = setInterval(() => {
-      currentProgress += 2
+      currentProgress = Math.min(100, currentProgress + 2)
       setProgress(currentProgress)
 
       if (currentProgress >= 100) {
@@ -55,7 +55,7 @@ export function SDLCSShowcase() {
         const nextIndex = (index + 1) % sdlcItems.length
         setTimeout(() => {
           startAnimation(nextIndex)
-        }, 500) // Small delay before starting next animation
+        }, 250) // brief pause before next bar
       }
     }, 40)
   }
@@ -66,19 +66,7 @@ export function SDLCSShowcase() {
 
   useEffect(() => {
     // Start automatic animation on mount
-    let currentIndex = 0
-    let currentProgress = 0
-
-    intervalRef.current = setInterval(() => {
-      setActiveIndex(currentIndex)
-      setProgress(currentProgress)
-
-      currentProgress += 2
-      if (currentProgress >= 100) {
-        currentProgress = 0
-        currentIndex = (currentIndex + 1) % sdlcItems.length
-      }
-    }, 40)
+    startAnimation(0)
 
     return () => {
       if (intervalRef.current) {
@@ -125,7 +113,11 @@ export function SDLCSShowcase() {
                 {/* Loading Bar */}
                 <div className="w-full h-0.5 overflow-hidden rounded-lg bg-neutral-300/50 mt-4">
                   <div
-                    className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-lg transition-all duration-300 ease-out"
+                    className={[
+                      "h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-lg",
+                      // Only animate width for the active item; inactive bars should snap to 0
+                      activeIndex === index ? "transition-[width] duration-75 linear" : "transition-none"
+                    ].join(" ")}
                     style={{
                       width: activeIndex === index ? `${progress}%` : '0%'
                     }}
