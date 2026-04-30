@@ -1,0 +1,4 @@
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *' # This will run every day at 2:00 AM UTC
