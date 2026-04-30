@@ -320,7 +320,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Function to accept team invitation
-CREATE OR REPLACE FUNCTION public.accept_team_invitation(invitation_token TEXT, user_id UUID)
+CREATE OR REPLACE FUNCTION public.accept_team_invitation(invitation_token TEXT, p_user_id UUID)
 RETURNS JSON AS $$
 DECLARE
   invitation_record RECORD;
@@ -342,7 +342,7 @@ BEGIN
 
   -- Add user to organization
   INSERT INTO public.organization_members (organization_id, user_id, role)
-  VALUES (invitation_record.organization_id, user_id, 'member')
+  VALUES (invitation_record.organization_id, p_user_id, 'member')
   ON CONFLICT (organization_id, user_id) DO NOTHING;
 
   RETURN json_build_object('success', true, 'organization_id', invitation_record.organization_id);

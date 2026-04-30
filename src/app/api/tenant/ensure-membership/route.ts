@@ -88,23 +88,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ organizationId: org.id, status: 'exists', role: existing.role })
     }
 
-    // Create membership as member (never admin from tenant auth).
-    const { data: inserted, error: insertError } = await admin
-      .from('organization_members')
-      .insert({
-        organization_id: org.id,
-        user_id: user.id,
-        role: 'member',
-      })
-      .select('id,role')
-      .single()
-
-    if (insertError) {
-      // Most common: unique constraint violation if a race happens.
-      return NextResponse.json({ error: insertError.message }, { status: 400 })
-    }
-
-    return NextResponse.json({ organizationId: org.id, status: 'created', role: inserted.role })
+    // IMPORTANT: this endpoint is an *enforcer*, not an auto-join mechanism.
+    // Membership should be created only through explicit flows (invite acceptance or org provisioning).
+    return NextResponse.json({ error: "You don't have access to this organization." }, { status: 403 })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? 'Internal server error' }, { status: 500 })
   }

@@ -51,6 +51,39 @@ export function LoginForm() {
             setError(body?.error ?? "You don't have access to this organization.")
             return
           }
+        } else {
+          // Base domain login should be restricted until the user is approved (and thus attached to an org),
+          // unless they're a super admin.
+          const [{ data: ownedOrg }, { data: anyMembership }] = await Promise.all([
+            supabase.from('organizations').select('id').eq('owner_id', authData.user.id).limit(1).maybeSingle(),
+            supabase.from('organization_members').select('id').eq('user_id', authData.user.id).limit(1).maybeSingle(),
+          ])
+
+          const hasOrg = Boolean(ownedOrg?.id || anyMembership?.id)
+          if (!hasOrg) {
+            const { data: latestApp } = await supabase
+              .from('organization_applications')
+              .select('status')
+              .eq('user_id', authData.user.id)
+              .order('submitted_at', { ascending: false })
+              .limit(1)
+              .maybeSingle()
+
+            await supabase.auth.signOut()
+
+            if (!latestApp) {
+              setError('Your account is created, but you must apply for an organization before you can log in.')
+              return
+            }
+
+            if (latestApp.status !== 'approved') {
+              setError('Your organization application is not approved yet. Please wait for a super admin to approve it.')
+              return
+            }
+
+            setError('Your application was approved, but your workspace is still being provisioned. Please try again in a moment.')
+            return
+          }
         }
 
         // Get user role to determine redirect

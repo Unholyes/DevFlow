@@ -43,10 +43,8 @@ export function TenantSignupForm() {
         email: data.email,
         password: data.password,
         options: {
-          data: {
-            role: 'team_member',
-          }
-        }
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent('/auth/login')}`,
+        },
       })
 
       if (authError) {

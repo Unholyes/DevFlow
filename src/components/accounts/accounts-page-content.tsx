@@ -141,6 +141,7 @@ export function AccountsPageContent({
   const [error, setError] = useState<string | null>(null)
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
   const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteResendLink, setInviteResendLink] = useState<string | null>(null)
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
   const [newRole, setNewRole] = useState<WorkspaceRole>('member')
 
@@ -293,6 +294,7 @@ export function AccountsPageContent({
     if (!email) return
 
     setError(null)
+    setInviteResendLink(null)
 
     // IMPORTANT: This action creates a Pending Invite (team_invitations),
     // not an immediate organization_members row.
@@ -331,6 +333,9 @@ export function AccountsPageContent({
 
       if (payload?.warning) {
         setError(String(payload.warning))
+        if (payload?.actionLink) {
+          setInviteResendLink(String(payload.actionLink))
+        }
       }
     } catch (e: any) {
       setInvitesList((prev) => prev.filter((i) => i.id !== optimisticId))
@@ -664,7 +669,29 @@ export function AccountsPageContent({
 
       {error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
+          <div>{error}</div>
+          {inviteResendLink ? (
+            <div className="mt-3 space-y-2">
+              <div className="text-xs text-red-700/80">Resend link (copy and send to the user):</div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input value={inviteResendLink} readOnly className="bg-white text-xs" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="shrink-0"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(inviteResendLink)
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                >
+                  Copy
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
 
