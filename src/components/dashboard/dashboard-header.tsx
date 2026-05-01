@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { KeyboardEvent, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Search, Bell, Plus, Settings, User, LogOut, Menu, Building2 } from 'lucide-react'
@@ -24,6 +24,14 @@ type HeaderUser = {
   avatarUrl: string | null
 }
 
+type SearchSuggestion = {
+  id: string
+  label: string
+  href: string
+  type: 'project' | 'feature'
+  description?: string
+}
+
 interface DashboardHeaderProps {
   isSidebarCollapsed?: boolean
   onToggleSidebar?: () => void
@@ -33,6 +41,11 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
   const router = useRouter()
   const [userInfo, setUserInfo] = useState<HeaderUser | null>(null)
   const { name: organizationName } = useOrganizationName()
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchSuggestions, setSearchSuggestions] = useState<SearchSuggestion[]>([])
+  const [isSearchOpen, setIsSearchOpen] = useState(false)
+  const [isSearchLoading, setIsSearchLoading] = useState(false)
+  const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1)
 
   useEffect(() => {
     let isMounted = true
@@ -82,6 +95,88 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
     router.refresh()
   }
 
+  useEffect(() => {
+    const query = searchQuery.trim()
+    if (!query) {
+      setSearchSuggestions([])
+      setIsSearchLoading(false)
+      setActiveSuggestionIndex(-1)
+      setIsSearchOpen(false)
+      return
+    }
+
+    let isCancelled = false
+    setIsSearchLoading(true)
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search/suggestions?q=${encodeURIComponent(query)}`)
+        const data = await res.json().catch(() => ({}))
+        if (isCancelled) return
+
+        const suggestions = Array.isArray(data?.suggestions) ? (data.suggestions as SearchSuggestion[]) : []
+        setSearchSuggestions(suggestions)
+        setIsSearchOpen(true)
+        setActiveSuggestionIndex(suggestions.length > 0 ? 0 : -1)
+      } catch {
+        if (isCancelled) return
+        setSearchSuggestions([])
+        setIsSearchOpen(true)
+        setActiveSuggestionIndex(-1)
+      } finally {
+        if (!isCancelled) setIsSearchLoading(false)
+      }
+    }, 150)
+
+    return () => {
+      isCancelled = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [searchQuery])
+
+  const goToSuggestion = (suggestion: SearchSuggestion) => {
+    setSearchQuery('')
+    setSearchSuggestions([])
+    setIsSearchOpen(false)
+    setActiveSuggestionIndex(-1)
+    router.push(suggestion.href)
+  }
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (!isSearchOpen) return
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      setActiveSuggestionIndex((prev) => {
+        if (searchSuggestions.length === 0) return -1
+        return prev >= searchSuggestions.length - 1 ? 0 : prev + 1
+      })
+      return
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      setActiveSuggestionIndex((prev) => {
+        if (searchSuggestions.length === 0) return -1
+        return prev <= 0 ? searchSuggestions.length - 1 : prev - 1
+      })
+      return
+    }
+
+    if (event.key === 'Enter') {
+      if (activeSuggestionIndex < 0 || activeSuggestionIndex >= searchSuggestions.length) return
+      event.preventDefault()
+      goToSuggestion(searchSuggestions[activeSuggestionIndex] as SearchSuggestion)
+      return
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      setIsSearchOpen(false)
+      setActiveSuggestionIndex(-1)
+    }
+  }
+
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-4">
       <div className="flex items-center justify-between">
@@ -110,9 +205,50 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
-              placeholder="Search projects, tasks, people..."
+              placeholder="Search projects, settings, and features..."
               className="pl-10 pr-4 py-2 w-full"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              onFocus={() => {
+                if (searchQuery.trim().length > 0) setIsSearchOpen(true)
+              }}
+              onBlur={() => {
+                window.setTimeout(() => setIsSearchOpen(false), 120)
+              }}
+              onKeyDown={handleSearchKeyDown}
             />
+            {isSearchOpen && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-80 overflow-y-auto">
+                {isSearchLoading ? (
+                  <div className="px-3 py-2 text-sm text-gray-500">Searching...</div>
+                ) : searchSuggestions.length > 0 ? (
+                  <ul className="py-1">
+                    {searchSuggestions.map((suggestion, index) => (
+                      <li key={suggestion.id}>
+                        <button
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault()
+                            goToSuggestion(suggestion)
+                          }}
+                          className={`w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors ${
+                            index === activeSuggestionIndex ? 'bg-blue-50' : ''
+                          }`}
+                        >
+                          <p className="text-sm font-medium text-gray-900">{suggestion.label}</p>
+                          <p className="text-xs text-gray-500">
+                            {suggestion.type === 'project' ? 'Project' : 'Feature'}
+                            {suggestion.description ? ` - ${suggestion.description}` : ''}
+                          </p>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="px-3 py-2 text-sm text-gray-500">No results found</div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
