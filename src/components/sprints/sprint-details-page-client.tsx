@@ -30,10 +30,6 @@ type Task = {
   position: number | null
 }
 
-function normalizePriority(p: Task['priority']): 'low' | 'medium' | 'high' {
-  return p === 'critical' ? 'high' : p
-}
-
 export function SprintDetailsPageClient(props: {
   projectId: string
   phaseId: string
@@ -100,6 +96,7 @@ export function SprintDetailsPageClient(props: {
           body: JSON.stringify({
             project_id: props.projectId,
             phase_id: props.phaseId,
+            process_id: props.processId,
             name: nextName,
             start_date: start,
             end_date: end,
@@ -257,7 +254,7 @@ export function SprintDetailsPageClient(props: {
                       id: task.id,
                       title: task.title,
                       description: task.description || '',
-                      priority: normalizePriority(task.priority),
+                      priority: task.priority,
                       storyPoints: task.story_points || 0,
                       assignee: null,
                       position: task.position || 0,

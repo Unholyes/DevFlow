@@ -7,7 +7,7 @@ interface BacklogTaskCardProps {
     id: string;
     title: string;
     description: string;
-    priority: 'high' | 'medium' | 'low';
+    priority: 'high' | 'medium' | 'low' | 'critical';
     storyPoints: number;
     assignee: string | null;
     position: number;
@@ -21,6 +21,7 @@ interface BacklogTaskCardProps {
 }
 
 const priorityColors = {
+  critical: 'bg-red-100 text-red-800 border-red-300',
   high: 'bg-red-50 text-red-700 border-red-200',
   medium: 'bg-yellow-50 text-yellow-700 border-yellow-200',
   low: 'bg-green-50 text-green-700 border-green-200',

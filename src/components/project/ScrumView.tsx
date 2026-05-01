@@ -24,8 +24,9 @@ type TaskRow = {
 }
 
 function priorityBadge(priority: TaskRow['priority']) {
-  const p = priority === 'critical' ? 'high' : priority
-  switch (p) {
+  switch (priority) {
+    case 'critical':
+      return 'bg-red-100 text-red-800 border border-red-300'
     case 'high':
       return 'bg-orange-50 text-orange-700 border border-orange-200'
     case 'medium':
@@ -248,7 +249,7 @@ export default function ScrumView(props: {
 
                     <div className="flex justify-between items-end">
                       <div className={`text-[11px] px-2 py-1 rounded-full font-bold capitalize ${priorityBadge(task.priority)}`}>
-                        {task.priority === 'critical' ? 'high' : task.priority}
+                        {task.priority}
                       </div>
                     </div>
                   </div>

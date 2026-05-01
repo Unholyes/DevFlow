@@ -65,6 +65,42 @@ export async function POST(request: Request) {
     const orgId = await resolveOrgId(supabase)
     if (!orgId) return NextResponse.json({ error: 'Missing tenant context' }, { status: 400 })
 
+    if (!name || !start_date || !end_date) {
+      return NextResponse.json({ error: 'name, start_date, and end_date are required' }, { status: 400 })
+    }
+
+    const parsedStartDate = new Date(start_date)
+    const parsedEndDate = new Date(end_date)
+    if (Number.isNaN(parsedStartDate.getTime()) || Number.isNaN(parsedEndDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid sprint dates' }, { status: 400 })
+    }
+    if (parsedEndDate < parsedStartDate) {
+      return NextResponse.json({ error: 'End date cannot be before start date' }, { status: 400 })
+    }
+
+    const normalizedStoryPointsTotal = Number.isFinite(Number(story_points_total))
+      ? Math.max(0, Math.floor(Number(story_points_total)))
+      : 0
+
+    if (process_id) {
+      const { data: process, error: processError } = await supabase
+        .from('phase_processes')
+        .select('sprint_capacity_points')
+        .eq('id', process_id)
+        .eq('organization_id', orgId)
+        .maybeSingle()
+
+      if (processError) throw processError
+
+      const sprintCapacity = Number(process?.sprint_capacity_points ?? 0)
+      if (sprintCapacity > 0 && normalizedStoryPointsTotal > sprintCapacity) {
+        return NextResponse.json(
+          { error: `Sprint exceeds capacity (${normalizedStoryPointsTotal}/${sprintCapacity} story points)` },
+          { status: 400 }
+        )
+      }
+    }
+
     const { data, error } = await supabase
       .from('sprints')
       .insert({
@@ -75,7 +111,7 @@ export async function POST(request: Request) {
         name,
         start_date,
         end_date,
-        story_points_total,
+        story_points_total: normalizedStoryPointsTotal,
         status,
       })
       .select()

@@ -22,10 +22,6 @@ type Task = {
 
 const defaultCapacity = 42
 
-function normalizePriority(p: Task['priority']): 'low' | 'medium' | 'high' {
-  return p === 'critical' ? 'high' : p
-}
-
 function uniqueById<T extends { id: string }>(items: T[]) {
   const map = new Map<string, T>()
   for (const item of items) map.set(item.id, item)
@@ -60,6 +56,7 @@ export function SprintPlanningPageClient(props: {
   const [sprintName, setSprintName] = useState('Sprint 1')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [formError, setFormError] = useState<string | null>(null)
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set())
   const [backlogTasks, setBacklogTasks] = useState<Task[]>(props.backlogTasks)
   const [sprintTasks, setSprintTasks] = useState<Task[]>([])
@@ -204,13 +201,24 @@ export function SprintPlanningPageClient(props: {
   }
 
   const handleStartSprint = async () => {
+    setFormError(null)
     if (!sprintName || !startDate || !endDate) {
-      alert('Please fill in all sprint details')
+      setFormError('Please fill in all sprint details')
       return
     }
 
     if (sprintTasks.length === 0) {
-      alert('Please add at least one task to the sprint')
+      setFormError('Please add at least one task to the sprint')
+      return
+    }
+
+    if (new Date(endDate) < new Date(startDate)) {
+      setFormError('End date cannot be before start date')
+      return
+    }
+
+    if (sprintBacklogStoryPoints > capacity) {
+      setFormError(`Sprint exceeds capacity (${sprintBacklogStoryPoints}/${capacity} points)`)
       return
     }
 
@@ -265,7 +273,7 @@ export function SprintPlanningPageClient(props: {
       router.refresh()
     } catch (e) {
       console.error(e)
-      alert(e instanceof Error ? e.message : 'Failed to start sprint')
+      setFormError(e instanceof Error ? e.message : 'Failed to start sprint')
     } finally {
       setLoading(false)
     }
@@ -304,7 +312,7 @@ export function SprintPlanningPageClient(props: {
           <Button
             className="bg-green-600 hover:bg-green-700"
             onClick={handleStartSprint}
-            disabled={!sprintName || !startDate || !endDate || sprintTasks.length === 0}
+            disabled={!sprintName || !startDate || !endDate || sprintTasks.length === 0 || sprintBacklogStoryPoints > capacity}
           >
             <Play className="h-4 w-4 mr-2" />
             Start Sprint
@@ -331,6 +339,7 @@ export function SprintPlanningPageClient(props: {
               <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
             </div>
           </div>
+          {formError ? <p className="mt-3 text-sm text-red-600">{formError}</p> : null}
         </CardContent>
       </Card>
 
@@ -500,7 +509,7 @@ export function SprintPlanningPageClient(props: {
                       id: task.id,
                       title: task.title,
                       description: task.description || '',
-                      priority: normalizePriority(task.priority),
+                      priority: task.priority,
                       storyPoints: task.story_points || 0,
                       assignee: null,
                       position: task.position || 0,
@@ -548,7 +557,7 @@ export function SprintPlanningPageClient(props: {
                       id: task.id,
                       title: task.title,
                       description: task.description || '',
-                      priority: normalizePriority(task.priority),
+                      priority: task.priority,
                       storyPoints: task.story_points || 0,
                       assignee: null,
                       position: task.position || 0,
