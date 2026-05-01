@@ -55,6 +55,7 @@ export default async function PhasePage({ params }: { params: { id: string; phas
 
   let processes:
     | {
+        id: string
         name: string
         methodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
         order_index: number

@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { getTenantSlug } from '@/lib/tenant/server'
 
+export const dynamic = 'force-dynamic'
+
 type SearchSuggestion = {
   id: string
   label: string
