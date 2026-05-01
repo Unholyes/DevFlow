@@ -126,11 +126,11 @@ export default async function ProcessBoardPage({
       <div className="space-y-6">
         <div className="flex items-center justify-between gap-3">
           <Link
-            href={`/dashboard/projects/${params.id}/phases/${params.phaseId}`}
+            href={`/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${params.processId}/sprints`}
             className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors"
           >
             <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to Phase Overview
+            Back to Sprints
           </Link>
           <div className="text-xs text-gray-500">
             Process: <span className="font-semibold text-gray-900">{process.name}</span>

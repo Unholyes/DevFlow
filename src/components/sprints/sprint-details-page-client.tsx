@@ -44,7 +44,7 @@ export function SprintDetailsPageClient(props: {
   const [isCompleteOpen, setIsCompleteOpen] = useState(false)
   useEffect(() => {
     const shouldOpen = searchParams.get('complete') === '1'
-    if (shouldOpen) setIsCompleteOpen(true)
+    if (shouldOpen && props.sprint.status !== 'closed') setIsCompleteOpen(true)
   }, [searchParams])
   const [isCompleting, setIsCompleting] = useState(false)
   const [tasks, setTasks] = useState<Task[]>(props.tasks)
@@ -83,62 +83,10 @@ export function SprintDetailsPageClient(props: {
       const sprintJson = await sprintRes.json()
       if (!sprintRes.ok) throw new Error(sprintJson?.error || 'Failed to complete sprint')
 
-      if (data.unfinishedAction === 'next_sprint' && unfinishedTasks.length > 0) {
-        const today = new Date()
-        const start = today.toISOString().slice(0, 10)
-        const end = new Date(today.getTime() + 13 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-
-        const nextName = `${props.sprint.name} (Next)`
-
-        const createRes = await fetch('/api/sprints', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project_id: props.projectId,
-            phase_id: props.phaseId,
-            process_id: props.processId,
-            name: nextName,
-            start_date: start,
-            end_date: end,
-            status: 'planned',
-            story_points_total: unfinishedTasks.reduce((sum, t) => sum + (t.story_points || 0), 0),
-          }),
-        })
-
-        const created = await createRes.json()
-        if (!createRes.ok) throw new Error(created?.error || 'Failed to create next sprint')
-        const nextSprintId = created?.data?.id as string | undefined
-        if (!nextSprintId) throw new Error('Failed to create next sprint (missing id)')
-
-        await Promise.all(
-          unfinishedTasks.map((t) =>
-            fetch('/api/tasks', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                id: t.id,
-                sprint_id: nextSprintId,
-                ...(props.sprintStartStageId ? { workflow_stage_id: props.sprintStartStageId } : {}),
-              }),
-            })
-          )
-        )
-      } else {
-        // Default: return unfinished tasks back to backlog by clearing sprint_id.
-        await Promise.all(
-          unfinishedTasks.map((t) =>
-            fetch('/api/tasks', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                id: t.id,
-                sprint_id: null,
-                ...(props.backlogStageId ? { workflow_stage_id: props.backlogStageId } : {}),
-              }),
-            })
-          )
-        )
-      }
+      // Important: keep tasks in-place when a sprint is closed so the completed sprint
+      // remains an accurate snapshot of where work was left (columns/statuses included).
+      // (We intentionally do NOT move unfinished tasks out of the sprint here.)
+      void data
 
       setIsCompleteOpen(false)
       router.push(
@@ -185,13 +133,15 @@ export function SprintDetailsPageClient(props: {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            className="bg-green-600 hover:bg-green-700"
-            onClick={() => setIsCompleteOpen(true)}
-            disabled={props.sprint.status === 'closed' || isCompleting}
-          >
-            Complete Sprint
-          </Button>
+          {props.sprint.status !== 'closed' ? (
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              onClick={() => setIsCompleteOpen(true)}
+              disabled={isCompleting}
+            >
+              Complete Sprint
+            </Button>
+          ) : null}
         </div>
       </div>
 

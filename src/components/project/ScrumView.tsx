@@ -51,6 +51,7 @@ export default function ScrumView(props: {
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null)
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [dragOverStageId, setDragOverStageId] = useState<string | null>(null)
+  const isLocked = props.sprint?.status === 'closed'
 
   const stages = useMemo(() => [...props.stages].sort((a, b) => a.stage_order - b.stage_order), [props.stages])
   const stageById = useMemo(() => Object.fromEntries(stages.map((s) => [s.id, s])), [stages])
@@ -70,6 +71,7 @@ export default function ScrumView(props: {
   }, [stages, hasBacklogTasks])
 
   const moveTask = async (taskId: string, targetStageId: string) => {
+    if (isLocked) return
     const stage = stageById[targetStageId]
     if (!stage) return
 
@@ -100,6 +102,7 @@ export default function ScrumView(props: {
   }
 
   const handleDropToStage = (stageId: string) => {
+    if (isLocked) return
     if (!draggedTaskId) return
     const current = tasks.find((t) => t.id === draggedTaskId)
     if (!current) return
@@ -145,7 +148,12 @@ export default function ScrumView(props: {
               </svg>
             </div>
             <h2 className="text-xl font-bold text-gray-900">
-              {props.sprint.status === 'active' ? 'Active Sprint' : 'Planned Sprint'} ({props.sprint.name})
+              {props.sprint.status === 'active'
+                ? 'Active Sprint'
+                : props.sprint.status === 'planned'
+                  ? 'Planned Sprint'
+                  : 'Completed Sprint'}{' '}
+              ({props.sprint.name})
             </h2>
           </div>
           <div className="flex gap-2">
@@ -161,22 +169,28 @@ export default function ScrumView(props: {
             >
               Sprint Details
             </Button>
-            <Button
-              className="bg-green-600 hover:bg-green-700"
-              onClick={() =>
-                router.push(
-                  props.processId
-                    ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints/${props.sprint!.id}?complete=1`
-                    : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${props.sprint!.id}?complete=1`
-                )
-              }
-            >
-              Complete Sprint
-            </Button>
+            {props.sprint.status !== 'closed' ? (
+              <Button
+                className="bg-green-600 hover:bg-green-700"
+                onClick={() =>
+                  router.push(
+                    props.processId
+                      ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints/${props.sprint!.id}?complete=1`
+                      : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${props.sprint!.id}?complete=1`
+                  )
+                }
+              >
+                Complete Sprint
+              </Button>
+            ) : null}
           </div>
         </div>
         <p className="text-sm text-gray-500 mt-1 max-w-4xl ml-16">
-          Progress: <span className="font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md">{donePoints}/{totalPoints} points completed</span>
+          Progress:{' '}
+          <span className="font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md">
+            {donePoints}/{totalPoints} points completed
+          </span>
+          {isLocked ? <span className="ml-2 text-xs text-gray-500">(Locked)</span> : null}
         </p>
       </div>
 
@@ -191,16 +205,19 @@ export default function ScrumView(props: {
                 key={stage.id}
                 className={[
                   "bg-gray-50/50 rounded-2xl p-4 border min-h-[600px] space-y-4 transition-colors",
-                  dragOverStageId === stage.id ? "border-blue-300 bg-blue-50/40" : "border-gray-100",
+                  !isLocked && dragOverStageId === stage.id ? "border-blue-300 bg-blue-50/40" : "border-gray-100",
                 ].join(" ")}
                 onDragOver={(e) => {
+                  if (isLocked) return
                   e.preventDefault()
                   if (dragOverStageId !== stage.id) setDragOverStageId(stage.id)
                 }}
                 onDragLeave={() => {
+                  if (isLocked) return
                   if (dragOverStageId === stage.id) setDragOverStageId(null)
                 }}
                 onDrop={(e) => {
+                  if (isLocked) return
                   e.preventDefault()
                   handleDropToStage(stage.id)
                   setDraggedTaskId(null)
@@ -217,8 +234,9 @@ export default function ScrumView(props: {
                 {stageTasks.map((task) => (
                   <div
                     key={task.id}
-                    draggable={movingTaskId !== task.id}
+                    draggable={!isLocked && movingTaskId !== task.id}
                     onDragStart={(e) => {
+                      if (isLocked) return
                       setDraggedTaskId(task.id)
                       e.dataTransfer.effectAllowed = "move"
                       try {
@@ -228,11 +246,13 @@ export default function ScrumView(props: {
                       }
                     }}
                     onDragEnd={() => {
+                      if (isLocked) return
                       setDraggedTaskId(null)
                       setDragOverStageId(null)
                     }}
                     className={[
-                      "bg-white p-4 rounded-xl border shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing",
+                      "bg-white p-4 rounded-xl border shadow-sm transition-shadow",
+                      isLocked ? "cursor-not-allowed opacity-95" : "hover:shadow-md cursor-grab active:cursor-grabbing",
                       draggedTaskId === task.id ? "opacity-60 border-blue-200" : "border-gray-100",
                     ].join(" ")}
                   >
