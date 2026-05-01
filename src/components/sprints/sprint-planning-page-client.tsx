@@ -291,11 +291,15 @@ export function SprintPlanningPageClient(props: {
     <div className="space-y-6">
       <div className="flex items-center gap-4 mb-4">
         <Link
-          href={`/dashboard/projects/${props.projectId}/phases/${props.phaseId}`}
+          href={
+            props.processId
+              ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints`
+              : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`
+          }
           className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Phase Overview
+          Back to Sprints
         </Link>
       </div>
 

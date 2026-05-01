@@ -62,6 +62,16 @@ export default async function ProcessSprintsPage({
     .eq('process_id', process.id)
     .order('start_date', { ascending: false })
 
+  const { data: backlogTasks } = await supabase
+    .from('tasks')
+    .select('id,title,description,priority,story_points,position')
+    .eq('project_id', project.id)
+    .eq('organization_id', orgId)
+    .eq('process_id', process.id)
+    .is('sprint_id', null)
+    .order('position', { ascending: true })
+    .limit(10)
+
   const sprintIds = (sprints ?? []).map((s) => s.id)
   let tasksBySprint: Record<string, { total: number; completed: number }> = {}
 
@@ -101,6 +111,7 @@ export default async function ProcessSprintsPage({
       processName={process.name}
       processMethod={process.methodology}
       sprints={sprintsWithStats}
+      backlogTasks={(backlogTasks ?? []) as any}
     />
   )
 }

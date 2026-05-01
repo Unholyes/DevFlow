@@ -3,6 +3,10 @@ import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { NextResponse } from 'next/server'
 
+function isUniqueViolation(error: unknown) {
+  return typeof error === 'object' && error !== null && (error as any).code === '23505'
+}
+
 async function resolveOrgId(supabase: ReturnType<typeof createClient>) {
   const tenantSlug = getTenantSlug()
   if (tenantSlug) {
@@ -121,6 +125,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ data })
   } catch (error) {
+    if (isUniqueViolation(error)) {
+      return NextResponse.json(
+        { error: 'A sprint with this name already exists in this process.' },
+        { status: 409 }
+      )
+    }
     console.error('Error creating sprint:', error)
     return NextResponse.json({ error: 'Failed to create sprint' }, { status: 500 })
   }
@@ -148,6 +158,12 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({ data })
   } catch (error) {
+    if (isUniqueViolation(error)) {
+      return NextResponse.json(
+        { error: 'A sprint with this name already exists in this process.' },
+        { status: 409 }
+      )
+    }
     console.error('Error updating sprint:', error)
     return NextResponse.json({ error: 'Failed to update sprint' }, { status: 500 })
   }

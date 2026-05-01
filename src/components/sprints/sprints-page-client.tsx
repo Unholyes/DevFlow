@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { Plus, CheckCircle2, ArrowLeft, PlayCircle } from 'lucide-react'
+import { Plus, CheckCircle2, ArrowLeft, PlayCircle, ListTodo } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
@@ -19,6 +19,29 @@ export type SprintWithStats = SprintRow & {
   tasks_completed: number
 }
 
+type BacklogTaskRow = {
+  id: string
+  title: string
+  description: string | null
+  priority: 'low' | 'medium' | 'high' | 'critical'
+  story_points: number | null
+  position: number | null
+}
+
+function priorityBadgeClass(priority: BacklogTaskRow['priority']) {
+  switch (priority) {
+    case 'critical':
+      return 'border-red-200 bg-red-50 text-red-700'
+    case 'high':
+      return 'border-orange-200 bg-orange-50 text-orange-700'
+    case 'medium':
+      return 'border-blue-200 bg-blue-50 text-blue-700'
+    case 'low':
+    default:
+      return 'border-gray-200 bg-gray-50 text-gray-700'
+  }
+}
+
 export function SprintsPageClient(props: {
   projectId: string
   phaseId: string
@@ -26,6 +49,7 @@ export function SprintsPageClient(props: {
   processName?: string
   processMethod?: string
   sprints: SprintWithStats[]
+  backlogTasks?: BacklogTaskRow[]
   selectedProcessName?: string | null
   selectedMethod?: string | null
 }) {
@@ -34,6 +58,8 @@ export function SprintsPageClient(props: {
   const completedSprints = props.sprints.filter((s) => s.status === 'closed')
   const totalStoryPoints = props.sprints.reduce((sum, s) => sum + (s.story_points_total || 0), 0)
   const averageVelocity = props.sprints.length ? Math.round(totalStoryPoints / props.sprints.length) : 0
+  const backlogTasks = props.backlogTasks ?? []
+  const backlogStoryPoints = backlogTasks.reduce((sum, t) => sum + Number(t.story_points ?? 0), 0)
 
   return (
     <div className="space-y-6">
@@ -117,6 +143,83 @@ export function SprintsPageClient(props: {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-gray-200 shadow-sm">
+        <CardHeader>
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <ListTodo className="h-5 w-5 text-gray-700" />
+                Backlog (not in sprint)
+              </CardTitle>
+              <p className="mt-1 text-sm text-gray-600">
+                Tasks ready to be pulled into a sprint for this process.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {props.processId ? (
+                <>
+                  <Link
+                    href={`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/backlog`}
+                    className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    View backlog
+                  </Link>
+                  <Link
+                    href={`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints/plan`}
+                    className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+                  >
+                    Plan sprint
+                  </Link>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Backlog tasks</p>
+              <p className="mt-1 text-xl font-semibold text-gray-900">{backlogTasks.length}</p>
+            </div>
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+              <p className="text-xs uppercase tracking-wide text-gray-500">Story points</p>
+              <p className="mt-1 text-xl font-semibold text-gray-900">{backlogStoryPoints}</p>
+            </div>
+          </div>
+
+          {backlogTasks.length === 0 ? (
+            <div className="text-center py-10 text-gray-500">
+              <p>No backlog tasks yet for this process.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {backlogTasks.slice(0, 10).map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-start justify-between gap-4 rounded-lg border border-gray-200 bg-white p-4 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900 truncate">{t.title}</p>
+                    {t.description ? (
+                      <p className="text-sm text-gray-500 line-clamp-1 mt-1">{t.description}</p>
+                    ) : null}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Badge variant="outline" className={`text-xs ${priorityBadgeClass(t.priority)}`}>
+                        {t.priority}
+                      </Badge>
+                      <Badge variant="outline" className="text-xs border-gray-200 bg-white text-gray-700">
+                        {Number(t.story_points ?? 0)} pts
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-400 tabular-nums">#{t.position ?? 0}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {activeSprints.length > 0 && (
         <Card className="border-gray-200 shadow-sm">

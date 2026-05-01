@@ -966,6 +966,8 @@ CREATE TABLE IF NOT EXISTS public.sprints (
   organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   phase_id UUID NOT NULL REFERENCES public.sdlc_phases(id) ON DELETE CASCADE,
+  -- Optional: when using per-process sprint planning in a phase
+  process_id UUID REFERENCES public.phase_processes(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
@@ -976,6 +978,11 @@ CREATE TABLE IF NOT EXISTS public.sprints (
 );
 
 ALTER TABLE public.sprints ENABLE ROW LEVEL SECURITY;
+
+-- Sprint names must be unique within the same phase+process (but can repeat in other processes)
+CREATE UNIQUE INDEX IF NOT EXISTS sprints_phase_process_name_unique_idx
+ON public.sprints (phase_id, process_id, lower(btrim(name)))
+WHERE process_id IS NOT NULL;
 
 CREATE POLICY "Sprints: select members/owner" ON public.sprints
   FOR SELECT
@@ -1078,9 +1085,13 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   -- Scrum association (optional)
   sprint_id UUID REFERENCES public.sprints(id) ON DELETE SET NULL,
 
+  -- Optional: for process-scoped boards/backlogs
+  process_id UUID REFERENCES public.phase_processes(id) ON DELETE SET NULL,
+
   title TEXT NOT NULL,
   description TEXT,
   priority public.task_priority NOT NULL DEFAULT 'medium',
+  story_points INTEGER,
   due_date DATE,
   assignee_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_by_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -1092,10 +1103,16 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   completed_at TIMESTAMPTZ,
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  position INTEGER
 );
 
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
+
+-- Task titles must be unique within the same sprint (but can repeat in other sprints)
+CREATE UNIQUE INDEX IF NOT EXISTS tasks_sprint_title_unique_idx
+ON public.tasks (sprint_id, lower(btrim(title)))
+WHERE sprint_id IS NOT NULL;
 
 CREATE POLICY "Tasks: select members/owner" ON public.tasks
   FOR SELECT
