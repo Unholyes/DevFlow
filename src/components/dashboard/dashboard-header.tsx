@@ -3,7 +3,7 @@
 import { KeyboardEvent, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, Bell, Plus, Settings, User, LogOut, Menu, Building2 } from 'lucide-react'
+import { Search, Bell, Settings, User, LogOut, Menu, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -178,7 +178,7 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
   }
 
   return (
-    <header className="bg-white border-b border-gray-200 px-6 py-4">
+    <header className="bg-white/90 backdrop-blur border-b border-gray-200 px-6 py-4">
       <div className="flex items-center justify-between">
         {/* Logo & Toggle */}
         <div className="flex items-center space-x-4">
@@ -206,7 +206,7 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
               placeholder="Search projects, settings, and features..."
-              className="pl-10 pr-4 py-2 w-full"
+              className="pl-10 pr-4 py-2 w-full bg-gray-50 border-gray-200 rounded-full focus-visible:ring-2 focus-visible:ring-blue-500"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               onFocus={() => {
@@ -263,14 +263,6 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
               </span>
             </div>
           )}
-
-          {/* Quick Actions */}
-          <Button asChild size="sm" className="flex items-center space-x-2">
-            <Link href="/dashboard/projects/new">
-              <Plus className="h-4 w-4" />
-              <span>Create</span>
-            </Link>
-          </Button>
 
           {/* Notifications */}
           <Button variant="ghost" size="sm" className="relative">

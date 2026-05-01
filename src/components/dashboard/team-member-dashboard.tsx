@@ -7,19 +7,17 @@ import { TaskBoard } from '@/components/dashboard/task-board'
 
 interface TeamMemberDashboardProps {
   userId: string
+  stats: {
+    totalProjects: number
+    totalTasks: number
+    completedTasks: number
+    activeSprints: number
+    overdueTasks: number
+    teamMembers: number
+  }
 }
 
-export function TeamMemberDashboard({ userId }: TeamMemberDashboardProps) {
-  // Stats initialized to zero
-  const stats = {
-    totalProjects: 0,
-    totalTasks: 0,
-    completedTasks: 0,
-    activeSprints: 0,
-    overdueTasks: 0,
-    teamMembers: 0,
-  }
-
+export function TeamMemberDashboard({ userId, stats }: TeamMemberDashboardProps) {
   // Arrays initialized to empty
   const projects: Array<{
     id: string
