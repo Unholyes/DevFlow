@@ -1335,11 +1335,27 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  SELECT ws.wip_limit, sp.methodology
-    INTO v_wip_limit, v_methodology
+  SELECT ws.wip_limit
+    INTO v_wip_limit
   FROM public.workflow_stages ws
-  JOIN public.sdlc_phases sp ON sp.id = ws.phase_id
   WHERE ws.id = NEW.workflow_stage_id;
+
+  v_methodology := NULL;
+
+  IF NEW.process_id IS NOT NULL THEN
+    SELECT pp.methodology
+      INTO v_methodology
+    FROM public.phase_processes pp
+    WHERE pp.id = NEW.process_id;
+  END IF;
+
+  IF v_methodology IS NULL THEN
+    SELECT sp.methodology
+      INTO v_methodology
+    FROM public.workflow_stages ws
+    JOIN public.sdlc_phases sp ON sp.id = ws.phase_id
+    WHERE ws.id = NEW.workflow_stage_id;
+  END IF;
 
   -- Only enforce WIP for Kanban stages with an explicit limit.
   IF v_methodology = 'kanban' AND v_wip_limit IS NOT NULL THEN

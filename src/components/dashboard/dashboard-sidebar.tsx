@@ -19,13 +19,15 @@ import { cn } from '@/lib/utils'
 import type { UserRole } from '@/types'
 import { useOrganizationName } from '@/lib/hooks/use-organization-name'
 
-type Project = {
-  id: string
-  name: string
-}
+export type SidebarProject = { id: string; name: string }
 
-// Mock projects for demo
-const mockProjects: Project[] = []
+function sidebarProjectLabel(projects: SidebarProject[], project: SidebarProject) {
+  const norm = (s: string) => s.trim()
+  const name = norm(project.name)
+  const sameName = projects.filter((p) => norm(p.name) === name).length
+  if (sameName <= 1) return project.name
+  return `${project.name} · ${project.id.slice(0, 6)}`
+}
 
 const tenantMemberNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
@@ -46,7 +48,19 @@ const bottomNavigation = [
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
-export function DashboardSidebar({ role = 'team_member', isCollapsed = false, onToggle }: { role?: UserRole; isCollapsed?: boolean; onToggle?: () => void }) {
+const SIDEBAR_PROJECT_LIMIT = 4
+
+export function DashboardSidebar({
+  role = 'team_member',
+  isCollapsed = false,
+  onToggle,
+  projects = [],
+}: {
+  role?: UserRole
+  isCollapsed?: boolean
+  onToggle?: () => void
+  projects?: SidebarProject[]
+}) {
   const pathname = usePathname()
   const [isProjectsOpen, setIsProjectsOpen] = useState(true)
   const { name: organizationName } = useOrganizationName()
@@ -96,13 +110,14 @@ export function DashboardSidebar({ role = 'team_member', isCollapsed = false, on
             </button>
             {isProjectsOpen && (
               <div className="mt-2 space-y-1">
-                {mockProjects.slice(0, 5).map((project) => {
+                {projects.slice(0, SIDEBAR_PROJECT_LIMIT).map((project) => {
                   const projectHref = `/dashboard/projects/${project.id}`
                   const isActive = pathname === projectHref
                   return (
                     <Link
                       key={project.id}
                       href={projectHref}
+                      title={sidebarProjectLabel(projects, project)}
                       className={cn(
                         'flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ml-3',
                         isActive
@@ -111,7 +126,7 @@ export function DashboardSidebar({ role = 'team_member', isCollapsed = false, on
                       )}
                     >
                       <FolderOpen className="mr-3 h-4 w-4" />
-                      <span className="truncate">{project.name}</span>
+                      <span className="truncate">{sidebarProjectLabel(projects, project)}</span>
                     </Link>
                   )
                 })}

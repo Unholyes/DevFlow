@@ -53,6 +53,21 @@ export default async function DashboardRouteLayout({ children }: { children: Rea
     }
   }
 
-  return <DashboardLayout role={role}>{children}</DashboardLayout>
+  let sidebarProjects: { id: string; name: string }[] = []
+  if (ws.organizationId) {
+    const { data: projectRows } = await supabase
+      .from('projects')
+      .select('id,name')
+      .eq('organization_id', ws.organizationId)
+      .order('created_at', { ascending: false })
+      .limit(4)
+    sidebarProjects = projectRows ?? []
+  }
+
+  return (
+    <DashboardLayout role={role} sidebarProjects={sidebarProjects}>
+      {children}
+    </DashboardLayout>
+  )
 }
 

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Plus, Search, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
@@ -25,6 +26,7 @@ export function ProductBacklogPageClient(props: {
   processId?: string
   backlogStageId?: string
   phaseTitle: string
+  methodology?: 'scrum' | 'kanban'
   tasks: BacklogTask[]
 }) {
   const router = useRouter()
@@ -34,9 +36,12 @@ export function ProductBacklogPageClient(props: {
   const [filterPriority, setFilterPriority] = useState<'all' | 'high' | 'medium' | 'low' | 'critical'>('all')
   const [isCreating, setIsCreating] = useState(false)
   const [createTitle, setCreateTitle] = useState('')
+  const [createDescription, setCreateDescription] = useState('')
   const [createPriority, setCreatePriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium')
   const [createStoryPoints, setCreateStoryPoints] = useState<string>('0')
   const [createLoading, setCreateLoading] = useState(false)
+
+  const isKanban = props.methodology === 'kanban'
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
@@ -49,6 +54,7 @@ export function ProductBacklogPageClient(props: {
   }, [tasks, searchQuery, filterPriority])
 
   const totalStoryPoints = filteredTasks.reduce((sum, task) => sum + (task.story_points || 0), 0)
+  const kanbanDetailedCount = filteredTasks.filter((t) => (t.description?.trim()?.length ?? 0) > 0).length
 
   const toggleTaskSelection = (taskId: string) => {
     setSelectedTasks((prev) => {
@@ -84,6 +90,7 @@ export function ProductBacklogPageClient(props: {
 
     const storyPoints = Number(createStoryPoints)
     const safeStoryPoints = Number.isFinite(storyPoints) && storyPoints >= 0 ? Math.floor(storyPoints) : 0
+    const desc = createDescription.trim()
 
     setCreateLoading(true)
     try {
@@ -96,8 +103,8 @@ export function ProductBacklogPageClient(props: {
           workflow_stage_id: props.backlogStageId,
           title,
           priority: createPriority,
-          story_points: safeStoryPoints,
-          description: null,
+          story_points: isKanban ? null : safeStoryPoints,
+          description: desc.length > 0 ? desc : null,
           sprint_id: null,
         }),
       })
@@ -112,7 +119,7 @@ export function ProductBacklogPageClient(props: {
             title: String(created.title ?? title),
             description: (created.description ?? null) as any,
             priority: (created.priority ?? createPriority) as any,
-            story_points: (created.story_points ?? safeStoryPoints) as any,
+            story_points: (created.story_points ?? (isKanban ? null : safeStoryPoints)) as any,
             assignee_id: (created.assignee_id ?? null) as any,
             position: (created.position ?? null) as any,
           },
@@ -121,6 +128,7 @@ export function ProductBacklogPageClient(props: {
       }
 
       setCreateTitle('')
+      setCreateDescription('')
       setCreatePriority('medium')
       setCreateStoryPoints('0')
       setIsCreating(false)
@@ -147,10 +155,14 @@ export function ProductBacklogPageClient(props: {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Product Backlog</h1>
-          <p className="text-gray-600 mt-1">Backlog items for “{props.phaseTitle}” (Scrum)</p>
+          <p className="text-gray-600 mt-1">
+            {isKanban
+              ? `Options queue for “${props.phaseTitle}” — refine with clear titles and descriptions, then pull work onto the board when capacity allows.`
+              : `Backlog items for “${props.phaseTitle}” (Scrum)`}
+          </p>
         </div>
         <div className="flex gap-2">
-          {selectedTasks.size > 0 && (
+          {props.methodology !== 'kanban' && selectedTasks.size > 0 && (
             <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleAddToSprint}>
               <Plus className="h-4 w-4 mr-2" />
               Add {selectedTasks.size} tasks to Sprint
@@ -171,49 +183,102 @@ export function ProductBacklogPageClient(props: {
       {isCreating ? (
         <Card className="border-gray-200 shadow-sm">
           <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-              <div className="md:col-span-7">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
-                <Input
-                  placeholder="e.g. Implement login validation"
-                  value={createTitle}
-                  onChange={(e) => setCreateTitle(e.target.value)}
-                />
+            {isKanban ? (
+              <div className="grid grid-cols-1 gap-4">
+                <p className="text-sm text-gray-600">
+                  Add a concise title and enough description that the next person can start without a handoff meeting.
+                  Story points are not used in Kanban.
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                  <div className="md:col-span-8">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                    <Input
+                      placeholder="Short, actionable summary of the work"
+                      value={createTitle}
+                      onChange={(e) => setCreateTitle(e.target.value)}
+                    />
+                  </div>
+                  <div className="md:col-span-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                    <select
+                      className="w-full h-10 rounded-md border border-gray-200 bg-white px-3 text-sm"
+                      value={createPriority}
+                      onChange={(e) => setCreatePriority(e.target.value as any)}
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </div>
+                  <div className="md:col-span-12">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <Textarea
+                      placeholder="Context, acceptance criteria, links, dependencies — whatever helps when this is pulled into a column."
+                      value={createDescription}
+                      onChange={(e) => setCreateDescription(e.target.value)}
+                      className="min-h-[120px] resize-y"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setIsCreating(false)} disabled={createLoading}>
+                    Cancel
+                  </Button>
+                  <Button
+                    className="bg-blue-600 hover:bg-blue-700"
+                    onClick={handleCreateTask}
+                    disabled={createLoading || !createTitle.trim()}
+                  >
+                    {createLoading ? 'Creating…' : 'Add to backlog'}
+                  </Button>
+                </div>
               </div>
-              <div className="md:col-span-3">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                <select
-                  className="w-full h-10 rounded-md border border-gray-200 bg-white px-3 text-sm"
-                  value={createPriority}
-                  onChange={(e) => setCreatePriority(e.target.value as any)}
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                  <option value="critical">Critical</option>
-                </select>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                <div className="md:col-span-7">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                  <Input
+                    placeholder="e.g. Implement login validation"
+                    value={createTitle}
+                    onChange={(e) => setCreateTitle(e.target.value)}
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                  <select
+                    className="w-full h-10 rounded-md border border-gray-200 bg-white px-3 text-sm"
+                    value={createPriority}
+                    onChange={(e) => setCreatePriority(e.target.value as any)}
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Story points</label>
+                  <Input
+                    inputMode="numeric"
+                    value={createStoryPoints}
+                    onChange={(e) => setCreateStoryPoints(e.target.value)}
+                  />
+                </div>
+                <div className="md:col-span-12 flex gap-2 justify-end pt-2">
+                  <Button variant="outline" onClick={() => setIsCreating(false)} disabled={createLoading}>
+                    Cancel
+                  </Button>
+                  <Button
+                    className="bg-blue-600 hover:bg-blue-700"
+                    onClick={handleCreateTask}
+                    disabled={createLoading || !createTitle.trim()}
+                  >
+                    {createLoading ? 'Creating…' : 'Create'}
+                  </Button>
+                </div>
               </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Story points</label>
-                <Input
-                  inputMode="numeric"
-                  value={createStoryPoints}
-                  onChange={(e) => setCreateStoryPoints(e.target.value)}
-                />
-              </div>
-              <div className="md:col-span-12 flex gap-2 justify-end pt-2">
-                <Button variant="outline" onClick={() => setIsCreating(false)} disabled={createLoading}>
-                  Cancel
-                </Button>
-                <Button
-                  className="bg-blue-600 hover:bg-blue-700"
-                  onClick={handleCreateTask}
-                  disabled={createLoading || !createTitle.trim()}
-                >
-                  {createLoading ? 'Creating…' : 'Create'}
-                </Button>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       ) : null}
@@ -229,10 +294,12 @@ export function ProductBacklogPageClient(props: {
         </Card>
         <Card className="border-gray-200 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Story Points</CardTitle>
+            <CardTitle className="text-sm font-medium text-gray-600">
+              {isKanban ? 'Items with description' : 'Story Points'}
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-900">{totalStoryPoints}</div>
+            <div className="text-2xl font-bold text-gray-900">{isKanban ? kanbanDetailedCount : totalStoryPoints}</div>
           </CardContent>
         </Card>
         <Card className="border-gray-200 shadow-sm">
@@ -276,7 +343,7 @@ export function ProductBacklogPageClient(props: {
       <Card className="border-gray-200 shadow-sm">
         <CardHeader>
           <div className="flex justify-between items-center">
-            <CardTitle className="text-lg">Backlog Items</CardTitle>
+            <CardTitle className="text-lg">{isKanban ? 'Backlog queue' : 'Backlog Items'}</CardTitle>
             <div className="flex items-center gap-2">
               <label className="flex items-center gap-2 text-sm text-gray-600">
                 <input
@@ -311,8 +378,10 @@ export function ProductBacklogPageClient(props: {
                       />
                       <div className="min-w-0">
                         <p className="font-medium text-gray-900 truncate">{task.title}</p>
-                        {task.description ? (
-                          <p className="text-sm text-gray-500 line-clamp-1">{task.description}</p>
+                        {task.description?.trim() ? (
+                          <p className="text-sm text-gray-500 line-clamp-2">{task.description}</p>
+                        ) : isKanban ? (
+                          <p className="text-sm text-gray-400 italic">No description yet — add one when you refine this item.</p>
                         ) : null}
                       </div>
                     </div>
@@ -320,9 +389,17 @@ export function ProductBacklogPageClient(props: {
                       <Badge variant="outline" className="text-xs">
                         Priority: {task.priority}
                       </Badge>
-                      <Badge variant="outline" className="text-xs">
-                        {task.story_points || 0} pts
-                      </Badge>
+                      {isKanban ? (
+                        task.description?.trim() ? (
+                          <Badge variant="outline" className="text-xs text-gray-600">
+                            Refined
+                          </Badge>
+                        ) : null
+                      ) : (
+                        <Badge variant="outline" className="text-xs">
+                          {task.story_points || 0} pts
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   <div className="text-xs text-gray-400">{task.position ?? 0}</div>

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { ProductBacklogPageClient } from '@/components/backlog/product-backlog-page-client'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
+import { ensureKanbanPhaseWorkflowStructure } from '@/lib/kanban/ensure-default-workflow-stages'
 
 async function ensureBacklogStageId(supabase: any, orgId: string, phaseId: string) {
   const { data: existingBacklog } = await supabase
@@ -145,8 +146,8 @@ export default async function ProcessBacklogPage({
     .maybeSingle()
   if (!process) notFound()
 
-  if (process.methodology !== 'scrum') {
-    return redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${process.id}/board`)
+  if (process.methodology === 'kanban') {
+    await ensureKanbanPhaseWorkflowStructure(supabase as any, orgId, phase.id)
   }
 
   const backlogStageId = await ensureBacklogStageId(supabase as any, orgId, phase.id)
@@ -169,6 +170,7 @@ export default async function ProcessBacklogPage({
       processId={process.id}
       backlogStageId={backlogStageId}
       phaseTitle={phase.title}
+      methodology={(process.methodology as 'scrum' | 'kanban') ?? 'scrum'}
       tasks={(tasks ?? []) as any}
     />
   )

@@ -77,18 +77,46 @@ export async function POST(request: Request) {
     if (!orgId) return NextResponse.json({ error: 'Missing tenant context', data: null }, { status: 400 })
 
     const body = await request.json();
-    const { 
-      project_id, 
+    const {
+      project_id,
       process_id,
-      title, 
-      description, 
-      priority, 
-      story_points = 0,
+      title,
+      description,
+      priority,
+      story_points: storyPointsRaw,
       due_date,
       assignee_id,
       workflow_stage_id,
-      sprint_id
+      sprint_id,
+      size_band: sizeBandRaw,
+      service_class: serviceClassRaw,
     } = body;
+
+    const story_points =
+      storyPointsRaw === null
+        ? null
+        : storyPointsRaw === undefined
+          ? 0
+          : (() => {
+              const n = Number(storyPointsRaw)
+              return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0
+            })()
+
+    const sizeBands = new Set(['xs', 's', 'm', 'l', 'xl'])
+    const size_band =
+      sizeBandRaw == null || sizeBandRaw === ''
+        ? null
+        : sizeBands.has(String(sizeBandRaw).toLowerCase())
+          ? String(sizeBandRaw).toLowerCase()
+          : null
+
+    const serviceClasses = new Set(['standard', 'fixed_date', 'expedite'])
+    const service_class =
+      serviceClassRaw == null || serviceClassRaw === ''
+        ? 'standard'
+        : serviceClasses.has(String(serviceClassRaw))
+          ? String(serviceClassRaw)
+          : 'standard'
 
     // Skip project_id if it's not a valid UUID (for development)
     const validProjectId = project_id && project_id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) ? project_id : null;
@@ -111,6 +139,8 @@ export async function POST(request: Request) {
       newPosition = (maxPosition?.position ?? -1) + 1;
     }
 
+    const nowIso = new Date().toISOString()
+
     const { data, error } = await supabase
       .from('tasks')
       .insert({
@@ -126,6 +156,9 @@ export async function POST(request: Request) {
         workflow_stage_id,
         sprint_id,
         position: newPosition,
+        size_band,
+        service_class,
+        current_stage_entered_at: nowIso,
         // Temporarily skip created_by_id to avoid RLS recursion
         // created_by_id: (await supabase.auth.getUser()).data.user?.id,
       })
@@ -155,7 +188,20 @@ export async function PATCH(request: Request) {
     if (!orgId) return NextResponse.json({ error: 'Missing tenant context' }, { status: 400 })
 
     const body = await request.json()
-    const { id, ...updates } = body
+    const { id, ...updates } = body as Record<string, unknown> & { id?: string }
+
+    if (updates.workflow_stage_id !== undefined && typeof updates.workflow_stage_id === 'string') {
+      const { data: existing } = await supabase
+        .from('tasks')
+        .select('workflow_stage_id')
+        .eq('id', id)
+        .eq('organization_id', orgId)
+        .maybeSingle()
+
+      if (existing && existing.workflow_stage_id !== updates.workflow_stage_id) {
+        updates.current_stage_entered_at = new Date().toISOString()
+      }
+    }
 
     const { data, error } = await supabase
       .from('tasks')
@@ -168,15 +214,22 @@ export async function PATCH(request: Request) {
     if (error) throw error
 
     return NextResponse.json({ data })
-  } catch (error) {
+  } catch (error: unknown) {
     if (isUniqueViolation(error)) {
       return NextResponse.json(
         { error: 'A task with this name already exists in this sprint.' },
         { status: 409 }
       )
     }
+    const msg =
+      typeof error === 'object' && error !== null && 'message' in error
+        ? String((error as { message: string }).message)
+        : 'Failed to update task'
     console.error('Error updating task:', error)
-    return NextResponse.json({ error: 'Failed to update task' }, { status: 500 })
+    const lower = msg.toLowerCase()
+    const status =
+      lower.includes('wip limit') || lower.includes('kanban wip') ? 409 : lower.includes('violates') ? 400 : 500
+    return NextResponse.json({ error: msg }, { status })
   }
 }
 
