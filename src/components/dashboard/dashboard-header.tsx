@@ -193,7 +193,7 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
             </Button>
           )}
           <div className="flex items-center space-x-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: 'var(--theme-primary)' }}>
               <span className="text-white font-bold text-sm">DF</span>
             </div>
             <span className="text-xl font-bold text-gray-900">DevFlow</span>
@@ -232,7 +232,7 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
                             goToSuggestion(suggestion)
                           }}
                           className={`w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors ${
-                            index === activeSuggestionIndex ? 'bg-blue-50' : ''
+                            index === activeSuggestionIndex ? 'bg-[var(--theme-primary)]/10' : ''
                           }`}
                         >
                           <p className="text-sm font-medium text-gray-900">{suggestion.label}</p>

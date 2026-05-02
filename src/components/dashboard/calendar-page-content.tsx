@@ -100,8 +100,8 @@ export function CalendarPageContent() {
         <Card className="border-gray-200 shadow-sm">
           <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-4 border-b border-gray-100 pb-4">
             <div className="flex items-center gap-2">
-              <div className="rounded-lg bg-blue-50 p-2">
-                <CalendarDays className="h-5 w-5 text-blue-600" />
+              <div className="rounded-lg p-2" style={{ backgroundColor: 'var(--theme-primary)', opacity: 0.1 }}>
+                <CalendarDays className="h-5 w-5" style={{ color: 'var(--theme-primary)' }} />
               </div>
               <div>
                 <CardTitle className="text-lg text-gray-900">{monthLabel}</CardTitle>
@@ -161,17 +161,19 @@ export function CalendarPageContent() {
                     className={cn(
                       'min-h-[88px] bg-white p-1.5 text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset',
                       !inMonth && 'bg-gray-50/80 text-gray-400',
-                      isToday(day) && inMonth && 'ring-1 ring-inset ring-blue-500 bg-blue-50/50'
+                      isToday(day) && inMonth && 'ring-1 ring-inset bg-[var(--theme-primary)]/50' style={{ backgroundColor: 'var(--theme-primary)', opacity: 0.1 }}
                     )}
                   >
                     <span
                       className={cn(
                         'inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium',
                         isToday(day) && inMonth
-                          ? 'bg-blue-600 text-white'
+                          ? 'text-white'
                           : inMonth
                             ? 'text-gray-900'
                             : 'text-gray-400'
+                      }`}
+                      style={isToday(day) && inMonth ? { backgroundColor: 'var(--theme-primary)' } : {}}
                       )}
                     >
                       {format(day, 'd')}
@@ -182,11 +184,13 @@ export function CalendarPageContent() {
                           <span
                             key={dl.id}
                             className={cn(
-                              'h-1.5 w-1.5 rounded-full',
-                              dl.type === 'task' && 'bg-blue-500',
-                              dl.type === 'sprint' && 'bg-purple-500',
-                              dl.type === 'milestone' && 'bg-amber-500'
+                              'h-1.5 w-1.5 rounded-full'
                             )}
+                            style={{
+                              backgroundColor: dl.type === 'task' ? 'var(--theme-primary)' :
+                                             dl.type === 'sprint' ? 'var(--theme-secondary)' :
+                                             dl.type === 'milestone' ? 'var(--theme-accent)' : ''
+                            }}
                             title={dl.title}
                           />
                         ))}
@@ -203,7 +207,7 @@ export function CalendarPageContent() {
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-gray-600">
               <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-blue-500" /> Task due
+                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: 'var(--theme-primary)' }} /> Task due
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-purple-500" /> Sprint
