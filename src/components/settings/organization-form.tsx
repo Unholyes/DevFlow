@@ -75,9 +75,9 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
     const formData = new FormData()
     formData.append('name', data.name)
     if (data.theme_preset) formData.append('theme_preset', data.theme_preset)
-    if (data.primary_color) formData.append('primary_color', data.primary_color)
-    if (data.secondary_color) formData.append('secondary_color', data.secondary_color)
-    if (data.accent_color) formData.append('accent_color', data.accent_color)
+    if (data.primary_color) formData.append('primary_color', data.primary_color.toUpperCase())
+    if (data.secondary_color) formData.append('secondary_color', data.secondary_color.toUpperCase())
+    if (data.accent_color) formData.append('accent_color', data.accent_color.toUpperCase())
 
     const result = await updateOrganization(formData)
 
@@ -203,6 +203,9 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                     )}
                   />
                 </div>
+                <p className="text-xs text-gray-500">
+                  Used for active navigation, buttons, and highlights throughout the app
+                </p>
                 {errors.primary_color && (
                   <p className="text-sm text-red-600">{errors.primary_color.message}</p>
                 )}
@@ -240,6 +243,9 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                     )}
                   />
                 </div>
+                <p className="text-xs text-gray-500">
+                  Used for borders, dividers, and sidebar accents
+                </p>
                 {errors.secondary_color && (
                   <p className="text-sm text-red-600">{errors.secondary_color.message}</p>
                 )}
@@ -277,13 +283,16 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                     )}
                   />
                 </div>
+                <p className="text-xs text-gray-500">
+                  Used for success states, calendar milestones, and positive indicators
+                </p>
                 {errors.accent_color && (
                   <p className="text-sm text-red-600">{errors.accent_color.message}</p>
                 )}
               </div>
             </div>
             <p className="text-xs text-gray-500">
-              Choose custom colors for your organization's theme. These will be applied across the dashboard.
+              Choose custom colors for your organization's theme. Currently applied to navigation, buttons, badges, and key UI elements. More theme integration coming soon!
             </p>
           </div>
         )}
