@@ -44,8 +44,13 @@ export function Features() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex-grow flex items-end justify-center pb-2 overflow-hidden">
-                <div className="w-full h-32 bg-white rounded-xl flex items-center justify-center text-gray-400 border shadow-lg transform translate-y-8 group-hover:translate-y-2 transition-transform duration-300 ease-out">
-                  UI Screenshot
+                <div className="w-full h-32 bg-white rounded-xl border shadow-lg transform translate-y-8 group-hover:translate-y-2 transition-transform duration-300 ease-out overflow-hidden">
+                  <img
+                    src="/images/Multitenantt.png"
+                    alt="Multi-tenant architecture screenshot"
+                    className="h-full w-full object-cover"
+                    draggable={false}
+                  />
                 </div>
               </CardContent>
            </Card>
@@ -61,8 +66,13 @@ export function Features() {
                 </CardDescription>
               </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center pb-2 overflow-hidden">
-                  <div className="w-full h-32 bg-white rounded-xl flex items-center justify-center text-gray-400 border shadow-lg transform translate-y-8 group-hover:translate-y-2 transition-transform duration-300 ease-out">
-                    UI Screenshot
+                  <div className="w-full h-32 bg-white rounded-xl border shadow-lg transform translate-y-8 group-hover:translate-y-2 transition-transform duration-300 ease-out overflow-hidden">
+                    <img
+                      src="/images/Methods.png"
+                      alt="SDLC methodologies screenshot"
+                      className="h-full w-full object-cover"
+                      draggable={false}
+                    />
                   </div>
                 </CardContent>
            </Card>
@@ -78,8 +88,16 @@ export function Features() {
                </CardDescription>
              </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-end pr-4 overflow-hidden">
-                  <div className="w-48 h-32 bg-white rounded-xl flex items-center justify-center text-gray-400 border shadow-lg transform translate-x-12 group-hover:translate-x-4 transition-transform duration-300 ease-out" style={{ height: '452px' }}>
-                    UI Screenshot
+                  <div
+                    className="w-48 bg-white rounded-xl border shadow-lg transform translate-x-12 group-hover:translate-x-4 transition-transform duration-300 ease-out overflow-hidden"
+                    style={{ height: '452px' }}
+                  >
+                    <img
+                      src="/images/Analytics.png"
+                      alt="Project tracking analytics screenshot"
+                      className="h-full w-full object-cover object-left transition-all duration-700 ease-out group-hover:object-right"
+                      draggable={false}
+                    />
                   </div>
                 </CardContent>
            </Card>
@@ -95,8 +113,13 @@ export function Features() {
                 </CardDescription>
               </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center pb-2 overflow-hidden">
-                  <div className="w-64 h-40 bg-white rounded-xl flex items-center justify-center text-gray-400 border shadow-lg transform translate-y-8 group-hover:translate-y-2 transition-transform duration-300 ease-out">
-                    UI Screenshot
+                  <div className="w-64 h-40 bg-white rounded-xl border shadow-lg transform translate-y-8 group-hover:translate-y-2 transition-transform duration-300 ease-out overflow-hidden">
+                    <img
+                      src="/images/TeamMembers.png"
+                      alt="Team collaboration screenshot"
+                      className="h-full w-full object-cover"
+                      draggable={false}
+                    />
                   </div>
                 </CardContent>
            </Card>
