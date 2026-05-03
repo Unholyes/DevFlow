@@ -126,9 +126,9 @@ export async function updateOrganization(formData: FormData) {
     }
 
     if (validatedData.theme_preset) updateData.theme_preset = validatedData.theme_preset
-    if (validatedData.primary_color) updateData.primary_color = validatedData.primary_color
-    if (validatedData.secondary_color) updateData.secondary_color = validatedData.secondary_color
-    if (validatedData.accent_color) updateData.accent_color = validatedData.accent_color
+    if (validatedData.primary_color) updateData.primary_color = validatedData.primary_color.toUpperCase()
+    if (validatedData.secondary_color) updateData.secondary_color = validatedData.secondary_color.toUpperCase()
+    if (validatedData.accent_color) updateData.accent_color = validatedData.accent_color.toUpperCase()
 
     console.log('Updating organization:', organizationId, 'with data:', updateData)
 

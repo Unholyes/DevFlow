@@ -9,8 +9,8 @@
   --card-foreground: hsl(0 0% 9%);
   --popover: hsl(0 0% 100%);
   --popover-foreground: hsl(0 0% 9%);
-  --primary: hsl(217 91% 60%);
-  --primary-foreground: hsl(0 0% 100%);
+  --primary: var(--tw-primary, hsl(217 91% 60%));
+  --primary-foreground: var(--tw-primary-foreground, hsl(0 0% 100%));
   --secondary: hsl(210 40% 96%);
   --secondary-foreground: hsl(222 84% 5%);
   --muted: hsl(210 40% 96%);
@@ -21,7 +21,7 @@
   --destructive-foreground: hsl(0 0% 100%);
   --border: hsl(210 14% 89%);
   --input: hsl(210 14% 89%);
-  --ring: hsl(217 91% 60%);
+  --ring: var(--tw-ring-color, hsl(217 91% 60%));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -32,8 +32,8 @@
     --card-foreground: hsl(222 84% 5%);
     --popover: hsl(0 0% 100%);
     --popover-foreground: hsl(222 84% 5%);
-    --primary: hsl(217 91% 59%);
-    --primary-foreground: hsl(0 0% 100%);
+    --primary: var(--tw-primary, hsl(217 91% 59%));
+    --primary-foreground: var(--tw-primary-foreground, hsl(0 0% 100%));
     --secondary: hsl(210 40% 96%);
     --secondary-foreground: hsl(222 84% 5%);
     --muted: hsl(210 40% 96%);
@@ -44,7 +44,7 @@
     --destructive-foreground: hsl(0 0% 100%);
     --border: hsl(214 32% 91%);
     --input: hsl(214 32% 91%);
-    --ring: hsl(217 91% 59%);
+    --ring: var(--tw-ring-color, hsl(217 91% 59%));
   }
 }
 
@@ -117,6 +117,47 @@ html {
 
   .animate-marquee-vertical-reverse {
     animation: marquee-vertical-reverse var(--duration, 20s) linear infinite;
+  }
+
+  /* Theme utility classes */
+  .theme-primary-bg {
+    background-color: var(--theme-primary);
+  }
+
+  .theme-primary-text {
+    color: var(--theme-primary);
+  }
+
+  .theme-secondary-bg {
+    background-color: var(--theme-secondary);
+  }
+
+  .theme-secondary-text {
+    color: var(--theme-secondary);
+  }
+
+  .theme-accent-bg {
+    background-color: var(--theme-accent);
+  }
+
+  .theme-accent-text {
+    color: var(--theme-accent);
+  }
+
+  .theme-primary-bg-10 {
+    background-color: rgba(var(--theme-primary-rgb), 0.1);
+  }
+
+  .theme-primary-bg-20 {
+    background-color: rgba(var(--theme-primary-rgb), 0.2);
+  }
+
+  .theme-secondary-bg-10 {
+    background-color: rgba(var(--theme-secondary-rgb), 0.1);
+  }
+
+  .theme-accent-bg-10 {
+    background-color: rgba(var(--theme-accent-rgb), 0.1);
   }
 }
 
