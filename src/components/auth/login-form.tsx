@@ -52,52 +52,37 @@ export function LoginForm() {
             return
           }
         } else {
-          // Base domain login should be restricted until the user is approved (and thus attached to an org),
-          // unless they're a super admin.
-          const [{ data: ownedOrg }, { data: anyMembership }] = await Promise.all([
+          // Base domain: load org membership and profile together.
+          const [{ data: ownedOrg }, { data: anyMembership }, { data: profile }] = await Promise.all([
             supabase.from('organizations').select('id').eq('owner_id', authData.user.id).limit(1).maybeSingle(),
             supabase.from('organization_members').select('id').eq('user_id', authData.user.id).limit(1).maybeSingle(),
+            supabase.from('profiles').select('role').eq('id', authData.user.id).single(),
           ])
+
+          if (profile?.role === 'super_admin') {
+            window.location.href = '/super-admin/dashboard'
+            return
+          }
 
           const hasOrg = Boolean(ownedOrg?.id || anyMembership?.id)
           if (!hasOrg) {
-            const { data: latestApp } = await supabase
-              .from('organization_applications')
-              .select('status')
-              .eq('user_id', authData.user.id)
-              .order('submitted_at', { ascending: false })
-              .limit(1)
-              .maybeSingle()
-
-            await supabase.auth.signOut()
-
-            if (!latestApp) {
-              setError('Your account is created, but you must apply for an organization before you can log in.')
-              return
-            }
-
-            if (latestApp.status !== 'approved') {
-              setError('Your organization application is not approved yet. Please wait for a super admin to approve it.')
-              return
-            }
-
-            setError('Your application was approved, but your workspace is still being provisioned. Please try again in a moment.')
+            // Keep the session: /onboarding lets users submit an application and see pending/approved status.
+            window.location.href = '/onboarding'
             return
           }
         }
 
-        // Get user role to determine redirect
+        // Tenant subdomain, or base domain with an org: redirect by role
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')
           .eq('id', authData.user.id)
           .single()
 
-        // Redirect based on role
         if (profile?.role === 'super_admin') {
-          window.location.href = "/super-admin/dashboard"
+          window.location.href = '/super-admin/dashboard'
         } else {
-          window.location.href = "/dashboard"
+          window.location.href = '/dashboard'
         }
       }
     } catch (err) {
