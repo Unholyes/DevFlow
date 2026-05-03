@@ -2,31 +2,33 @@
 
 import { useState, useEffect, useRef } from "react"
 import { KanbanSquare, Cog, Layers, Target } from "lucide-react"
+import { AnimatePresence, motion } from "framer-motion"
 
 const sdlcItems = [
   {
     name: "Kanban",
     description: "Visual workflow management with continuous delivery",
     icon: KanbanSquare,
-    image: "/images/sdlc-kanban.svg"
+    // Temporary PNG placeholder (swap to your own local PNG later)
+    image: "https://picsum.photos/seed/devflow-kanban/800/600?grayscale"
   },
   {
     name: "DevOps",
     description: "Culture and practices for seamless development",
     icon: Cog,
-    image: "/images/sdlc-devops.svg"
+    image: "https://picsum.photos/seed/devflow-devops/800/600?grayscale"
   },
   {
     name: "Waterfall",
     description: "Sequential development with defined phases",
     icon: Layers,
-    image: "/images/sdlc-waterfall.svg"
+    image: "https://picsum.photos/seed/devflow-waterfall/800/600?grayscale"
   },
   {
     name: "Scrum",
     description: "Agile framework that emphasizes incremental delivery.",
     icon: Target,
-    image: "/images/sdlc-scrum.svg"
+    image: "https://picsum.photos/seed/devflow-scrum/800/600?grayscale"
   }
 ]
 
@@ -63,6 +65,9 @@ export function SDLCSShowcase() {
   const handleItemClick = (index: number) => {
     startAnimation(index)
   }
+
+  const goNext = () => startAnimation((activeIndex + 1) % sdlcItems.length)
+  const goPrev = () => startAnimation((activeIndex - 1 + sdlcItems.length) % sdlcItems.length)
 
   useEffect(() => {
     // Start automatic animation on mount
@@ -130,9 +135,57 @@ export function SDLCSShowcase() {
 
         {/* Main Content Placeholder */}
         <div className="max-w-4xl mx-auto">
-          <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-2xl p-12 text-center border border-slate-200 shadow-sm">
-                  <p className="text-gray-600 font-medium">{sdlcItems[activeIndex].name} Visualization</p>
-                  <p className="text-sm text-gray-500 mt-1">Interactive dashboard coming soon</p>
+          <div className="bg-gradient-to-br from-slate-50 to-slate-100 rounded-2xl p-4 md:p-6 border border-slate-200 shadow-sm">
+            <div className="flex items-baseline justify-between gap-4 px-2 pb-3">
+              <p className="text-xs text-gray-500">Drag left/right to switch</p>
+            </div>
+
+            <div className="relative w-full overflow-hidden rounded-xl bg-white/50 border border-slate-200">
+              <div className="relative h-[420px] md:h-[460px]">
+                <AnimatePresence initial={false} mode="popLayout">
+                  <motion.div
+                    key={activeIndex}
+                    className="absolute inset-0 flex items-center justify-center p-4 md:p-6"
+                    initial={{ opacity: 0, x: 40, scale: 0.98 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: -40, scale: 0.98 }}
+                    transition={{ type: "spring", stiffness: 260, damping: 26 }}
+                    drag="x"
+                    dragConstraints={{ left: 0, right: 0 }}
+                    dragElastic={0.12}
+                    onDragEnd={(_, info) => {
+                      const swipe = info.offset.x + info.velocity.x * 0.2
+                      if (swipe < -80) goNext()
+                      else if (swipe > 80) goPrev()
+                    }}
+                  >
+                    <div className="w-full max-w-3xl grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                      <div className="relative order-2 md:order-1">
+                        <div className="text-sm text-slate-500 font-medium mb-2">Methodology</div>
+                        <div className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">
+                          {sdlcItems[activeIndex].name}
+                        </div>
+                        <p className="text-slate-600 mt-3 leading-relaxed">
+                          {sdlcItems[activeIndex].description}
+                        </p>
+                      </div>
+
+                      <div className="order-1 md:order-2">
+                        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-slate-200 shadow-sm bg-gradient-to-br from-slate-50 to-slate-100">
+                          <img
+                            src={sdlcItems[activeIndex].image}
+                            alt={sdlcItems[activeIndex].name}
+                            className="h-full w-full object-cover"
+                            draggable={false}
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/10 via-transparent to-transparent" />
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </div>
           </div>
         </div>
       </div>

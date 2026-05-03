@@ -1,9 +1,11 @@
 import { Button } from "@/components/ui/button"
+import { HeroOrbBackground } from "@/components/Landing_Page/hero-orb-background"
 
 export function Hero() {
   return (
     <section className="relative min-h-[50rem] flex items-center justify-center bg-white dark:bg-slate-50">
-      <div className="container mx-auto px-4 py-16 text-center">
+      <HeroOrbBackground />
+      <div className="relative z-10 container mx-auto px-4 py-16 text-center">
         <div className="max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-200 text-sm font-medium text-slate-700 dark:text-slate-600 mb-8">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
