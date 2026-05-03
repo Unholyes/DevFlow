@@ -8,7 +8,7 @@ interface ThemeColors {
   accent: string
 }
 
-interface OrganizationTheme {
+export interface OrganizationTheme {
   preset: 'default' | 'blue' | 'green' | 'purple' | 'dark' | 'custom'
   colors: ThemeColors
 }

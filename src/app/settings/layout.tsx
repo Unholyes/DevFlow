@@ -2,7 +2,7 @@ import { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
-import { ThemeProvider } from '@/components/theme/theme-provider'
+import { ThemeProvider, type OrganizationTheme } from '@/components/theme/theme-provider'
 import type { UserRole } from '@/types'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
@@ -59,7 +59,7 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
   }
 
   let sidebarProjects: { id: string; name: string }[] = []
-  let organizationTheme = null
+  let organizationTheme: Partial<OrganizationTheme> | undefined = undefined
 
   if (ws.organizationId) {
     const { data: projectRows } = await supabase

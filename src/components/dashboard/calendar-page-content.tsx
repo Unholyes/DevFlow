@@ -161,7 +161,8 @@ export function CalendarPageContent() {
                     className={cn(
                       'min-h-[88px] bg-white p-1.5 text-left transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset',
                       !inMonth && 'bg-gray-50/80 text-gray-400',
-                      isToday(day) && inMonth && 'ring-1 ring-inset bg-[var(--theme-primary)]/50' style={{ backgroundColor: 'var(--theme-primary)', opacity: 0.1 }}
+                      isToday(day) && inMonth &&
+                        'ring-1 ring-inset bg-[color-mix(in_srgb,var(--theme-primary)_12%,white)]',
                     )}
                   >
                     <span
@@ -171,10 +172,13 @@ export function CalendarPageContent() {
                           ? 'text-white'
                           : inMonth
                             ? 'text-gray-900'
-                            : 'text-gray-400'
-                      }`}
-                      style={isToday(day) && inMonth ? { backgroundColor: 'var(--theme-primary)' } : {}}
+                            : 'text-gray-400',
                       )}
+                      style={
+                        isToday(day) && inMonth
+                          ? { backgroundColor: 'var(--theme-primary)' }
+                          : undefined
+                      }
                     >
                       {format(day, 'd')}
                     </span>
