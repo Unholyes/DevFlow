@@ -86,7 +86,7 @@ export function TeamPageContent({ role = 'team_member' }: TeamPageContentProps) 
           </p>
         </div>
         {role === 'tenant_admin' && (
-          <Button className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white">
+          <Button className="shrink-0 text-white" style={{ backgroundColor: 'var(--theme-primary)' }}>
             <UserPlus className="mr-2 h-4 w-4" />
             Invite member
           </Button>
@@ -97,8 +97,8 @@ export function TeamPageContent({ role = 'team_member' }: TeamPageContentProps) 
         <Card className="border-gray-200 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Workspace members</CardTitle>
-            <div className="rounded-lg bg-blue-50 p-2">
-              <Users className="h-4 w-4 text-blue-600" />
+            <div className="rounded-lg p-2" style={{ backgroundColor: 'var(--theme-primary)', opacity: 0.1 }}>
+              <Users className="h-4 w-4" style={{ color: 'var(--theme-primary)' }} />
             </div>
           </CardHeader>
           <CardContent>
@@ -109,8 +109,8 @@ export function TeamPageContent({ role = 'team_member' }: TeamPageContentProps) 
         <Card className="border-gray-200 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Projects represented</CardTitle>
-            <div className="rounded-lg bg-blue-50 p-2">
-              <FolderKanban className="h-4 w-4 text-blue-600" />
+            <div className="rounded-lg p-2" style={{ backgroundColor: 'var(--theme-primary)', opacity: 0.1 }}>
+              <FolderKanban className="h-4 w-4" style={{ color: 'var(--theme-primary)' }} />
             </div>
           </CardHeader>
           <CardContent>
@@ -121,8 +121,8 @@ export function TeamPageContent({ role = 'team_member' }: TeamPageContentProps) 
         <Card className="border-gray-200 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Pending invites</CardTitle>
-            <div className="rounded-lg bg-blue-50 p-2">
-              <Mail className="h-4 w-4 text-blue-600" />
+            <div className="rounded-lg p-2" style={{ backgroundColor: 'var(--theme-primary)', opacity: 0.1 }}>
+              <Mail className="h-4 w-4" style={{ color: 'var(--theme-primary)' }} />
             </div>
           </CardHeader>
           <CardContent>
@@ -171,7 +171,7 @@ export function TeamPageContent({ role = 'team_member' }: TeamPageContentProps) 
               >
                 <div className="flex gap-4">
                   <Avatar className="h-12 w-12 border border-gray-100">
-                    <AvatarFallback className="bg-blue-50 text-sm font-semibold text-blue-700">
+                    <AvatarFallback className="text-sm font-semibold" style={{ backgroundColor: 'var(--theme-primary)', opacity: 0.1, color: 'var(--theme-primary)' }}>
                       {m.initials}
                     </AvatarFallback>
                   </Avatar>
@@ -181,7 +181,8 @@ export function TeamPageContent({ role = 'team_member' }: TeamPageContentProps) 
                       {m.role === 'tenant_admin' ? (
                         <Badge
                           variant="secondary"
-                          className="border-0 bg-blue-600 text-white hover:bg-blue-600"
+                          className="border-0 text-white"
+                          style={{ backgroundColor: 'var(--theme-primary)' }}
                         >
                           <Shield className="mr-1 h-3 w-3" />
                           Admin

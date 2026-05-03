@@ -2,6 +2,7 @@ import { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
+import { ThemeProvider } from '@/components/theme/theme-provider'
 import type { UserRole } from '@/types'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
@@ -58,6 +59,8 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
   }
 
   let sidebarProjects: { id: string; name: string }[] = []
+  let organizationTheme = null
+
   if (ws.organizationId) {
     const { data: projectRows } = await supabase
       .from('projects')
@@ -66,11 +69,31 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
       .order('created_at', { ascending: false })
       .limit(4)
     sidebarProjects = projectRows ?? []
+
+    // Fetch organization theme
+    const { data: orgData } = await supabase
+      .from('organizations')
+      .select('theme_preset, primary_color, secondary_color, accent_color')
+      .eq('id', ws.organizationId)
+      .single()
+
+    if (orgData) {
+      organizationTheme = {
+        preset: orgData.theme_preset || 'default',
+        colors: {
+          primary: orgData.primary_color || '#3B82F6',
+          secondary: orgData.secondary_color || '#64748B',
+          accent: orgData.accent_color || '#10B981',
+        },
+      }
+    }
   }
 
   return (
-    <DashboardLayout role={role} sidebarProjects={sidebarProjects}>
-      {children}
-    </DashboardLayout>
+    <ThemeProvider organizationTheme={organizationTheme}>
+      <DashboardLayout role={role} sidebarProjects={sidebarProjects}>
+        {children}
+      </DashboardLayout>
+    </ThemeProvider>
   )
 }
