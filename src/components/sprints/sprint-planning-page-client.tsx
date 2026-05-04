@@ -245,20 +245,31 @@ export function SprintPlanningPageClient(props: {
       const sprintId = created?.data?.id as string | undefined
       if (!sprintId) throw new Error('Failed to create sprint (missing id)')
 
-      await Promise.all(
-        sprintTasks.map((t) =>
-          fetch('/api/tasks', {
+      // Assign tasks into this sprint. Also ensure `process_id` is set so DB rules (e.g. Kanban WIP)
+      // can correctly detect methodology for hybrid phases.
+      const taskResults = await Promise.all(
+        sprintTasks.map(async (t) => {
+          const res = await fetch('/api/tasks', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               id: t.id,
               sprint_id: sprintId,
+              ...(props.processId ? { process_id: props.processId } : {}),
               // Ensure sprint tasks show on the Scrum board by moving them out of the backlog stage.
               ...(props.sprintStartStageId ? { workflow_stage_id: props.sprintStartStageId } : {}),
             }),
           })
-        )
+          const json = await res.json().catch(() => ({}))
+          return { ok: res.ok, status: res.status, error: json?.error as string | undefined, taskId: t.id }
+        })
       )
+
+      const failed = taskResults.filter((r) => !r.ok)
+      if (failed.length > 0) {
+        const first = failed[0]
+        throw new Error(first.error || `Failed to assign ${failed.length} task(s) into the sprint (status ${first.status})`)
+      }
 
       // After starting a sprint, drop users into the Scrum board for that sprint.
       if (props.processId) {

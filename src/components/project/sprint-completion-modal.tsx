@@ -9,7 +9,10 @@ import { CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
 interface SprintCompletionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onComplete: (data: { retrospective: string; unfinishedAction: 'backlog' | 'next_sprint' }) => void;
+  onComplete: (data: {
+    retrospective: { wentWell: string; improve: string; actionItems: string };
+    unfinishedAction: 'backlog' | 'next_sprint';
+  }) => void;
   sprintData: {
     name: string;
     totalPoints: number;
@@ -23,7 +26,9 @@ interface SprintCompletionModalProps {
 }
 
 export function SprintCompletionModal({ isOpen, onClose, onComplete, sprintData }: SprintCompletionModalProps) {
-  const [retrospective, setRetrospective] = useState('');
+  const [wentWell, setWentWell] = useState('');
+  const [improve, setImprove] = useState('');
+  const [actionItems, setActionItems] = useState('');
   const [unfinishedAction, setUnfinishedAction] = useState<'backlog' | 'next_sprint'>('backlog');
   const [step, setStep] = useState(1);
 
@@ -32,9 +37,14 @@ export function SprintCompletionModal({ isOpen, onClose, onComplete, sprintData 
   const unfinishedPoints = sprintData.unfinishedTasks.reduce((sum, t) => sum + t.storyPoints, 0);
 
   const handleComplete = () => {
-    onComplete({ retrospective, unfinishedAction });
+    onComplete({
+      retrospective: { wentWell, improve, actionItems },
+      unfinishedAction,
+    });
     setStep(1);
-    setRetrospective('');
+    setWentWell('');
+    setImprove('');
+    setActionItems('');
     setUnfinishedAction('backlog');
   };
 
@@ -142,6 +152,8 @@ export function SprintCompletionModal({ isOpen, onClose, onComplete, sprintData 
                     <Textarea
                       placeholder="Share successes and positive outcomes..."
                       className="min-h-[80px]"
+                      value={wentWell}
+                      onChange={(e) => setWentWell(e.target.value)}
                     />
                   </div>
                   <div>
@@ -151,6 +163,8 @@ export function SprintCompletionModal({ isOpen, onClose, onComplete, sprintData 
                     <Textarea
                       placeholder="Share challenges and areas for improvement..."
                       className="min-h-[80px]"
+                      value={improve}
+                      onChange={(e) => setImprove(e.target.value)}
                     />
                   </div>
                   <div>
@@ -160,6 +174,8 @@ export function SprintCompletionModal({ isOpen, onClose, onComplete, sprintData 
                     <Textarea
                       placeholder="List specific actions to take..."
                       className="min-h-[80px]"
+                      value={actionItems}
+                      onChange={(e) => setActionItems(e.target.value)}
                     />
                   </div>
                 </div>

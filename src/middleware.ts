@@ -56,6 +56,23 @@ export async function middleware(req: NextRequest) {
   const tenantSlug = resolveTenantSlugFromHost({ host: req.headers.get('host') })
   if (tenantSlug) requestHeaders.set(TENANT_SLUG_HEADER, tenantSlug)
 
+  const { pathname } = req.nextUrl
+
+  // Skip middleware auth work for static/public assets.
+  // This avoids unnecessary Supabase calls and noisy "Auth session missing!" logs on first load.
+  if (
+    pathname.startsWith('/images/') ||
+    pathname === '/favicon.ico' ||
+    pathname === '/robots.txt' ||
+    pathname === '/sitemap.xml'
+  ) {
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    })
+  }
+
   let res = NextResponse.next({
     request: {
       headers: requestHeaders,
@@ -86,25 +103,39 @@ export async function middleware(req: NextRequest) {
     },
   })
 
+  const MW_AUTH_CODES = {
+    NO_SESSION: 'MW_AUTH_NO_SESSION',
+    REFRESH_TOKEN_NOT_FOUND: 'MW_AUTH_REFRESH_TOKEN_NOT_FOUND',
+    GET_USER_FAILED: 'MW_AUTH_GET_USER_FAILED',
+  } as const
+
   let user: Awaited<ReturnType<typeof supabase.auth.getUser>>['data']['user'] | null = null
   {
     const { data, error } = await supabase.auth.getUser()
     if (error) {
-      // Common in local dev when cookies are stale (non-incognito sessions).
-      // Clear auth cookies to avoid redirect loops.
-      if ((error as any).code === 'refresh_token_not_found') {
-        try {
-          await supabase.auth.signOut()
-        } catch {
-          // ignore
-        }
+      const errCode = (error as any)?.code
+
+      // Common in local dev when cookies are stale or missing. This is not actionable,
+      // and attempting network sign-out in middleware can introduce more noise.
+      if (errCode === 'refresh_token_not_found') {
+        ;(req as any).__mw_auth = { code: MW_AUTH_CODES.REFRESH_TOKEN_NOT_FOUND }
+      } else if (error.message === 'Auth session missing!') {
+        // Normal for unauthenticated first-time visits (no cookies yet).
+        ;(req as any).__mw_auth = { code: MW_AUTH_CODES.NO_SESSION }
+      } else {
+        console.log('[mw] supabase.auth.getUser failed', {
+          code: MW_AUTH_CODES.GET_USER_FAILED,
+          supabaseCode: errCode ?? null,
+          message: error.message,
+          host: req.headers.get('host'),
+          pathname: req.nextUrl.pathname,
+        })
       }
     } else {
       user = data.user
+      ;(req as any).__mw_auth = { code: user ? null : MW_AUTH_CODES.NO_SESSION }
     }
   }
-
-  const { pathname } = req.nextUrl
 
   // Define route types
   const isAdminRoute = pathname.startsWith('/super-admin')

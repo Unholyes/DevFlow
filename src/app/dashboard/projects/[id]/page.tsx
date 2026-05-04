@@ -285,11 +285,11 @@ export default async function ProjectPage({ params }: { params: { id: string } }
                   {!locked ? (
                     <Link
                       href={`/dashboard/projects/${project.id}/phases/${phase.id}`}
-                      className="absolute inset-0 rounded-lg"
+                      className="absolute inset-0 rounded-lg z-10"
                       aria-label={`Open phase ${phase.name}`}
                     />
                   ) : null}
-                  <div className="relative z-10 flex items-start justify-between mb-3">
+                  <div className="relative z-20 pointer-events-none flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2 flex-1">
                       <StatusIcon className={`h-5 w-5 flex-shrink-0 ${statusTextColor}`} />
                       <h3 className="font-semibold text-sm text-gray-900 line-clamp-1">{phase.name}</h3>
@@ -310,14 +310,14 @@ export default async function ProjectPage({ params }: { params: { id: string } }
                     </div>
                   </div>
 
-                  <div className={`relative z-10 text-xs font-medium mb-3 ${statusTextColor}`}>
+                  <div className={`relative z-20 pointer-events-none text-xs font-medium mb-3 ${statusTextColor}`}>
                     {statusLabel}
                   </div>
 
-                  <div className="relative z-10 mb-3 space-y-1">
-                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Processes</p>
+                  <div className="relative z-20 mb-3 space-y-1">
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500 pointer-events-none">Processes</p>
                     {phase.processes.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-wrap gap-1 pointer-events-auto">
                         {phase.processes.map((process, processIndex) => (
                           <Link
                             key={process.id ?? `${process.name}-${processIndex}`}
@@ -333,11 +333,11 @@ export default async function ProjectPage({ params }: { params: { id: string } }
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-gray-500">No processes configured yet.</p>
+                      <p className="text-xs text-gray-500 pointer-events-none">No processes configured yet.</p>
                     )}
                   </div>
 
-                  <div className="relative z-10 space-y-2">
+                  <div className="relative z-20 pointer-events-none space-y-2">
                     <div className="flex justify-between text-xs text-gray-600">
                       <span>Progress</span>
                       <span className="font-semibold text-gray-900">{progress}%</span>

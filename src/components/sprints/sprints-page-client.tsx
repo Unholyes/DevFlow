@@ -323,7 +323,7 @@ export function SprintsPageClient(props: {
                   <Link
                     href={
                       props.processId
-                        ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/board?sprintId=${encodeURIComponent(
+                        ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints/${encodeURIComponent(
                             sprint.id
                           )}`
                         : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${sprint.id}`
