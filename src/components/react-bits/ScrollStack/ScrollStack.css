@@ -1,0 +1,119 @@
+.scroll-stack-scroller {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: visible;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  will-change: scroll-position;
+}
+
+.scroll-stack-inner {
+  padding: 20vh 3rem 40rem;
+  min-height: 100vh;
+}
+
+.scroll-stack--onboarding-modal .scroll-stack-inner {
+  padding-top: 0.25rem;
+  padding-left: 0;
+  padding-right: 0;
+  /*
+   * Just enough runway after the last card for the stack to finish (~half viewport matches pinEnd math),
+   * then scroll stops — no huge empty tail like 32rem.
+   */
+  padding-bottom: calc(max(4rem, min(38vh, 14rem)) + env(safe-area-inset-bottom, 0px));
+  /* Don’t stretch inner to viewport height beyond content (avoids phantom scroll area) */
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.scroll-stack--onboarding-modal .scroll-stack-card:first-child {
+  margin-top: 0;
+}
+
+.scroll-stack--onboarding-modal .scroll-stack-card {
+  width: 100%;
+  max-width: 100%;
+  /* Taller cards so the stack fills the modal instead of a small “floating” tile */
+  height: min(30rem, 58vh);
+  min-height: min(26rem, 52vh);
+  padding: 1.25rem 1.25rem;
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.scroll-stack-card {
+  transform-origin: top center;
+  will-change: transform, filter;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+  box-shadow: 0 0 30px rgba(0, 0, 0, 0.1);
+  height: 20rem;
+  width: 100%;
+  margin: 30px 0;
+  padding: 2rem;
+  border-radius: 28px;
+  box-sizing: border-box;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  position: relative;
+  background: white;
+  border: 1px solid hsl(var(--border));
+}
+
+/* Themes (must come after base `.scroll-stack-card` so gradients win over `background: white`) */
+.scroll-stack-card.scroll-stack-card--theme-slate {
+  background: linear-gradient(160deg, #f8fafc 0%, #e2e8f0 45%, #dbeafe 100%);
+  border-color: rgb(203 213 225);
+  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.08);
+}
+
+.scroll-stack-card.scroll-stack-card--theme-violet {
+  background: linear-gradient(155deg, #faf5ff 0%, #ede9fe 50%, #e9d5ff 100%);
+  border-color: rgb(196 181 253);
+  box-shadow: 0 10px 40px rgba(91, 33, 182, 0.1);
+}
+
+.scroll-stack-card.scroll-stack-card--theme-sky {
+  background: linear-gradient(160deg, #f0f9ff 0%, #dbeafe 40%, #cffafe 100%);
+  border-color: rgb(125 211 252);
+  box-shadow: 0 10px 40px rgba(14 116 144 / 0.12);
+}
+
+.scroll-stack-card.scroll-stack-card--theme-emerald {
+  background: linear-gradient(158deg, #ecfdf5 0%, #a7f3d0 40%, #6ee7b7 95%);
+  border-color: rgb(52 211 153);
+  box-shadow: 0 12px 40px rgba(5 122 85 / 0.12);
+}
+
+.scroll-stack-end {
+  width: 100%;
+  height: 1px;
+}
+
+@media (max-width: 640px) {
+  .scroll-stack-inner {
+    padding: 16vh 1rem 34rem;
+  }
+
+  .scroll-stack--onboarding-modal .scroll-stack-inner {
+    padding-top: 0.25rem;
+    padding-bottom: calc(max(3.5rem, min(36vh, 12rem)) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .scroll-stack--onboarding-modal .scroll-stack-card {
+    height: min(28rem, 56vh);
+    min-height: min(24rem, 50vh);
+    padding: 1rem 1rem;
+  }
+
+  .scroll-stack-card {
+    padding: 1.25rem;
+    border-radius: 22px;
+  }
+}
+
