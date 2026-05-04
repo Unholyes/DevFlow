@@ -1,8 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { ArrowLeft, Calendar, CheckCircle2 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -15,8 +16,11 @@ type Sprint = {
   name: string
   start_date: string
   end_date: string
-  status: 'planned' | 'active' | 'completed'
+  status: 'planned' | 'active' | 'closed'
   story_points_total: number
+  summary?: any | null
+  retrospective?: any | null
+  unfinished_action?: string | null
 }
 
 type Task = {
@@ -29,21 +33,24 @@ type Task = {
   position: number | null
 }
 
-function normalizePriority(p: Task['priority']): 'low' | 'medium' | 'high' {
-  return p === 'critical' ? 'high' : p
-}
-
 export function SprintDetailsPageClient(props: {
   projectId: string
   phaseId: string
+  processId?: string
+  backlogStageId?: string
+  sprintStartStageId?: string
   sprint: Sprint
   tasks: Task[]
 }) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isCompleteOpen, setIsCompleteOpen] = useState(false)
+  useEffect(() => {
+    const shouldOpen = searchParams.get('complete') === '1'
+    if (shouldOpen && props.sprint.status !== 'closed') setIsCompleteOpen(true)
+  }, [searchParams])
   const [isCompleting, setIsCompleting] = useState(false)
   const [tasks, setTasks] = useState<Task[]>(props.tasks)
-  const [togglingTaskId, setTogglingTaskId] = useState<string | null>(null)
 
   const totalTasks = tasks.length
   const completedTasks = tasks.filter((t) => !!t.completed_at).length
@@ -67,99 +74,50 @@ export function SprintDetailsPageClient(props: {
     }
   }, [completedPoints, props.sprint.name, props.sprint.story_points_total, unfinishedTasks])
 
-  const toggleTaskDone = async (taskId: string) => {
-    const task = tasks.find((t) => t.id === taskId)
-    if (!task) return
-
-    const nextCompletedAt = task.completed_at ? null : new Date().toISOString()
-
-    setTogglingTaskId(taskId)
-    // Optimistic UI
-    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, completed_at: nextCompletedAt } : t)))
-
-    try {
-      const res = await fetch('/api/tasks', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: taskId, completed_at: nextCompletedAt }),
-      })
-
-      const json = await res.json()
-      if (!res.ok) throw new Error(json?.error || 'Failed to update task')
-
-      router.refresh()
-    } catch (e) {
-      console.error(e)
-      // Roll back if it failed
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, completed_at: task.completed_at } : t)))
-      alert(e instanceof Error ? e.message : 'Failed to update task')
-    } finally {
-      setTogglingTaskId(null)
-    }
-  }
-
-  const handleCompleteSprint = async (data: { retrospective: string; unfinishedAction: 'backlog' | 'next_sprint' }) => {
+  const handleCompleteSprint = async (data: {
+    retrospective: { wentWell: string; improve: string; actionItems: string }
+    unfinishedAction: 'backlog' | 'next_sprint'
+  }) => {
     setIsCompleting(true)
     try {
       const sprintRes = await fetch('/api/sprints', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: props.sprint.id, status: 'completed' }),
+        body: JSON.stringify({
+          id: props.sprint.id,
+          status: 'closed',
+          unfinished_action: data.unfinishedAction,
+          summary: {
+            completedPoints,
+            totalPoints: props.sprint.story_points_total,
+            completionRate: props.sprint.story_points_total
+              ? Math.round((completedPoints / props.sprint.story_points_total) * 100)
+              : 0,
+            unfinishedCount: unfinishedTasks.length,
+            closedAt: new Date().toISOString(),
+          },
+          retrospective: {
+            wentWell: data.retrospective.wentWell,
+            improve: data.retrospective.improve,
+            actionItems: data.retrospective.actionItems,
+          },
+        }),
       })
 
       const sprintJson = await sprintRes.json()
       if (!sprintRes.ok) throw new Error(sprintJson?.error || 'Failed to complete sprint')
 
-      if (data.unfinishedAction === 'next_sprint' && unfinishedTasks.length > 0) {
-        const today = new Date()
-        const start = today.toISOString().slice(0, 10)
-        const end = new Date(today.getTime() + 13 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-
-        const nextName = `${props.sprint.name} (Next)`
-
-        const createRes = await fetch('/api/sprints', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            project_id: props.projectId,
-            phase_id: props.phaseId,
-            name: nextName,
-            start_date: start,
-            end_date: end,
-            status: 'planned',
-            story_points_total: unfinishedTasks.reduce((sum, t) => sum + (t.story_points || 0), 0),
-          }),
-        })
-
-        const created = await createRes.json()
-        if (!createRes.ok) throw new Error(created?.error || 'Failed to create next sprint')
-        const nextSprintId = created?.data?.id as string | undefined
-        if (!nextSprintId) throw new Error('Failed to create next sprint (missing id)')
-
-        await Promise.all(
-          unfinishedTasks.map((t) =>
-            fetch('/api/tasks', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: t.id, sprint_id: nextSprintId }),
-            })
-          )
-        )
-      } else {
-        // Default: return unfinished tasks back to backlog by clearing sprint_id.
-        await Promise.all(
-          unfinishedTasks.map((t) =>
-            fetch('/api/tasks', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: t.id, sprint_id: null }),
-            })
-          )
-        )
-      }
+      // Important: keep tasks in-place when a sprint is closed so the completed sprint
+      // remains an accurate snapshot of where work was left (columns/statuses included).
+      // (We intentionally do NOT move unfinished tasks out of the sprint here.)
+      void data
 
       setIsCompleteOpen(false)
-      router.push(`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`)
+      router.push(
+        props.processId
+          ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints/${props.sprint.id}?review=1`
+          : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${props.sprint.id}?review=1`
+      )
       router.refresh()
     } catch (e) {
       console.error(e)
@@ -173,7 +131,11 @@ export function SprintDetailsPageClient(props: {
     <div className="space-y-6">
       <div className="flex items-center gap-4 mb-4">
         <Link
-          href={`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`}
+          href={
+            props.processId
+              ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints`
+              : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`
+          }
           className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
@@ -195,13 +157,15 @@ export function SprintDetailsPageClient(props: {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button
-            className="bg-green-600 hover:bg-green-700"
-            onClick={() => setIsCompleteOpen(true)}
-            disabled={props.sprint.status === 'completed' || isCompleting}
-          >
-            Complete Sprint
-          </Button>
+          {props.sprint.status !== 'closed' ? (
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              onClick={() => setIsCompleteOpen(true)}
+              disabled={isCompleting}
+            >
+              Complete Sprint
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -264,7 +228,7 @@ export function SprintDetailsPageClient(props: {
                       id: task.id,
                       title: task.title,
                       description: task.description || '',
-                      priority: normalizePriority(task.priority),
+                      priority: task.priority,
                       storyPoints: task.story_points || 0,
                       assignee: null,
                       position: task.position || 0,
@@ -273,6 +237,8 @@ export function SprintDetailsPageClient(props: {
                     onSelect={() => {}}
                     onEdit={() => {}}
                     onDelete={() => {}}
+                    showCheckbox={false}
+                    showActions={false}
                   />
                   <div className="absolute right-4 top-4 flex items-center gap-2">
                     {task.completed_at ? (
@@ -281,14 +247,6 @@ export function SprintDetailsPageClient(props: {
                         Done
                       </div>
                     ) : null}
-                    <Button
-                      size="sm"
-                      variant={task.completed_at ? 'outline' : 'default'}
-                      onClick={() => toggleTaskDone(task.id)}
-                      disabled={togglingTaskId === task.id || isCompleting || props.sprint.status === 'completed'}
-                    >
-                      {task.completed_at ? 'Undo' : 'Mark Done'}
-                    </Button>
                   </div>
                 </div>
               ))}
@@ -296,6 +254,62 @@ export function SprintDetailsPageClient(props: {
           )}
         </CardContent>
       </Card>
+
+      {props.sprint.status === 'closed' && (props.sprint.summary || props.sprint.retrospective) ? (
+        <Card className="border-gray-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg">Sprint Review</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {props.sprint.summary ? (
+              <div>
+                <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Summary</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                    <p className="text-xs text-gray-500">Completion</p>
+                    <p className="mt-1 text-lg font-semibold text-gray-900">
+                      {props.sprint.summary?.completedPoints ?? completedPoints}/{props.sprint.summary?.totalPoints ?? props.sprint.story_points_total}{' '}
+                      pts
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                    <p className="text-xs text-gray-500">Unfinished action</p>
+                    <p className="mt-1 text-lg font-semibold text-gray-900">
+                      {props.sprint.unfinished_action ?? '—'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {props.sprint.retrospective ? (
+              <div className="space-y-3">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Retrospective</p>
+                <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">What went well</p>
+                    <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">
+                      {props.sprint.retrospective?.wentWell || '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">What could be improved</p>
+                    <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">
+                      {props.sprint.retrospective?.improve || '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Action items</p>
+                    <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">
+                      {props.sprint.retrospective?.actionItems || '—'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <SprintCompletionModal
         isOpen={isCompleteOpen}

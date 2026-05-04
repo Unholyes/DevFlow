@@ -4,6 +4,7 @@ import { FolderKanban, Calendar } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
+import { Button } from '@/components/ui/button'
 
 export default async function ProjectsPage() {
   const tenantSlug = getTenantSlug()
@@ -35,9 +36,14 @@ export default async function ProjectsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Projects</h1>
-        <p className="mt-2 text-gray-600">Manage and track all your projects</p>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Projects</h1>
+          <p className="mt-2 text-gray-600">Manage and track all your projects</p>
+        </div>
+        <Button asChild>
+          <Link href="/dashboard/projects/new">Create Project</Link>
+        </Button>
       </div>
 
       {/* Projects Grid */}

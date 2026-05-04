@@ -43,3 +43,6 @@ next-env.d.ts
 #agents 
 .kilocode
 .kilo
+
+# Upstream addyosmani/agent-skills clone (skills link here via directory junctions)
+.agents/vendor/

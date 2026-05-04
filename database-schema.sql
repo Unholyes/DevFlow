@@ -321,7 +321,7 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- Function to accept team invitation
-CREATE OR REPLACE FUNCTION public.accept_team_invitation(invitation_token TEXT, user_id UUID)
+CREATE OR REPLACE FUNCTION public.accept_team_invitation(invitation_token TEXT, p_user_id UUID)
 RETURNS JSON AS $$
 DECLARE
   invitation_record RECORD;
@@ -343,7 +343,7 @@ BEGIN
 
   -- Add user to organization
   INSERT INTO public.organization_members (organization_id, user_id, role)
-  VALUES (invitation_record.organization_id, user_id, 'member')
+  VALUES (invitation_record.organization_id, p_user_id, 'member')
   ON CONFLICT (organization_id, user_id) DO NOTHING;
 
   RETURN json_build_object('success', true, 'organization_id', invitation_record.organization_id);
@@ -437,6 +437,7 @@ CREATE TABLE IF NOT EXISTS public.projects (
   description TEXT,
   status public.project_status_enum NOT NULL DEFAULT 'active',
   progress_percent INTEGER NOT NULL DEFAULT 0,
+  due_date DATE,
   -- Waterfall-style governance toggle: if enabled, phases can be locked sequentially
   phase_gating_enabled BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -742,6 +743,112 @@ FOR EACH ROW
 EXECUTE FUNCTION public.set_updated_at();
 
 -- -----------------------------------------
+-- PHASE PROCESSES (one phase can have many processes)
+-- -----------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.phase_processes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
+  phase_id UUID NOT NULL REFERENCES public.sdlc_phases(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  methodology public.sdlc_methodology_enum NOT NULL DEFAULT 'kanban',
+  order_index INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (phase_id, order_index)
+);
+
+ALTER TABLE public.phase_processes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Phase processes: select members/owner" ON public.phase_processes
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = phase_processes.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = phase_processes.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Phase processes: insert members/owner" ON public.phase_processes
+  FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = phase_processes.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = phase_processes.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Phase processes: update members/owner" ON public.phase_processes
+  FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = phase_processes.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = phase_processes.organization_id
+        AND om.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = phase_processes.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = phase_processes.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Phase processes: delete members/owner" ON public.phase_processes
+  FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.organizations o
+      WHERE o.id = phase_processes.organization_id
+        AND o.owner_id = auth.uid()
+    )
+    OR EXISTS (
+      SELECT 1
+      FROM public.organization_members om
+      WHERE om.organization_id = phase_processes.organization_id
+        AND om.user_id = auth.uid()
+    )
+  );
+
+DROP TRIGGER IF EXISTS trg_phase_processes_set_updated_at ON public.phase_processes;
+CREATE TRIGGER trg_phase_processes_set_updated_at
+BEFORE UPDATE ON public.phase_processes
+FOR EACH ROW
+EXECUTE FUNCTION public.set_updated_at();
+
+-- -----------------------------------------
 -- WORKFLOW STAGES (task columns / scrum states)
 -- -----------------------------------------
 
@@ -860,6 +967,8 @@ CREATE TABLE IF NOT EXISTS public.sprints (
   organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   phase_id UUID NOT NULL REFERENCES public.sdlc_phases(id) ON DELETE CASCADE,
+  -- Optional: when using per-process sprint planning in a phase
+  process_id UUID REFERENCES public.phase_processes(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   start_date DATE NOT NULL,
   end_date DATE NOT NULL,
@@ -870,6 +979,11 @@ CREATE TABLE IF NOT EXISTS public.sprints (
 );
 
 ALTER TABLE public.sprints ENABLE ROW LEVEL SECURITY;
+
+-- Sprint names must be unique within the same phase+process (but can repeat in other processes)
+CREATE UNIQUE INDEX IF NOT EXISTS sprints_phase_process_name_unique_idx
+ON public.sprints (phase_id, process_id, lower(btrim(name)))
+WHERE process_id IS NOT NULL;
 
 CREATE POLICY "Sprints: select members/owner" ON public.sprints
   FOR SELECT
@@ -972,9 +1086,13 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   -- Scrum association (optional)
   sprint_id UUID REFERENCES public.sprints(id) ON DELETE SET NULL,
 
+  -- Optional: for process-scoped boards/backlogs
+  process_id UUID REFERENCES public.phase_processes(id) ON DELETE SET NULL,
+
   title TEXT NOT NULL,
   description TEXT,
   priority public.task_priority NOT NULL DEFAULT 'medium',
+  story_points INTEGER,
   due_date DATE,
   assignee_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_by_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -986,10 +1104,16 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   completed_at TIMESTAMPTZ,
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  position INTEGER
 );
 
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
+
+-- Task titles must be unique within the same sprint (but can repeat in other sprints)
+CREATE UNIQUE INDEX IF NOT EXISTS tasks_sprint_title_unique_idx
+ON public.tasks (sprint_id, lower(btrim(title)))
+WHERE sprint_id IS NOT NULL;
 
 CREATE POLICY "Tasks: select members/owner" ON public.tasks
   FOR SELECT
@@ -1212,11 +1336,27 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  SELECT ws.wip_limit, sp.methodology
-    INTO v_wip_limit, v_methodology
+  SELECT ws.wip_limit
+    INTO v_wip_limit
   FROM public.workflow_stages ws
-  JOIN public.sdlc_phases sp ON sp.id = ws.phase_id
   WHERE ws.id = NEW.workflow_stage_id;
+
+  v_methodology := NULL;
+
+  IF NEW.process_id IS NOT NULL THEN
+    SELECT pp.methodology
+      INTO v_methodology
+    FROM public.phase_processes pp
+    WHERE pp.id = NEW.process_id;
+  END IF;
+
+  IF v_methodology IS NULL THEN
+    SELECT sp.methodology
+      INTO v_methodology
+    FROM public.workflow_stages ws
+    JOIN public.sdlc_phases sp ON sp.id = ws.phase_id
+    WHERE ws.id = NEW.workflow_stage_id;
+  END IF;
 
   -- Only enforce WIP for Kanban stages with an explicit limit.
   IF v_methodology = 'kanban' AND v_wip_limit IS NOT NULL THEN

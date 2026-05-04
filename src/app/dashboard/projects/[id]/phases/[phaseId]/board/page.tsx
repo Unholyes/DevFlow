@@ -1,13 +1,15 @@
-import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
-import ScrumView from '@/components/project/ScrumView'
-import KanbanView from '@/components/project/KanbanView'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 
-export default async function PhaseBoardPage({ params }: { params: { id: string; phaseId: string } }) {
+export default async function PhaseBoardPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string; phaseId: string }
+  searchParams?: { process?: string; method?: string }
+}) {
   const tenantSlug = getTenantSlug()
   const supabase = createClient()
 
@@ -47,6 +49,15 @@ export default async function PhaseBoardPage({ params }: { params: { id: string;
   const phase = (phases ?? []).find((p) => p.id === params.phaseId)
   if (!phase) notFound()
 
+  const attempt = await supabase
+    .from('phase_processes')
+    .select('id,name,methodology,order_index')
+    .eq('phase_id', phase.id)
+    .order('order_index', { ascending: true })
+
+  const processes =
+    attempt.error?.code === 'PGRST204' ? ([] as any[]) : ((attempt.data as any[]) ?? [])
+
   const phaseIndex = (phases ?? []).findIndex((p) => p.id === phase.id)
   const prev = phaseIndex > 0 ? (phases ?? [])[phaseIndex - 1] : null
 
@@ -57,74 +68,30 @@ export default async function PhaseBoardPage({ params }: { params: { id: string;
     return redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}`)
   }
 
-  const { data: stages } = await supabase
-    .from('workflow_stages')
-    .select('id,name,stage_order,is_done,is_backlog')
-    .eq('phase_id', phase.id)
-    .eq('organization_id', orgId)
-    .order('stage_order', { ascending: true })
+  const selectedProcessName =
+    typeof searchParams?.process === 'string' && searchParams.process.trim().length > 0
+      ? decodeURIComponent(searchParams.process)
+      : null
+  const selectedMethod =
+    typeof searchParams?.method === 'string' && searchParams.method.trim().length > 0
+      ? decodeURIComponent(searchParams.method)
+      : null
 
-  const { data: sprint } = await supabase
-    .from('sprints')
-    .select('id,name,status')
-    .eq('project_id', project.id)
-    .eq('phase_id', phase.id)
-    .eq('organization_id', orgId)
-    .in('status', ['active', 'planned'])
-    .order('start_date', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const resolvedProcess =
+    selectedProcessName
+      ? (processes ?? []).find(
+          (p) =>
+            p.name === selectedProcessName && (selectedMethod ? p.methodology === selectedMethod : true)
+        ) ?? (processes ?? []).find((p) => p.name === selectedProcessName)
+      : (processes ?? [])[0] ?? null
 
-  const { data: sprintTasks } = sprint
-    ? await supabase
-        .from('tasks')
-        .select('id,title,priority,story_points,workflow_stage_id,completed_at,position')
-        .eq('project_id', project.id)
-        .eq('organization_id', orgId)
-        .eq('sprint_id', sprint.id)
-        .order('position', { ascending: true })
-    : { data: [] as any[] }
+  if (!resolvedProcess?.id) {
+    return redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}`)
+  }
 
-  const stageIds = (stages ?? []).map((s) => s.id)
-  const { data: kanbanTasks } =
-    stageIds.length > 0
-      ? await supabase
-          .from('tasks')
-          .select('id,title,priority,story_points,workflow_stage_id,completed_at,position')
-          .eq('project_id', project.id)
-          .eq('organization_id', orgId)
-          .in('workflow_stage_id', stageIds)
-          .order('position', { ascending: true })
-      : { data: [] as any[] }
-
-  return (
-    <div className="space-y-6">
-      {/* Back Button */}
-      <Link 
-        href={`/dashboard/projects/${params.id}/phases/${params.phaseId}`}
-        className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors"
-      >
-        <ArrowLeft className="h-4 w-4 mr-1" />
-        Back to Phase Overview
-      </Link>
-
-      {/* Phase Board (Scrum or Kanban) */}
-      {phase.methodology === 'scrum' ? (
-        <ScrumView
-          projectId={project.id}
-          phaseId={phase.id}
-          sprint={(sprint as any) ?? null}
-          stages={(stages ?? []) as any}
-          tasks={(sprintTasks ?? []) as any}
-        />
-      ) : (
-        <KanbanView
-          projectId={project.id}
-          phaseId={phase.id}
-          stages={(stages ?? []) as any}
-          tasks={(kanbanTasks ?? []) as any}
-        />
-      )}
-    </div>
+  return redirect(
+    resolvedProcess.methodology === 'scrum'
+      ? `/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${resolvedProcess.id}/sprints`
+      : `/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${resolvedProcess.id}/board`
   )
 }

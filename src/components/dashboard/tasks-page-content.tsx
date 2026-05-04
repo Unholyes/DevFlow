@@ -230,7 +230,7 @@ export function TasksPageContent() {
                         <TypeIcon className="h-4 w-4 text-gray-500" aria-hidden />
                       </td>
                       <td className="px-3 py-2 align-middle whitespace-nowrap">
-                        <span className="font-mono text-xs font-medium text-blue-700">{t.key}</span>
+                        <span className="font-mono text-xs font-medium" style={{ color: 'var(--theme-primary)' }}>{t.key}</span>
                       </td>
                       <td className="px-3 py-2 align-middle">
                         <span className="text-gray-900 font-medium line-clamp-2">{t.summary}</span>
@@ -290,7 +290,7 @@ export function TasksPageContent() {
                     <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
                       <span className="truncate">{selected.project}</span>
                       <ChevronRight className="h-3 w-3 shrink-0" />
-                      <span className="font-mono text-blue-700 font-medium">{selected.key}</span>
+                      <span className="font-mono font-medium" style={{ color: 'var(--theme-primary)' }}>{selected.key}</span>
                     </div>
                     <h2 className="text-lg font-semibold text-gray-900 leading-snug">{selected.summary}</h2>
                   </div>
@@ -341,7 +341,7 @@ export function TasksPageContent() {
                         <p className="text-xs text-gray-500">Assignee</p>
                         <div className="flex items-center gap-2 mt-0.5">
                           <Avatar className="h-7 w-7">
-                            <AvatarFallback className="text-xs bg-blue-100 text-blue-800">
+                            <AvatarFallback className="text-xs" style={{ backgroundColor: 'var(--theme-primary)', opacity: 0.2, color: 'var(--theme-primary)' }}>
                               {selected.assignee.initials}
                             </AvatarFallback>
                           </Avatar>
@@ -399,7 +399,7 @@ export function TasksPageContent() {
                     <Link2 className="h-3.5 w-3.5 mr-1.5" />
                     Copy link
                   </Button>
-                  <Button size="sm" className="bg-blue-600 hover:bg-blue-700 flex-1" type="button">
+                  <Button size="sm" className="flex-1" style={{ backgroundColor: 'var(--theme-primary)' }} type="button">
                     Open in board
                   </Button>
                 </div>
@@ -408,7 +408,7 @@ export function TasksPageContent() {
           ) : selected && !selectedInView ? (
             <div className="p-6 flex flex-col items-center justify-center text-center flex-1 text-gray-500">
               <p className="text-sm">Selected issue is hidden by filters.</p>
-              <Button variant="link" className="text-blue-600 mt-2" onClick={() => setProjectId('all')}>
+              <Button variant="link" className="mt-2" style={{ color: 'var(--theme-primary)' }} onClick={() => setProjectId('all')}>
                 Clear project filter
               </Button>
             </div>

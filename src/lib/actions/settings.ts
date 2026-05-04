@@ -53,6 +53,10 @@ export async function updateProfile(formData: FormData) {
 
 const updateOrganizationSchema = z.object({
   name: z.string().min(1, "Organization name is required").max(100, "Organization name must be less than 100 characters"),
+  theme_preset: z.enum(['default', 'blue', 'green', 'purple', 'dark', 'custom']).optional(),
+  primary_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
+  secondary_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
+  accent_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
 })
 
 export async function updateOrganization(formData: FormData) {
@@ -109,15 +113,28 @@ export async function updateOrganization(formData: FormData) {
     // Validate form data
     const validatedData = updateOrganizationSchema.parse({
       name: formData.get('name'),
+      theme_preset: formData.get('theme_preset') || undefined,
+      primary_color: formData.get('primary_color') || undefined,
+      secondary_color: formData.get('secondary_color') || undefined,
+      accent_color: formData.get('accent_color') || undefined,
     })
 
     // Update organization
+    const updateData: any = {
+      name: validatedData.name,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (validatedData.theme_preset) updateData.theme_preset = validatedData.theme_preset
+    if (validatedData.primary_color) updateData.primary_color = validatedData.primary_color
+    if (validatedData.secondary_color) updateData.secondary_color = validatedData.secondary_color
+    if (validatedData.accent_color) updateData.accent_color = validatedData.accent_color
+
+    console.log('Updating organization:', organizationId, 'with data:', updateData)
+
     const { error } = await admin
       .from('organizations')
-      .update({
-        name: validatedData.name,
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', organizationId)
 
     if (error) {
@@ -128,6 +145,13 @@ export async function updateOrganization(formData: FormData) {
     return { success: true }
   } catch (error) {
     console.error('Error updating organization:', error)
+    console.error('Form data received:', {
+      name: formData.get('name'),
+      theme_preset: formData.get('theme_preset'),
+      primary_color: formData.get('primary_color'),
+      secondary_color: formData.get('secondary_color'),
+      accent_color: formData.get('accent_color'),
+    })
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Failed to update organization'

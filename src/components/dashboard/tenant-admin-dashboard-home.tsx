@@ -1,22 +1,20 @@
 'use client'
 
-import { useState } from 'react'
 import Link from 'next/link'
 import { BarChart3, FolderOpen, Settings, UserPlus, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
-// Tenant Admin POV: workspace overview + member management + project status.
-// Data is mocked for now; wire to Supabase when ready.
-export function TenantAdminDashboardHome() {
-  const [isCreateOrgModalOpen] = useState(false)
-
-  const stats = {
-    activeProjects: 0,
-    totalMembers: 0,
-    pendingInvites: 0,
+interface TenantAdminDashboardHomeProps {
+  stats: {
+    activeProjects: number
+    totalMembers: number
+    pendingInvites: number
   }
+}
 
+// Tenant Admin POV: workspace overview + member management + project status.
+export function TenantAdminDashboardHome({ stats }: TenantAdminDashboardHomeProps) {
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -91,7 +89,7 @@ export function TenantAdminDashboardHome() {
           </CardHeader>
           <CardContent>
             <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 p-6 text-sm text-gray-600">
-              Connect your database to populate this with active projects, statuses, and owners.
+              We’re now showing real counts above. Next, we can populate this section with a live project list and health metrics.
             </div>
           </CardContent>
         </Card>

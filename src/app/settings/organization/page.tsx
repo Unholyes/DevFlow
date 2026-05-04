@@ -137,7 +137,7 @@ export default async function OrganizationPage() {
                 {members.map((member: any) => (
                   <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--theme-primary)' }}>
                         <span className="text-white font-medium text-sm">
                           {member.profiles?.full_name
                             ? member.profiles.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase()

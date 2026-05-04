@@ -19,13 +19,15 @@ import { cn } from '@/lib/utils'
 import type { UserRole } from '@/types'
 import { useOrganizationName } from '@/lib/hooks/use-organization-name'
 
-type Project = {
-  id: string
-  name: string
-}
+export type SidebarProject = { id: string; name: string }
 
-// Mock projects for demo
-const mockProjects: Project[] = []
+function sidebarProjectLabel(projects: SidebarProject[], project: SidebarProject) {
+  const norm = (s: string) => s.trim()
+  const name = norm(project.name)
+  const sameName = projects.filter((p) => norm(p.name) === name).length
+  if (sameName <= 1) return project.name
+  return `${project.name} · ${project.id.slice(0, 6)}`
+}
 
 const tenantMemberNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
@@ -46,7 +48,19 @@ const bottomNavigation = [
   { name: 'Settings', href: '/settings', icon: Settings },
 ]
 
-export function DashboardSidebar({ role = 'team_member', isCollapsed = false, onToggle }: { role?: UserRole; isCollapsed?: boolean; onToggle?: () => void }) {
+const SIDEBAR_PROJECT_LIMIT = 4
+
+export function DashboardSidebar({
+  role = 'team_member',
+  isCollapsed = false,
+  onToggle,
+  projects = [],
+}: {
+  role?: UserRole
+  isCollapsed?: boolean
+  onToggle?: () => void
+  projects?: SidebarProject[]
+}) {
   const pathname = usePathname()
   const [isProjectsOpen, setIsProjectsOpen] = useState(true)
   const { name: organizationName } = useOrganizationName()
@@ -54,9 +68,9 @@ export function DashboardSidebar({ role = 'team_member', isCollapsed = false, on
   const navItems = role === 'tenant_admin' ? tenantAdminNavigation : tenantMemberNavigation
 
   return (
-    <div className={`bg-white min-h-screen border-r border-gray-200 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`}>
+    <div className={`bg-white min-h-screen border-r border-gray-200 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`} style={{ borderRightColor: 'var(--theme-secondary)' }}>
       {/* Navigation */}
-      <nav className="flex-2 px-2 py-6 space-y-2">
+      <nav className="flex-1 px-2 py-6 space-y-2">
         {navItems.map((item) => {
           const isActive = item.name === 'Dashboard'
             ? pathname === item.href
@@ -68,8 +82,8 @@ export function DashboardSidebar({ role = 'team_member', isCollapsed = false, on
               className={cn(
                 'flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
                 isActive
-                  ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                  ? 'bg-[var(--theme-primary)]/10 text-[var(--theme-primary)] border-r-2 border-[var(--theme-primary)]'
+                  : 'text-gray-600 hover:bg-[var(--theme-primary)]/5 hover:text-[var(--theme-primary)]',
                 isCollapsed ? 'justify-center' : ''
               )}
               title={isCollapsed ? item.name : undefined}
@@ -96,28 +110,29 @@ export function DashboardSidebar({ role = 'team_member', isCollapsed = false, on
             </button>
             {isProjectsOpen && (
               <div className="mt-2 space-y-1">
-                {mockProjects.slice(0, 5).map((project) => {
+                {projects.slice(0, SIDEBAR_PROJECT_LIMIT).map((project) => {
                   const projectHref = `/dashboard/projects/${project.id}`
                   const isActive = pathname === projectHref
                   return (
                     <Link
                       key={project.id}
                       href={projectHref}
+                      title={sidebarProjectLabel(projects, project)}
                       className={cn(
                         'flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ml-3',
                         isActive
-                          ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
-                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                          ? 'bg-[var(--theme-primary)]/10 text-[var(--theme-primary)] border-r-2 border-[var(--theme-primary)]'
+                          : 'text-gray-600 hover:bg-[var(--theme-primary)]/5 hover:text-[var(--theme-primary)]'
                       )}
                     >
                       <FolderOpen className="mr-3 h-4 w-4" />
-                      <span className="truncate">{project.name}</span>
+                      <span className="truncate">{sidebarProjectLabel(projects, project)}</span>
                     </Link>
                   )
                 })}
                 <Link
                   href="/dashboard/projects"
-                  className="flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors ml-3"
+                  className="flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:bg-[var(--theme-primary)]/5 hover:text-[var(--theme-primary)] rounded-lg transition-colors ml-3"
                 >
                   <FolderOpen className="mr-3 h-4 w-4" />
                   <span>View all projects</span>
@@ -139,8 +154,8 @@ export function DashboardSidebar({ role = 'team_member', isCollapsed = false, on
               className={cn(
                 'flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors',
                 isActive
-                  ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                  ? 'bg-[var(--theme-primary)]/10 text-[var(--theme-primary)] border-r-2 border-[var(--theme-primary)]'
+                  : 'text-gray-600 hover:bg-[var(--theme-primary)]/5 hover:text-[var(--theme-primary)]',
                 isCollapsed ? 'justify-center' : ''
               )}
               title={isCollapsed ? item.name : undefined}
@@ -154,9 +169,9 @@ export function DashboardSidebar({ role = 'team_member', isCollapsed = false, on
 
       {/* Workspace/Organization Selector - Hide when collapsed */}
       {!isCollapsed && (
-        <div className="px-4 py-4 border-t border-gray-200">
+        <div className="px-4 py-4 border-t border-gray-200" style={{ borderTopColor: 'var(--theme-secondary)' }}>
           <div className="flex items-center px-3 py-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center mr-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center mr-3" style={{ backgroundColor: 'var(--theme-primary)' }}>
               <span className="text-white font-bold text-sm">DF</span>
             </div>
             <div>

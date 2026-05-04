@@ -10,19 +10,51 @@ import { supabase } from '@/lib/supabase/client'
 
 type Phase = {
   title: string
-  methodology: 'scrum' | 'kanban'
   is_gated: boolean
+  processes: {
+    name: string
+    methodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
+  }[]
 }
 
 const DEFAULT_PHASES: Phase[] = [
-  { title: 'Requirements', methodology: 'scrum', is_gated: true },
-  { title: 'Design', methodology: 'kanban', is_gated: true },
-  { title: 'Development', methodology: 'scrum', is_gated: true },
-  { title: 'Testing', methodology: 'kanban', is_gated: true },
-  { title: 'Deployment', methodology: 'kanban', is_gated: false },
+  { title: 'Requirements', is_gated: true, processes: [{ name: 'Requirements Workshop', methodology: 'kanban' }] },
+  { title: 'Design', is_gated: true, processes: [{ name: 'Solution Design', methodology: 'kanban' }] },
+  { title: 'Development', is_gated: true, processes: [{ name: 'Feature Delivery Sprint', methodology: 'scrum' }] },
+  { title: 'Testing', is_gated: true, processes: [{ name: 'Quality Validation', methodology: 'kanban' }] },
+  { title: 'Deployment', is_gated: false, processes: [{ name: 'Release Management', methodology: 'devops' }] },
 ]
 
 export function SetupWizard(props: { tenantSlug: string }) {
+  return (
+    <SetupProjectWizard
+      title="Tenant Setup Wizard"
+      description="Configure your first project. This is where “Hybrid SDLC” becomes real: phases are sequential milestones, and each phase can run Scrum or Kanban."
+      submitEndpoint="/api/onboarding/bootstrap"
+      submitLabel="Finish setup"
+      tenantSlug={props.tenantSlug}
+      showSignOut
+    />
+  )
+}
+
+type SetupProjectWizardProps = {
+  title: string
+  description: string
+  submitEndpoint: string
+  submitLabel?: string
+  tenantSlug?: string | null
+  showSignOut?: boolean
+}
+
+export function SetupProjectWizard({
+  title,
+  description,
+  submitEndpoint,
+  submitLabel = 'Finish setup',
+  tenantSlug,
+  showSignOut = false,
+}: SetupProjectWizardProps) {
   const router = useRouter()
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [saving, setSaving] = useState(false)
@@ -34,14 +66,21 @@ export function SetupWizard(props: { tenantSlug: string }) {
   const [phases, setPhases] = useState<Phase[]>(DEFAULT_PHASES)
 
   const isValid = useMemo(() => {
-    return projectName.trim().length > 0 && phases.filter((p) => p.title.trim().length > 0).length > 0
+    return (
+      projectName.trim().length > 0 &&
+      phases.filter(
+        (phase) =>
+          phase.title.trim().length > 0 &&
+          phase.processes.some((process) => process.name.trim().length > 0)
+      ).length > 0
+    )
   }, [projectName, phases])
 
   const submit = async () => {
     if (!isValid) return
     setSaving(true)
     try {
-      const res = await fetch('/api/onboarding/bootstrap', {
+      const res = await fetch(submitEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -83,18 +122,19 @@ export function SetupWizard(props: { tenantSlug: string }) {
       <div className="mx-auto w-full max-w-4xl space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Tenant Setup Wizard</h1>
-            <p className="mt-2 text-gray-600">
-              Configure your first project. This is where “Hybrid SDLC” becomes real: phases are sequential milestones,
-              and each phase can run Scrum or Kanban.
-            </p>
-            <div className="mt-3 text-xs text-gray-500">
-              Tenant: <Badge variant="outline">{props.tenantSlug}</Badge>
-            </div>
+            <h1 className="text-3xl font-bold text-gray-900">{title}</h1>
+            <p className="mt-2 text-gray-600">{description}</p>
+            {tenantSlug ? (
+              <div className="mt-3 text-xs text-gray-500">
+                Tenant: <Badge variant="outline">{tenantSlug}</Badge>
+              </div>
+            ) : null}
           </div>
-          <Button type="button" variant="outline" onClick={handleSignOut} disabled={isSigningOut}>
-            {isSigningOut ? 'Signing out...' : 'Sign out'}
-          </Button>
+          {showSignOut ? (
+            <Button type="button" variant="outline" onClick={handleSignOut} disabled={isSigningOut}>
+              {isSigningOut ? 'Signing out...' : 'Sign out'}
+            </Button>
+          ) : null}
         </div>
 
         <div className="flex gap-2">
@@ -141,6 +181,10 @@ export function SetupWizard(props: { tenantSlug: string }) {
               <CardTitle>Phases (sequential milestones)</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Each phase can contain one or more processes. Set execution methods per process (Scrum, Kanban,
+                Waterfall, or DevOps).
+              </p>
               <div className="space-y-3">
                 {phases.map((p, idx) => (
                   <div key={idx} className="rounded-lg border border-gray-200 bg-white p-4">
@@ -166,23 +210,6 @@ export function SetupWizard(props: { tenantSlug: string }) {
                           }
                         />
                       </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Execution method</label>
-                        <select
-                          value={p.methodology}
-                          onChange={(e) =>
-                            setPhases((prev) =>
-                              prev.map((x, i) =>
-                                i === idx ? { ...x, methodology: e.target.value as Phase['methodology'] } : x
-                              )
-                            )
-                          }
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
-                        >
-                          <option value="scrum">Scrum</option>
-                          <option value="kanban">Kanban</option>
-                        </select>
-                      </div>
                       <label className="flex items-center gap-2 text-sm text-gray-700">
                         <input
                           type="checkbox"
@@ -194,19 +221,139 @@ export function SetupWizard(props: { tenantSlug: string }) {
                         Gated
                       </label>
                     </div>
+                    <div className="mt-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-gray-600">Processes</p>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setPhases((prev) =>
+                              prev.map((x, i) =>
+                                i === idx
+                                  ? {
+                                      ...x,
+                                      processes: [...x.processes, { name: 'New Process', methodology: 'kanban' }],
+                                    }
+                                  : x
+                              )
+                            )
+                          }
+                        >
+                          Add process
+                        </Button>
+                      </div>
+                      {p.processes.map((process, processIdx) => (
+                        <div
+                          key={processIdx}
+                          className="grid grid-cols-1 md:grid-cols-[1fr_180px_auto] gap-2 items-end rounded border border-gray-100 p-2"
+                        >
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Process name</label>
+                            <Input
+                              value={process.name}
+                              onChange={(e) =>
+                                setPhases((prev) =>
+                                  prev.map((x, i) =>
+                                    i === idx
+                                      ? {
+                                          ...x,
+                                          processes: x.processes.map((y, j) =>
+                                            j === processIdx ? { ...y, name: e.target.value } : y
+                                          ),
+                                        }
+                                      : x
+                                  )
+                                )
+                              }
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Execution method</label>
+                            <select
+                              value={process.methodology}
+                              onChange={(e) =>
+                                setPhases((prev) =>
+                                  prev.map((x, i) =>
+                                    i === idx
+                                      ? {
+                                          ...x,
+                                          processes: x.processes.map((y, j) =>
+                                            j === processIdx
+                                              ? { ...y, methodology: e.target.value as typeof y.methodology }
+                                              : y
+                                          ),
+                                        }
+                                      : x
+                                  )
+                                )
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
+                            >
+                              <option value="scrum">Scrum</option>
+                              <option value="kanban">Kanban</option>
+                              <option value="waterfall">Waterfall</option>
+                              <option value="devops">DevOps</option>
+                            </select>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              setPhases((prev) =>
+                                prev.map((x, i) =>
+                                  i === idx
+                                    ? {
+                                        ...x,
+                                        processes: x.processes.filter((_, j) => j !== processIdx),
+                                      }
+                                    : x
+                                )
+                              )
+                            }
+                            disabled={p.processes.length <= 1}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
 
               <div className="flex items-center justify-between">
-                <Button variant="outline" onClick={() => setPhases((p) => [...p, { title: 'New Phase', methodology: 'kanban', is_gated: true }])}>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    setPhases((p) => [
+                      ...p,
+                      {
+                        title: 'New Phase',
+                        is_gated: true,
+                        processes: [{ name: 'New Process', methodology: 'kanban' }],
+                      },
+                    ])
+                  }
+                >
                   Add phase
                 </Button>
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={() => setStep(1)}>
                     Back
                   </Button>
-                  <Button onClick={() => setStep(3)} disabled={phases.filter((p) => p.title.trim()).length === 0}>
+                  <Button
+                    onClick={() => setStep(3)}
+                    disabled={
+                      phases.filter(
+                        (phase) =>
+                          phase.title.trim().length > 0 &&
+                          phase.processes.some((process) => process.name.trim().length > 0)
+                      ).length === 0
+                    }
+                  >
                     Next
                   </Button>
                 </div>
@@ -238,15 +385,23 @@ export function SetupWizard(props: { tenantSlug: string }) {
                     .map((p, idx) => (
                       <div key={idx} className="flex items-center justify-between">
                         <div>
-                          <span className="font-medium">{idx + 1}. {p.title}</span>{' '}
-                          <span className="text-gray-500">({p.methodology})</span>
+                          <span className="font-medium">
+                            {idx + 1}. {p.title}
+                          </span>
+                          <div className="mt-1 text-xs text-gray-500">
+                            {p.processes
+                              .filter((process) => process.name.trim())
+                              .map((process) => `${process.name} (${process.methodology})`)
+                              .join(' · ')}
+                          </div>
                         </div>
                         <Badge variant="outline">{p.is_gated ? 'gated' : 'not gated'}</Badge>
                       </div>
                     ))}
                 </div>
                 <div className="mt-3 text-xs text-gray-500">
-                  Default workflow stages will be created automatically per phase (Scrum includes a Backlog stage and a Done stage).
+                  Workflow stages are created from each phase&apos;s primary process. Scrum uses a Backlog stage and DevOps
+                  uses release-oriented stages by default.
                 </div>
               </div>
 
@@ -255,7 +410,7 @@ export function SetupWizard(props: { tenantSlug: string }) {
                   Back
                 </Button>
                 <Button onClick={submit} disabled={!isValid || saving}>
-                  {saving ? 'Creating…' : 'Finish setup'}
+                  {saving ? 'Creating…' : submitLabel}
                 </Button>
               </div>
             </CardContent>

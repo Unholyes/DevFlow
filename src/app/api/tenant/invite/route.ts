@@ -81,15 +81,20 @@ export async function POST(request: Request) {
     }
 
     // Enforce one-org-per-user:
-    // If the invited email already maps to an existing user (profiles.email) who is attached to ANY org,
+    // If the invited email already maps to an existing auth user who is attached to ANY org,
     // block the invite to prevent cross-org membership.
-    const { data: invitedProfile } = await admin
-      .from('profiles')
-      .select('id')
-      .ilike('email', email)
-      .maybeSingle()
+    const { data: usersData, error: usersError } = await admin.auth.admin.listUsers({
+      page: 1,
+      perPage: 1,
+      // GoTrue admin filter syntax.
+      filter: `email=eq.${email}`,
+    } as any)
 
-    const invitedUserId = invitedProfile?.id ?? null
+    if (usersError) {
+      return NextResponse.json({ error: 'Failed to resolve invited user' }, { status: 500 })
+    }
+
+    const invitedUserId = usersData?.users?.[0]?.id ?? null
 
     if (invitedUserId) {
       const { data: owned } = await admin
@@ -150,7 +155,9 @@ export async function POST(request: Request) {
     // Send email automatically via Supabase Auth invite email.
     // NOTE: Delivery depends on your Supabase Auth SMTP/email configuration.
     const origin = resolveOriginFromHeaders(new Headers(request.headers))
-    const redirectTo = `${origin}/auth/invite/${token}`
+    // Route through /auth/callback so we can exchange the invite `code` for a session cookie
+    // before rendering the set-password screen.
+    const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(`/auth/invite/${token}`)}`
 
     const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
       redirectTo,
@@ -158,10 +165,34 @@ export async function POST(request: Request) {
 
     if (inviteError) {
       // Keep the pending row, but report email failure.
-      return NextResponse.json(
-        { invite: inviteRow, warning: `Invite saved but email failed to send: ${inviteError.message}` },
-        { status: 200 },
-      )
+      // If the user already exists (e.g. previously invited), Supabase won't send another invite email.
+      // In that case, generate a magiclink so the admin can resend a working link.
+      const msg = inviteError.message ?? 'Email failed to send'
+      const alreadyRegistered = /already been registered|already registered|user already registered/i.test(msg)
+
+      if (alreadyRegistered) {
+        const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+          type: 'magiclink',
+          email,
+          options: {
+            redirectTo,
+          },
+        } as any)
+
+        const actionLink = (linkData as any)?.properties?.action_link as string | undefined
+
+        return NextResponse.json(
+          {
+            invite: inviteRow,
+            warning:
+              'Invite saved, but Supabase would not send an invite email because this user already exists. Use the resend link below.',
+            actionLink: !linkError ? actionLink ?? null : null,
+          },
+          { status: 200 },
+        )
+      }
+
+      return NextResponse.json({ invite: inviteRow, warning: `Invite saved but email failed to send: ${msg}` }, { status: 200 })
     }
 
     return NextResponse.json({ invite: inviteRow }, { status: 200 })

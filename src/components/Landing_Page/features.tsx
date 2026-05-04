@@ -34,7 +34,7 @@ export function Features() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
            {/* Top left: Card 1 */}
-           <Card className="bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-blue-50/30 transition-all duration-200 flex flex-col p-6 group">
+           <Card className="bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-blue-50/30 transition-all duration-200 flex flex-col p-6 group ring-2 ring-transparent hover:ring-blue-600">
              <CardHeader className="pb-4">
                 <CardTitle className="text-xl font-semibold text-blue-600">
                   {features[0].name}
@@ -44,14 +44,19 @@ export function Features() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex-grow flex items-end justify-center pb-2 overflow-hidden">
-                <div className="w-full h-32 bg-white rounded-xl flex items-center justify-center text-gray-400 border shadow-lg transform translate-y-8 group-hover:translate-y-2 transition-transform duration-300 ease-out">
-                  UI Screenshot
+                <div className="w-full h-32 bg-white rounded-xl border shadow-lg transform translate-y-8 group-hover:translate-y-2 transition-transform duration-300 ease-out overflow-hidden">
+                  <img
+                    src="/images/Multitenantt.png"
+                    alt="Multi-tenant architecture screenshot"
+                    className="h-full w-full object-cover"
+                    draggable={false}
+                  />
                 </div>
               </CardContent>
            </Card>
 
            {/* Top middle: Card 2 */}
-           <Card className="bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-green-50/30 transition-all duration-200 flex flex-col p-6 group">
+           <Card className="bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md transition-all duration-200 flex flex-col p-6 group hover:bg-blue-50/60 ring-2 ring-transparent hover:ring-blue-600">
              <CardHeader className="pb-4">
                 <CardTitle className="text-xl font-semibold text-blue-600">
                   {features[1].name}
@@ -61,14 +66,19 @@ export function Features() {
                 </CardDescription>
               </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center pb-2 overflow-hidden">
-                  <div className="w-full h-32 bg-white rounded-xl flex items-center justify-center text-gray-400 border shadow-lg transform translate-y-8 group-hover:translate-y-2 transition-transform duration-300 ease-out">
-                    UI Screenshot
+                  <div className="w-full h-32 bg-white rounded-xl border shadow-lg transform translate-y-8 group-hover:translate-y-2 transition-transform duration-300 ease-out overflow-hidden">
+                    <img
+                      src="/images/Methods.png"
+                      alt="SDLC methodologies screenshot"
+                      className="h-full w-full object-cover"
+                      draggable={false}
+                    />
                   </div>
                 </CardContent>
            </Card>
 
            {/* Right: Tall card spanning 2 rows */}
-           <Card className="row-span-2 bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-yellow-50/30 transition-all duration-200 flex flex-col p-6 group">
+           <Card className="row-span-2 bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-yellow-50/30 transition-all duration-200 flex flex-col p-6 group ring-2 ring-transparent hover:ring-blue-600">
              <CardHeader className="pb-4">
                <CardTitle className="text-xl font-semibold text-blue-600">
                  {features[3].name}
@@ -78,14 +88,22 @@ export function Features() {
                </CardDescription>
              </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-end pr-4 overflow-hidden">
-                  <div className="w-48 h-32 bg-white rounded-xl flex items-center justify-center text-gray-400 border shadow-lg transform translate-x-12 group-hover:translate-x-4 transition-transform duration-300 ease-out" style={{ height: '452px' }}>
-                    UI Screenshot
+                  <div
+                    className="w-48 bg-white rounded-xl border shadow-lg transform translate-x-12 group-hover:translate-x-4 transition-transform duration-300 ease-out overflow-hidden"
+                    style={{ height: '452px' }}
+                  >
+                    <img
+                      src="/images/Analytics.png"
+                      alt="Project tracking analytics screenshot"
+                      className="h-full w-full object-cover object-left transition-all duration-700 ease-out group-hover:object-right"
+                      draggable={false}
+                    />
                   </div>
                 </CardContent>
            </Card>
 
             {/* Bottom left: Card 3 spanning 2 columns */}
-            <Card className="md:col-span-2 md:h-80 bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-red-50/30 transition-all duration-200 flex flex-col p-6 group">
+            <Card className="md:col-span-2 md:h-80 bg-gray-50 border-0 rounded-[24px] shadow-sm hover:shadow-md hover:bg-red-50/30 transition-all duration-200 flex flex-col p-6 group ring-2 ring-transparent hover:ring-blue-600">
              <CardHeader className="pb-4">
                 <CardTitle className="text-xl font-semibold text-blue-600">
                   {features[2].name}
@@ -95,8 +113,13 @@ export function Features() {
                 </CardDescription>
               </CardHeader>
                 <CardContent className="flex-grow flex items-end justify-center pb-2 overflow-hidden">
-                  <div className="w-64 h-40 bg-white rounded-xl flex items-center justify-center text-gray-400 border shadow-lg transform translate-y-8 group-hover:translate-y-2 transition-transform duration-300 ease-out">
-                    UI Screenshot
+                  <div className="w-64 h-40 bg-white rounded-xl border shadow-lg transform translate-y-8 group-hover:translate-y-2 transition-transform duration-300 ease-out overflow-hidden">
+                    <img
+                      src="/images/TeamMembers.png"
+                      alt="Team collaboration screenshot"
+                      className="h-full w-full object-cover"
+                      draggable={false}
+                    />
                   </div>
                 </CardContent>
            </Card>

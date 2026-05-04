@@ -25,11 +25,13 @@ export function TeamMemberSignupForm({ token }: TeamMemberSignupFormProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [invitationData, setInvitationData] = useState<{
     email: string
     organizationName: string
     inviterName: string
   } | null>(null)
+  const [hasSession, setHasSession] = useState(false)
 
   const {
     register,
@@ -68,6 +70,44 @@ export function TeamMemberSignupForm({ token }: TeamMemberSignupFormProps) {
     verifyInvitation()
   }, [token])
 
+  useEffect(() => {
+    // After the user clicks the email invite link, /auth/callback should exchange the code
+    // for a session cookie. Confirm we have an authenticated session before allowing password set.
+    const checkSession = async () => {
+      const { data } = await supabase.auth.getSession()
+      setHasSession(Boolean(data.session))
+    }
+    const hydrateSessionFromHash = async () => {
+      if (typeof window === 'undefined') return
+      const hash = window.location.hash?.startsWith('#') ? window.location.hash.slice(1) : window.location.hash
+      if (!hash) return
+
+      const params = new URLSearchParams(hash)
+      const access_token = params.get('access_token')
+      const refresh_token = params.get('refresh_token')
+
+      // Some Supabase email links (OTP / magiclink) return tokens in the hash fragment.
+      // The fragment is not sent to the server, so we must set the session client-side.
+      if (access_token && refresh_token) {
+        await supabase.auth.setSession({ access_token, refresh_token })
+        // Remove tokens from the URL to avoid leaking into logs / screenshots.
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.search)
+      }
+    }
+
+    void hydrateSessionFromHash().finally(() => {
+      void checkSession()
+    })
+
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      checkSession()
+    })
+
+    return () => {
+      sub.subscription.unsubscribe()
+    }
+  }, [])
+
   const onSubmit = async (data: TeamMemberSignupFormData) => {
     if (!invitationData || !token) return
 
@@ -75,37 +115,30 @@ export function TeamMemberSignupForm({ token }: TeamMemberSignupFormProps) {
     setError(null)
 
     try {
-      // Sign up the team member with the invited email
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: invitationData.email,
-        password: data.password,
-        options: {
-          data: {
-            role: 'team_member',
-          }
-        }
-      })
-
-      if (authError) {
-        setError(authError.message)
+      // Invited users are created via `inviteUserByEmail` (server-side).
+      // Clicking the invite email link should authenticate them via /auth/callback.
+      const { data: sessionData } = await supabase.auth.getSession()
+      if (!sessionData.session) {
+        setError('Please open the invite link from your email again to verify and start account setup.')
         return
       }
 
-      // If signup produced a session immediately (email confirmation disabled),
-      // accept the invite on the server (updates invite + inserts membership).
-      if (authData.session) {
-        const res = await fetch(`/api/invite/${encodeURIComponent(token)}`, { method: 'POST' })
-        const payload = await res.json().catch(() => null)
-        if (!res.ok) {
-          setError(payload?.error ?? 'Failed to accept invitation')
-          return
-        }
-        window.location.href = "/dashboard?message=Welcome to the team!"
+      // Set password for the invited (already-authenticated) user.
+      const { error: updateError } = await supabase.auth.updateUser({ password: data.password })
+      if (updateError) {
+        setError(updateError.message)
         return
       }
 
-      // Otherwise, user must confirm email first. After login, they can open the invite link again to join.
-      window.location.href = "/auth/login?message=Check your email to verify your account, then open the invite link again."
+      // Accept the app-level invite (updates invite + inserts membership).
+      const res = await fetch(`/api/invite/${encodeURIComponent(token)}`, { method: 'POST' })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) {
+        setError(payload?.error ?? 'Failed to accept invitation')
+        return
+      }
+
+      window.location.href = "/dashboard?message=Welcome to the team!"
     } catch (err) {
       setError("An unexpected error occurred")
     } finally {
@@ -164,6 +197,12 @@ export function TeamMemberSignupForm({ token }: TeamMemberSignupFormProps) {
       {/* Form */}
       <div className="flex flex-col items-start gap-6">
         <form onSubmit={handleSubmit(onSubmit)} className="w-full space-y-6">
+          {!hasSession && (
+            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              This invite link must be opened from your email to verify you. If you refreshed or opened this page
+              directly, please click the invite email again.
+            </div>
+          )}
           {/* Password Field */}
           <div className="flex flex-col gap-1.5">
             <label
@@ -206,14 +245,29 @@ export function TeamMemberSignupForm({ token }: TeamMemberSignupFormProps) {
               </div>
             </div>
 
-            <div className="flex items-start justify-center px-4 py-3.5 relative self-stretch w-full flex-[0_0_auto] bg-white rounded-xl overflow-hidden border border-solid border-slate-200">
+            <div className="relative flex items-center px-4 py-3.5 bg-white rounded-xl border border-slate-200">
               <input
                 {...register("confirmPassword")}
-                className="relative grow border-[none] bg-transparent self-stretch mt-[-1.00px] font-normal text-slate-900 text-base tracking-[0] leading-[normal] p-0 placeholder:text-slate-400 focus:outline-none"
+                className="relative grow border-[none] bg-transparent self-stretch mt-[-1.00px] font-normal text-slate-900 text-base tracking-[0] leading-[normal] p-0 placeholder:text-slate-400 focus:outline-none pr-10"
                 id="confirmPassword"
                 placeholder="Confirm your password"
-                type="password"
+                type={showConfirmPassword ? "text" : "password"}
               />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setShowConfirmPassword(!showConfirmPassword)
+                }}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors duration-200 z-10 bg-transparent border-none cursor-pointer"
+              >
+                {showConfirmPassword ? (
+                  <EyeOff className="h-5 w-5" />
+                ) : (
+                  <Eye className="h-5 w-5" />
+                )}
+              </button>
             </div>
             {errors.confirmPassword && (
               <p className="text-sm text-red-600 mt-1">{errors.confirmPassword.message}</p>
@@ -230,7 +284,7 @@ export function TeamMemberSignupForm({ token }: TeamMemberSignupFormProps) {
           {/* Join Team Button */}
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || !hasSession}
             className="flex items-center justify-center py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 w-full rounded-xl transition-colors duration-200 relative"
           >
             <div className="absolute inset-0 bg-[#ffffff01] shadow-[0px_4px_6px_-4px_#3b82f633,0px_10px_15px_-3px_#3b82f633] rounded-xl" />

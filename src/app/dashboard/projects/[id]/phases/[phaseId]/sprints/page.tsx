@@ -4,7 +4,13 @@ import { getTenantSlug } from '@/lib/tenant/server'
 import { SprintsPageClient, type SprintWithStats } from '@/components/sprints/sprints-page-client'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 
-export default async function SprintsPage({ params }: { params: { id: string; phaseId: string } }) {
+export default async function SprintsPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string; phaseId: string }
+  searchParams?: { process?: string; method?: string }
+}) {
   const tenantSlug = getTenantSlug()
   const supabase = createClient()
 
@@ -30,49 +36,48 @@ export default async function SprintsPage({ params }: { params: { id: string; ph
 
   const { data: phase } = await supabase
     .from('sdlc_phases')
-    .select('id,methodology')
+    .select('id')
     .eq('id', params.phaseId)
     .eq('project_id', project.id)
     .maybeSingle()
   if (!phase) notFound()
-  if (phase.methodology !== 'scrum') redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}`)
 
-  const { data: sprints } = await supabase
-    .from('sprints')
-    .select('id,name,start_date,end_date,status,story_points_total')
-    .eq('project_id', project.id)
+  const selectedProcessName =
+    typeof searchParams?.process === 'string' && searchParams.process.trim().length > 0
+      ? decodeURIComponent(searchParams.process)
+      : null
+  const selectedMethod =
+    typeof searchParams?.method === 'string' && searchParams.method.trim().length > 0
+      ? decodeURIComponent(searchParams.method)
+      : null
+
+  // Back-compat: resolve process by name/method and redirect to process-scoped route.
+  const { data: processes } = await supabase
+    .from('phase_processes')
+    .select('id,name,methodology,order_index')
     .eq('phase_id', phase.id)
-    .order('start_date', { ascending: false })
+    .order('order_index', { ascending: true })
 
-  const sprintIds = (sprints ?? []).map((s) => s.id)
-  let tasksBySprint: Record<string, { total: number; completed: number }> = {}
+  const process =
+    selectedProcessName
+      ? (processes ?? []).find(
+          (p) => p.name === selectedProcessName && (selectedMethod ? p.methodology === selectedMethod : true)
+        ) ?? (processes ?? []).find((p) => p.name === selectedProcessName)
+      : (processes ?? [])[0] ?? null
 
-  if (sprintIds.length) {
-    const { data: sprintTasks } = await supabase
-      .from('tasks')
-      .select('sprint_id,completed_at')
-      .in('sprint_id', sprintIds)
-
-    tasksBySprint = (sprintTasks ?? []).reduce(
-      (acc, t) => {
-        if (!t.sprint_id) return acc
-        acc[t.sprint_id] ||= { total: 0, completed: 0 }
-        acc[t.sprint_id].total += 1
-        if (t.completed_at) acc[t.sprint_id].completed += 1
-        return acc
-      },
-      {} as Record<string, { total: number; completed: number }>
+  if (process?.id) {
+    return redirect(
+      `/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${process.id}/sprints`
     )
   }
 
-  const sprintsWithStats: SprintWithStats[] = (sprints ?? []).map((s) => {
-    const stats = tasksBySprint[s.id] || { total: 0, completed: 0 }
-    return {
-      ...s,
-      tasks_total: stats.total,
-      tasks_completed: stats.completed,
-    } as SprintWithStats
-  })
-
-  return <SprintsPageClient projectId={project.id} phaseId={phase.id} sprints={sprintsWithStats} />
+  return (
+    <SprintsPageClient
+      projectId={project.id}
+      phaseId={phase.id}
+      sprints={[] as SprintWithStats[]}
+      selectedProcessName={selectedProcessName}
+      selectedMethod={selectedMethod}
+    />
+  )
 }

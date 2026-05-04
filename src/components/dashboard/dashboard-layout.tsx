@@ -2,15 +2,20 @@
 
 import { ReactNode, useState } from 'react'
 import { DashboardHeader } from './dashboard-header'
-import { DashboardSidebar } from './dashboard-sidebar'
+import { DashboardSidebar, type SidebarProject } from './dashboard-sidebar'
 import type { UserRole } from '@/types'
 
 interface DashboardLayoutProps {
   children: ReactNode
   role?: UserRole
+  sidebarProjects?: SidebarProject[]
 }
 
-export function DashboardLayout({ children, role = 'team_member' }: DashboardLayoutProps) {
+export function DashboardLayout({
+  children,
+  role = 'team_member',
+  sidebarProjects = [],
+}: DashboardLayoutProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
 
   return (
@@ -26,10 +31,11 @@ export function DashboardLayout({ children, role = 'team_member' }: DashboardLay
       {/* Fixed Sidebar and Main Content */}
       <div className="flex pt-16">
         <div className={`fixed left-0 top-16 h-[calc(100vh-4rem)] z-40 transition-all duration-300 ${isSidebarCollapsed ? 'w-16' : 'w-64'}`}>
-          <DashboardSidebar 
-            role={role} 
+          <DashboardSidebar
+            role={role}
             isCollapsed={isSidebarCollapsed}
             onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            projects={sidebarProjects}
           />
         </div>
 

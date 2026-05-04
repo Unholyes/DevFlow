@@ -1,4 +1,6 @@
 import { Card, CardContent } from "@/components/ui/card"
+import { Marquee } from "@/components/ui/marquee"
+import { cn } from "@/lib/utils"
 
 const testimonials = [
   {
@@ -31,7 +33,48 @@ const testimonials = [
   },
 ]
 
+function TestimonialCard({
+  testimonial,
+  className,
+}: {
+  testimonial: (typeof testimonials)[number]
+  className?: string
+}) {
+  return (
+    <Card
+      className={cn(
+        "w-[320px] border-0 shadow-sm hover:shadow-md transition-shadow duration-200",
+        className
+      )}
+    >
+      <CardContent className="p-6">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+            {testimonial.avatar}
+          </div>
+          <div className="flex-1">
+            <p className="text-slate-700 dark:text-slate-700 mb-4 leading-relaxed">
+              &ldquo;{testimonial.content}&rdquo;
+            </p>
+            <div>
+              <p className="font-semibold text-slate-900 dark:text-slate-900">
+                {testimonial.name}
+              </p>
+              <p className="text-sm text-slate-600 dark:text-slate-600">
+                {testimonial.role} at {testimonial.company}
+              </p>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 export function Testimonials() {
+  const firstRow = testimonials.slice(0, Math.ceil(testimonials.length / 2))
+  const secondRow = testimonials.slice(Math.ceil(testimonials.length / 2))
+
   return (
     <section className="py-24 bg-white dark:bg-slate-50" style={{paddingTop: '96px', paddingBottom: '96px'}}>
       <div className="container mx-auto px-4">
@@ -44,31 +87,26 @@ export function Testimonials() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-          {testimonials.map((testimonial, idx) => (
-            <Card key={idx} className="border-0 shadow-sm hover:shadow-md transition-shadow duration-200">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                    {testimonial.avatar}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-slate-700 dark:text-slate-700 mb-4 leading-relaxed">
-                      &ldquo;{testimonial.content}&rdquo;
-                    </p>
-                    <div>
-                      <p className="font-semibold text-slate-900 dark:text-slate-900">
-                        {testimonial.name}
-                      </p>
-                      <p className="text-sm text-slate-600 dark:text-slate-600">
-                        {testimonial.role} at {testimonial.company}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+        <div className="relative mx-auto max-w-6xl overflow-hidden">
+          <Marquee pauseOnHover className="[--duration:22s] [--gap:1.25rem] py-2">
+            {firstRow.map((t) => (
+              <TestimonialCard key={`${t.name}-${t.company}`} testimonial={t} />
+            ))}
+          </Marquee>
+
+          <Marquee
+            reverse
+            pauseOnHover
+            className="[--duration:22s] [--gap:1.25rem] py-2"
+          >
+            {secondRow.map((t) => (
+              <TestimonialCard key={`${t.name}-${t.company}`} testimonial={t} />
+            ))}
+          </Marquee>
+
+          {/* Edge fades */}
+          <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-white to-transparent dark:from-slate-50" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-white to-transparent dark:from-slate-50" />
         </div>
       </div>
     </section>

@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CalendarDays, Settings, Users } from 'lucide-react'
 import { Project } from '@/types'
+import Link from 'next/link'
 
 interface ProjectHeaderProps {
   project: {
@@ -13,7 +14,7 @@ interface ProjectHeaderProps {
     progress: number
     tasksCount: number
     completedTasks: number
-    dueDate: Date
+    dueDate: Date | null
     teamMembers: number
   }
 }
@@ -54,7 +55,7 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
               </div>
               <div className="flex items-center gap-1">
                 <CalendarDays className="h-4 w-4" />
-                <span>Due {project.dueDate.toLocaleDateString()}</span>
+                <span>{project.dueDate ? `Due ${project.dueDate.toLocaleDateString()}` : 'No deadline set'}</span>
               </div>
             </div>
           </div>
@@ -63,9 +64,11 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
               <Users className="h-4 w-4 mr-2" />
               Manage Team
             </Button>
-            <Button variant="outline" size="sm">
-              <Settings className="h-4 w-4 mr-2" />
-              Settings
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/dashboard/projects/${project.id}/settings`}>
+                <Settings className="h-4 w-4 mr-2" />
+                Settings
+              </Link>
             </Button>
           </div>
         </div>

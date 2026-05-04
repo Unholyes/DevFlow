@@ -83,7 +83,7 @@ export async function POST(
   // Accept via SECURITY DEFINER function (handles status update + membership insert).
   const { data: result, error } = await admin.rpc('accept_team_invitation', {
     invitation_token: token,
-    user_id: user.id,
+    p_user_id: user.id,
   } as any)
 
   if (error) {
