@@ -178,7 +178,7 @@ export default async function ProcessSprintDetailsPage({
 
   const { data: sprint } = await supabase
     .from('sprints')
-    .select('id,name,start_date,end_date,status,story_points_total,process_id')
+    .select('id,name,start_date,end_date,status,story_points_total,process_id,summary,retrospective,unfinished_action')
     .eq('id', params.sprintId)
     .eq('project_id', project.id)
     .eq('phase_id', phase.id)

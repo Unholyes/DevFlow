@@ -73,7 +73,8 @@ async function setupDatabase() {
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
           user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-          role TEXT DEFAULT 'member' CHECK (role IN ('admin', 'member')),
+          role TEXT DEFAULT 'Member' CHECK (role IN ('Admin', 'Project Manager', 'Member')),
+          roles TEXT[] NOT NULL DEFAULT ARRAY['Member']::text[],
           joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
           UNIQUE(organization_id, user_id)
         );
@@ -107,7 +108,7 @@ async function setupDatabase() {
               SELECT 1 FROM public.organization_members om
               WHERE om.organization_id = organization_members.organization_id
               AND om.user_id = auth.uid()
-              AND om.role = 'admin'
+              AND om.role = 'Admin'
             )
           );
       `
@@ -163,7 +164,7 @@ async function setupDatabase() {
               SELECT 1 FROM public.organization_members om
               WHERE om.organization_id = team_invitations.organization_id
               AND om.user_id = auth.uid()
-              AND om.role = 'admin'
+              AND om.role = 'Admin'
             )
           );
 
@@ -178,7 +179,7 @@ async function setupDatabase() {
               SELECT 1 FROM public.organization_members om
               WHERE om.organization_id = team_invitations.organization_id
               AND om.user_id = auth.uid()
-              AND om.role = 'admin'
+              AND om.role = 'Admin'
             )
           );
       `

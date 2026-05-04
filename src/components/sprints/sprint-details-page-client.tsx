@@ -18,6 +18,9 @@ type Sprint = {
   end_date: string
   status: 'planned' | 'active' | 'closed'
   story_points_total: number
+  summary?: any | null
+  retrospective?: any | null
+  unfinished_action?: string | null
 }
 
 type Task = {
@@ -71,13 +74,34 @@ export function SprintDetailsPageClient(props: {
     }
   }, [completedPoints, props.sprint.name, props.sprint.story_points_total, unfinishedTasks])
 
-  const handleCompleteSprint = async (data: { retrospective: string; unfinishedAction: 'backlog' | 'next_sprint' }) => {
+  const handleCompleteSprint = async (data: {
+    retrospective: { wentWell: string; improve: string; actionItems: string }
+    unfinishedAction: 'backlog' | 'next_sprint'
+  }) => {
     setIsCompleting(true)
     try {
       const sprintRes = await fetch('/api/sprints', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: props.sprint.id, status: 'closed' }),
+        body: JSON.stringify({
+          id: props.sprint.id,
+          status: 'closed',
+          unfinished_action: data.unfinishedAction,
+          summary: {
+            completedPoints,
+            totalPoints: props.sprint.story_points_total,
+            completionRate: props.sprint.story_points_total
+              ? Math.round((completedPoints / props.sprint.story_points_total) * 100)
+              : 0,
+            unfinishedCount: unfinishedTasks.length,
+            closedAt: new Date().toISOString(),
+          },
+          retrospective: {
+            wentWell: data.retrospective.wentWell,
+            improve: data.retrospective.improve,
+            actionItems: data.retrospective.actionItems,
+          },
+        }),
       })
 
       const sprintJson = await sprintRes.json()
@@ -91,8 +115,8 @@ export function SprintDetailsPageClient(props: {
       setIsCompleteOpen(false)
       router.push(
         props.processId
-          ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints`
-          : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`
+          ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints/${props.sprint.id}?review=1`
+          : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${props.sprint.id}?review=1`
       )
       router.refresh()
     } catch (e) {
@@ -230,6 +254,62 @@ export function SprintDetailsPageClient(props: {
           )}
         </CardContent>
       </Card>
+
+      {props.sprint.status === 'closed' && (props.sprint.summary || props.sprint.retrospective) ? (
+        <Card className="border-gray-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg">Sprint Review</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {props.sprint.summary ? (
+              <div>
+                <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">Summary</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                    <p className="text-xs text-gray-500">Completion</p>
+                    <p className="mt-1 text-lg font-semibold text-gray-900">
+                      {props.sprint.summary?.completedPoints ?? completedPoints}/{props.sprint.summary?.totalPoints ?? props.sprint.story_points_total}{' '}
+                      pts
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                    <p className="text-xs text-gray-500">Unfinished action</p>
+                    <p className="mt-1 text-lg font-semibold text-gray-900">
+                      {props.sprint.unfinished_action ?? '—'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {props.sprint.retrospective ? (
+              <div className="space-y-3">
+                <p className="text-xs uppercase tracking-wide text-gray-500">Retrospective</p>
+                <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-4">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">What went well</p>
+                    <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">
+                      {props.sprint.retrospective?.wentWell || '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">What could be improved</p>
+                    <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">
+                      {props.sprint.retrospective?.improve || '—'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">Action items</p>
+                    <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">
+                      {props.sprint.retrospective?.actionItems || '—'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <SprintCompletionModal
         isOpen={isCompleteOpen}

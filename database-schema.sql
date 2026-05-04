@@ -87,7 +87,7 @@ AS $$
     FROM public.organization_members om
     WHERE om.organization_id = p_org_id
       AND om.user_id = auth.uid()
-      AND om.role = 'admin'
+      AND om.role = 'Admin'
   );
 $$;
 
@@ -119,7 +119,8 @@ CREATE TABLE IF NOT EXISTS public.organization_members (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT DEFAULT 'member' CHECK (role IN ('admin', 'member')),
+  role TEXT DEFAULT 'Member' CHECK (role IN ('Admin', 'Project Manager', 'Member')),
+  roles TEXT[] NOT NULL DEFAULT ARRAY['Member']::text[],
   joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(organization_id, user_id)
 );
@@ -263,7 +264,7 @@ CREATE POLICY "Organization admins can create invitations" ON public.team_invita
       SELECT 1 FROM public.organization_members om
       WHERE om.organization_id = team_invitations.organization_id
       AND om.user_id = auth.uid()
-      AND om.role = 'admin'
+      AND om.role = 'Admin'
     )
   );
 
@@ -278,7 +279,7 @@ CREATE POLICY "Organization admins can update invitations" ON public.team_invita
       SELECT 1 FROM public.organization_members om
       WHERE om.organization_id = team_invitations.organization_id
       AND om.user_id = auth.uid()
-      AND om.role = 'admin'
+      AND om.role = 'Admin'
     )
   );
 

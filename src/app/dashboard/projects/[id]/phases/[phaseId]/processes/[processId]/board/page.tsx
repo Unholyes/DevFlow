@@ -123,7 +123,6 @@ export default async function ProcessBoardPage({
             .eq('organization_id', orgId)
             .eq('process_id', process.id)
             .eq('sprint_id', sprintRow.id)
-            .in('workflow_stage_id', stageIds)
             .order('position', { ascending: true })
         : { data: [] as any[] }
 

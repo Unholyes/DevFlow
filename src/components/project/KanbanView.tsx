@@ -524,6 +524,11 @@ export default function KanbanView(props: {
   const [tasks, setTasks] = useState<TaskRow[]>(props.tasks)
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null)
   const [persisting, setPersisting] = useState(false)
+  const tasksRef = useRef<TaskRow[]>(props.tasks)
+  const lastPersistedRef = useRef<TaskRow[]>(props.tasks)
+  const persistTimerRef = useRef<number | null>(null)
+  const persistInFlightRef = useRef(false)
+  const persistQueuedRef = useRef(false)
 
   const [addOpen, setAddOpen] = useState(false)
   const [newColumnName, setNewColumnName] = useState('')
@@ -557,7 +562,12 @@ export default function KanbanView(props: {
 
   useEffect(() => {
     setTasks(props.tasks)
+    tasksRef.current = props.tasks
+    lastPersistedRef.current = props.tasks
   }, [props.tasks])
+  useEffect(() => {
+    tasksRef.current = tasks
+  }, [tasks])
 
   const stageById = useMemo(() => Object.fromEntries(props.stages.map((s) => [s.id, s])), [props.stages])
 
@@ -690,8 +700,17 @@ export default function KanbanView(props: {
     [router]
   )
 
-  const persistBoardChange = useCallback(
-    async (prev: TaskRow[], next: TaskRow[]) => {
+  const flushPersistBoardChange = useCallback(async () => {
+    if (persistInFlightRef.current) {
+      persistQueuedRef.current = true
+      return
+    }
+    persistInFlightRef.current = true
+    setPersisting(true)
+    try {
+      const prev = lastPersistedRef.current
+      const next = tasksRef.current
+
       const prevMap: Record<string, string[]> = {}
       const nextMap: Record<string, string[]> = {}
       for (const s of boardStages) {
@@ -710,72 +729,78 @@ export default function KanbanView(props: {
         return p && p.workflow_stage_id !== t.workflow_stage_id
       })
 
-      setPersisting(true)
-      try {
-        if (moved) {
-          const fromStageId = prev.find((t) => t.id === moved.id)!.workflow_stage_id
-          const targetStage = stageById[moved.workflow_stage_id]
-          const nextCompletedAt = targetStage?.is_done ? new Date().toISOString() : null
+      if (moved) {
+        const fromStageId = prev.find((t) => t.id === moved.id)!.workflow_stage_id
+        const targetStage = stageById[moved.workflow_stage_id]
+        const nextCompletedAt = targetStage?.is_done ? new Date().toISOString() : null
 
-          await patchTask({
-            id: moved.id,
-            workflow_stage_id: moved.workflow_stage_id,
-            completed_at: nextCompletedAt,
-          })
+        await patchTask({
+          id: moved.id,
+          workflow_stage_id: moved.workflow_stage_id,
+          completed_at: nextCompletedAt,
+        })
 
-          const sourceOrder = nextMap[fromStageId] ?? []
-          const targetOrder = nextMap[moved.workflow_stage_id] ?? []
-          const reorderPromises: Promise<unknown>[] = []
-          if (sourceOrder.length > 0) {
-            reorderPromises.push(
-              reorderStage(props.projectId, props.processId, fromStageId, sourceOrder)
-            )
-          }
-          if (targetOrder.length > 0) {
-            reorderPromises.push(
-              reorderStage(props.projectId, props.processId, moved.workflow_stage_id, targetOrder)
-            )
-          }
-          await Promise.all(reorderPromises)
-        } else {
-          const reorderPromises: Promise<unknown>[] = []
-          for (const s of boardStages) {
-            const a = prevMap[s.id].join(',')
-            const b = nextMap[s.id].join(',')
-            if (a !== b && nextMap[s.id].length > 0) {
-              reorderPromises.push(
-                reorderStage(props.projectId, props.processId, s.id, nextMap[s.id])
-              )
-            }
-          }
-          if (backlogStageId && prevBacklog !== nextBacklog && nextBacklog.length > 0) {
-            reorderPromises.push(
-              reorderStage(
-                props.projectId,
-                props.processId,
-                backlogStageId,
-                stageTaskIds(next, backlogStageId)
-              )
-            )
-          }
-          await Promise.all(reorderPromises)
+        const sourceOrder = nextMap[fromStageId] ?? []
+        const targetOrder = nextMap[moved.workflow_stage_id] ?? []
+        const reorderPromises: Promise<unknown>[] = []
+        if (sourceOrder.length > 0) {
+          reorderPromises.push(reorderStage(props.projectId, props.processId, fromStageId, sourceOrder))
         }
-      } catch (e) {
-        console.error(e)
-        setTasks(prev)
-        const msg = e instanceof Error ? e.message : 'Could not update board'
-        const wip = parseKanbanWipErrorMessage(msg, stageById, prev)
-        if (wip) setWipBlockedInfo(wip)
-        else alert(msg)
-      } finally {
-        setPersisting(false)
+        if (targetOrder.length > 0) {
+          reorderPromises.push(
+            reorderStage(props.projectId, props.processId, moved.workflow_stage_id, targetOrder)
+          )
+        }
+        await Promise.all(reorderPromises)
+      } else {
+        const reorderPromises: Promise<unknown>[] = []
+        for (const s of boardStages) {
+          const a = prevMap[s.id].join(',')
+          const b = nextMap[s.id].join(',')
+          if (a !== b && nextMap[s.id].length > 0) {
+            reorderPromises.push(reorderStage(props.projectId, props.processId, s.id, nextMap[s.id]))
+          }
+        }
+        if (backlogStageId && prevBacklog !== nextBacklog && nextBacklog.length > 0) {
+          reorderPromises.push(
+            reorderStage(props.projectId, props.processId, backlogStageId, stageTaskIds(next, backlogStageId))
+          )
+        }
+        await Promise.all(reorderPromises)
       }
 
-      // Revalidate RSC data without blocking the "Saving…" state on full server render latency.
+      lastPersistedRef.current = next
+    } catch (e) {
+      console.error(e)
+      const msg = e instanceof Error ? e.message : 'Could not update board'
+      const wip = parseKanbanWipErrorMessage(msg, stageById, tasksRef.current)
+      if (wip) setWipBlockedInfo(wip)
+      else alert(msg)
+
+      // Prefer server truth after an error rather than trying to rewind multiple rapid drags.
       router.refresh()
-    },
-    [backlogStageId, boardStages, props.processId, props.projectId, router, stageById]
-  )
+      lastPersistedRef.current = tasksRef.current
+    } finally {
+      setPersisting(false)
+      persistInFlightRef.current = false
+
+      if (persistQueuedRef.current) {
+        persistQueuedRef.current = false
+        void flushPersistBoardChange()
+        return
+      }
+
+      // Revalidate RSC data after a short idle; avoids "refresh per drag".
+      router.refresh()
+    }
+  }, [backlogStageId, boardStages, props.processId, props.projectId, router, stageById])
+
+  const schedulePersistBoardChange = useCallback(() => {
+    if (persistTimerRef.current) window.clearTimeout(persistTimerRef.current)
+    persistTimerRef.current = window.setTimeout(() => {
+      void flushPersistBoardChange()
+    }, 450)
+  }, [flushPersistBoardChange])
 
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
@@ -848,7 +873,7 @@ export default function KanbanView(props: {
         const nextColumns = { ...columns, [activeContainer]: nextOrder }
         const next = applyColumnOrders(tasks, nextColumns, stageById)
         setTasks(next)
-        void persistBoardChange(prev, next)
+        schedulePersistBoardChange()
         return
       }
 
@@ -884,13 +909,13 @@ export default function KanbanView(props: {
       }
       const next = applyColumnOrders(tasks, nextColumns, stageById)
       setTasks(next)
-      void persistBoardChange(prev, next)
+      schedulePersistBoardChange()
     },
     [
       boardStageIds,
       boardStages,
       columns,
-      persistBoardChange,
+      schedulePersistBoardChange,
       persistColumnOrder,
       stageById,
       tasks,
@@ -1451,7 +1476,7 @@ export default function KanbanView(props: {
                         stage={stage}
                         tasksInColumn={colTasks}
                         stageById={stageById}
-                        disabled={persisting || columnMutation || reorderingColumns}
+                        disabled={columnMutation || reorderingColumns}
                         onRequestDelete={() => setDeleteStage(stage)}
                         onEditWip={() => {
                           setWipEditStage(stage)
@@ -1463,7 +1488,7 @@ export default function KanbanView(props: {
                   })}
                   <AddColumnTrigger
                     onClick={() => setAddOpen(true)}
-                    disabled={persisting || columnMutation || reorderingColumns}
+                    disabled={columnMutation || reorderingColumns}
                   />
                 </div>
               </SortableContext>
@@ -1487,7 +1512,7 @@ export default function KanbanView(props: {
                         size="sm"
                         className="gap-1"
                         onClick={() => setBacklogCreateOpen(true)}
-                        disabled={persisting || columnMutation || reorderingColumns}
+                        disabled={columnMutation || reorderingColumns}
                       >
                         <Plus className="h-4 w-4" />
                         Add task
@@ -1509,7 +1534,7 @@ export default function KanbanView(props: {
                                     <SortableCard
                                       task={task}
                                       stage={backlogStageEntity}
-                                      disabled={persisting || columnMutation || reorderingColumns}
+                                      disabled={columnMutation || reorderingColumns}
                                       onOpen={openTaskDetail}
                                     />
                                   </div>
