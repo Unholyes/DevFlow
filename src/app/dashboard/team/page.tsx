@@ -1,6 +1,9 @@
 import type { Metadata } from 'next'
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { TeamPageContent } from '@/components/dashboard/team-page-content'
+import { getTenantSlug } from '@/lib/tenant/server'
+import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 
 export const metadata: Metadata = {
   title: 'Team | DevFlow',
@@ -16,7 +19,19 @@ export default async function TeamPage() {
   } = await supabase.auth.getUser()
 
   if (!user) {
-    return null
+    redirect('/auth/login')
+  }
+
+  const tenantSlug = getTenantSlug()
+
+  const orgId = tenantSlug
+    ? (
+        await supabase.from('organizations').select('id').eq('slug', tenantSlug).maybeSingle()
+      ).data?.id ?? null
+    : await resolvePrimaryOrgIdForUser(supabase as any, user.id)
+
+  if (!orgId) {
+    redirect('/onboarding')
   }
 
   const { data: profile } = await supabase
@@ -25,7 +40,7 @@ export default async function TeamPage() {
     .eq('id', user.id)
     .single()
 
-  const role = profile?.role ?? 'team_member'
+  const workspaceRole = profile?.role === 'tenant_admin' ? 'tenant_admin' : 'team_member'
 
-  return <TeamPageContent role={role} />
+  return <TeamPageContent organizationId={orgId} role={workspaceRole} />
 }
