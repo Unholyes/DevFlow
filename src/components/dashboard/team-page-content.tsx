@@ -712,82 +712,84 @@ export function TeamPageContent({
                       </div>
                       <div className="flex shrink-0 items-center gap-3">
                         <span className="text-xs text-gray-500">Joined {m.joinedAt}</span>
-                        {editingMemberId === m.id ? (
-                          <div className="flex gap-1">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
-                                  Select roles
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="min-w-[220px]">
-                                {roleOptions.builtIns.map((opt) => {
-                                  const checked = draftRoles.includes(opt.value)
-                                  return (
-                                    <DropdownMenuCheckboxItem
-                                      key={opt.value}
-                                      checked={checked}
-                                      onSelect={(e) => e.preventDefault()}
-                                      onCheckedChange={(next) => {
-                                        setDraftRoles((cur) => {
-                                          if (next) return Array.from(new Set([...cur, opt.value]))
-                                          const filtered = cur.filter((x) => x !== opt.value)
-                                          return filtered.length > 0 ? filtered : ['Member']
-                                        })
-                                      }}
-                                    >
-                                      {opt.label}
-                                    </DropdownMenuCheckboxItem>
-                                  )
-                                })}
-                                <DropdownMenuSeparator />
-                                <div className="px-2 py-1 text-[11px] text-slate-500">Select one or more roles.</div>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => void handleRolesChange(m.id, draftRoles)}
-                              className="h-7 px-2 text-xs"
-                            >
-                              Save
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setEditingMemberId(null)
-                                setDraftRoles(m.roles)
-                              }}
-                              className="h-7 px-2 text-xs"
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => {
-                                setEditingMemberId(m.id)
-                                setDraftRoles(m.roles.length > 0 ? m.roles : ['Member'])
-                              }}
-                              className="h-7 px-2 text-xs"
-                            >
-                              Edit Roles
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => void handleRemoveMember(m.id)}
-                              className="h-7 px-2 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
-                              disabled={m.userId === currentUserId}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        )}
+                        {canManageRoles ? (
+                          editingMemberId === m.id ? (
+                            <div className="flex gap-1">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
+                                    Select roles
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="min-w-[220px]">
+                                  {roleOptions.builtIns.map((opt) => {
+                                    const checked = draftRoles.includes(opt.value)
+                                    return (
+                                      <DropdownMenuCheckboxItem
+                                        key={opt.value}
+                                        checked={checked}
+                                        onSelect={(e) => e.preventDefault()}
+                                        onCheckedChange={(next) => {
+                                          setDraftRoles((cur) => {
+                                            if (next) return Array.from(new Set([...cur, opt.value]))
+                                            const filtered = cur.filter((x) => x !== opt.value)
+                                            return filtered.length > 0 ? filtered : ['Member']
+                                          })
+                                        }}
+                                      >
+                                        {opt.label}
+                                      </DropdownMenuCheckboxItem>
+                                    )
+                                  })}
+                                  <DropdownMenuSeparator />
+                                  <div className="px-2 py-1 text-[11px] text-slate-500">Select one or more roles.</div>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => void handleRolesChange(m.id, draftRoles)}
+                                className="h-7 px-2 text-xs"
+                              >
+                                Save
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingMemberId(null)
+                                  setDraftRoles(m.roles)
+                                }}
+                                className="h-7 px-2 text-xs"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  setEditingMemberId(m.id)
+                                  setDraftRoles(m.roles.length > 0 ? m.roles : ['Member'])
+                                }}
+                                className="h-7 px-2 text-xs"
+                              >
+                                Edit Roles
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => void handleRemoveMember(m.id)}
+                                className="h-7 px-2 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+                                disabled={m.userId === currentUserId}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )
+                        ) : null}
                       </div>
                     </div>
                   ))

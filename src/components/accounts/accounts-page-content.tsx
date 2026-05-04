@@ -412,12 +412,6 @@ export function AccountsPageContent({
     }
   }, [selectedOrganizationId, currentUserId])
 
-  useEffect(() => {
-    if (!canManageRoles && activeTab === 'roles') {
-      setActiveTab('members')
-    }
-  }, [canManageRoles, activeTab])
-
   const handleInvite = async () => {
     const email = inviteEmail.trim().toLowerCase()
     if (!email) return
@@ -679,143 +673,145 @@ export function AccountsPageContent({
           >
             Teams
           </button>
-          {canManageRoles ? (
-            <button
-              type="button"
-              onClick={() => setActiveTab('roles')}
-              className={[
-                'pb-3 text-sm font-medium',
-                activeTab === 'roles' ? 'text-gray-900 border-b-2 border-[#7a2233]' : 'text-gray-500 hover:text-gray-700',
-              ].join(' ')}
-            >
-              Roles
-            </button>
-          ) : null}
+          <button
+            type="button"
+            onClick={() => setActiveTab('roles')}
+            className={[
+              'pb-3 text-sm font-medium',
+              activeTab === 'roles' ? 'text-gray-900 border-b-2 border-[#7a2233]' : 'text-gray-500 hover:text-gray-700',
+            ].join(' ')}
+          >
+            Roles
+          </button>
         </div>
       </div>
 
-      {activeTab === 'roles' && canManageRoles ? (
-        <div className="pt-2">
-          <div className="mb-3 flex items-center justify-end">
-            <Dialog
-              open={isAssignRoleOpen}
-              onOpenChange={(v) => {
-                setIsAssignRoleOpen(v)
-                if (!v) {
-                  setAssignQuery('')
-                  setAssignSelectedUserIds([])
-                }
-              }}
-            >
-              <DialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="h-9"
-                  onClick={() => {
-                    setAssignRoleName('Member')
-                  }}
-                >
-                  Assign role
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-lg p-0">
-                <DialogHeader className="space-y-1 border-b border-slate-200 px-6 py-5 text-left">
-                  <div className="flex items-start gap-4">
-                    <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700">
-                      <Users className="h-5 w-5" />
-                    </div>
-                    <div className="min-w-0">
-                      <DialogTitle className="text-lg">Assign this role</DialogTitle>
-                      <DialogDescription className="mt-1">
-                        Select one or multiple employees to assign to this role{' '}
-                        <span className="font-medium text-[#7a2233]">“{assignRoleName}”</span>.
-                      </DialogDescription>
-                    </div>
-                  </div>
-                </DialogHeader>
-
-                <div className="space-y-4 px-6 py-5">
-                  <div className="rounded-xl border border-slate-200 bg-white p-3">
-                    <div className="flex flex-wrap gap-2">
-                      {assignSelectedUsers.length === 0 ? (
-                        <div className="text-sm text-slate-500">No one selected yet.</div>
-                      ) : (
-                        assignSelectedUsers.map((u) => (
-                          <span
-                            key={u.id}
-                            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700"
-                          >
-                            <Avatar className="h-5 w-5">
-                              <AvatarFallback className="bg-white text-[10px] text-slate-600">
-                                {initials(u.name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="max-w-[180px] truncate">{u.name}</span>
-                            <button
-                              type="button"
-                              className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-slate-500 hover:text-slate-700"
-                              onClick={() => setAssignSelectedUserIds((cur) => cur.filter((id) => id !== u.id))}
-                              aria-label={`Remove ${u.name}`}
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
-                        ))
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <Input
-                        value={assignQuery}
-                        onChange={(e) => setAssignQuery(e.target.value)}
-                        placeholder="Search for an individual or team"
-                        className="pl-9"
-                      />
-                    </div>
-
-                    {assignCandidates.length > 0 ? (
-                      <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white">
-                        {assignCandidates.map((c) => (
-                          <button
-                            key={c.id}
-                            type="button"
-                            className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-slate-50"
-                            onClick={() => setAssignSelectedUserIds((cur) => [...cur, c.id])}
-                          >
-                            <Avatar className="h-7 w-7">
-                              <AvatarFallback className="bg-slate-100 text-xs text-slate-700">
-                                {initials(c.name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="min-w-0">
-                              <span className="block truncate font-medium text-slate-900">{c.name}</span>
-                              <span className="block truncate text-xs text-slate-500">{c.email}</span>
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-
-                <DialogFooter className="border-t border-slate-200 px-6 py-5">
+      {activeTab === 'roles' ? (
+        canManageRoles ? (
+          <div className="pt-2">
+            <div className="mb-3 flex items-center justify-end">
+              <Dialog
+                open={isAssignRoleOpen}
+                onOpenChange={(v) => {
+                  setIsAssignRoleOpen(v)
+                  if (!v) {
+                    setAssignQuery('')
+                    setAssignSelectedUserIds([])
+                  }
+                }}
+              >
+                <DialogTrigger asChild>
                   <Button
-                    className="w-full bg-[#7a2233] text-white hover:bg-[#651c2a]"
-                    disabled={assignSelectedUserIds.length === 0}
-                    onClick={() => setIsAssignRoleOpen(false)}
+                    variant="outline"
+                    className="h-9"
+                    onClick={() => {
+                      setAssignRoleName('Member')
+                    }}
                   >
-                    Assign
+                    Assign role
                   </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </div>
+                </DialogTrigger>
+                <DialogContent className="max-w-lg p-0">
+                  <DialogHeader className="space-y-1 border-b border-slate-200 px-6 py-5 text-left">
+                    <div className="flex items-start gap-4">
+                      <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700">
+                        <Users className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <DialogTitle className="text-lg">Assign this role</DialogTitle>
+                        <DialogDescription className="mt-1">
+                          Select one or multiple employees to assign to this role{' '}
+                          <span className="font-medium text-[#7a2233]">“{assignRoleName}”</span>.
+                        </DialogDescription>
+                      </div>
+                    </div>
+                  </DialogHeader>
 
-          <PermissionsPageContent organizationId={selectedOrganizationId} embedded />
-        </div>
+                  <div className="space-y-4 px-6 py-5">
+                    <div className="rounded-xl border border-slate-200 bg-white p-3">
+                      <div className="flex flex-wrap gap-2">
+                        {assignSelectedUsers.length === 0 ? (
+                          <div className="text-sm text-slate-500">No one selected yet.</div>
+                        ) : (
+                          assignSelectedUsers.map((u) => (
+                            <span
+                              key={u.id}
+                              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700"
+                            >
+                              <Avatar className="h-5 w-5">
+                                <AvatarFallback className="bg-white text-[10px] text-slate-600">
+                                  {initials(u.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="max-w-[180px] truncate">{u.name}</span>
+                              <button
+                                type="button"
+                                className="ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded-full text-slate-500 hover:text-slate-700"
+                                onClick={() => setAssignSelectedUserIds((cur) => cur.filter((id) => id !== u.id))}
+                                aria-label={`Remove ${u.name}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <Input
+                          value={assignQuery}
+                          onChange={(e) => setAssignQuery(e.target.value)}
+                          placeholder="Search for an individual or team"
+                          className="pl-9"
+                        />
+                      </div>
+
+                      {assignCandidates.length > 0 ? (
+                        <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                          {assignCandidates.map((c) => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                              onClick={() => setAssignSelectedUserIds((cur) => [...cur, c.id])}
+                            >
+                              <Avatar className="h-7 w-7">
+                                <AvatarFallback className="bg-slate-100 text-xs text-slate-700">
+                                  {initials(c.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="min-w-0">
+                                <span className="block truncate font-medium text-slate-900">{c.name}</span>
+                                <span className="block truncate text-xs text-slate-500">{c.email}</span>
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  <DialogFooter className="border-t border-slate-200 px-6 py-5">
+                    <Button
+                      className="w-full bg-[#7a2233] text-white hover:bg-[#651c2a]"
+                      disabled={assignSelectedUserIds.length === 0}
+                      onClick={() => setIsAssignRoleOpen(false)}
+                    >
+                      Assign
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
+
+            <PermissionsPageContent organizationId={selectedOrganizationId} embedded />
+          </div>
+        ) : (
+          <div className="py-8 text-center text-gray-500">You do not have permission to manage roles.</div>
+        )
       ) : activeTab === 'teams' ? (
         <div className="pt-6">
           <Card className="border-gray-200 shadow-sm">
