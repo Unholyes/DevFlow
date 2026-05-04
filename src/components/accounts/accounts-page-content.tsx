@@ -880,6 +880,7 @@ export function AccountsPageContent({
                               <DropdownMenuCheckboxItem
                                 key={opt.value}
                                 checked={checked}
+                                onSelect={(e) => e.preventDefault()}
                                 onCheckedChange={(next) => {
                                   setDraftRoles((cur) => {
                                     if (next) return Array.from(new Set([...cur, opt.value]))
