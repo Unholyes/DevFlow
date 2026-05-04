@@ -123,6 +123,68 @@ function isNonEmptyStringArray(v: unknown): v is string[] {
   return v.every((x) => typeof x === 'string' && x.trim().length > 0)
 }
 
+function asPermissionStrings(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((x): x is string => typeof x === 'string')
+}
+
+function permissionsIncludeAccountMembersManage(permissions: unknown): boolean {
+  return asPermissionStrings(permissions).some((p) => p.toLowerCase() === 'account.members.manage')
+}
+
+const BUILT_IN_WORKSPACE_ROLE_NAMES: WorkspaceRole[] = ['Admin', 'Project Manager', 'Member']
+
+function isBuiltInWorkspaceRoleName(name: string): name is WorkspaceRole {
+  return (BUILT_IN_WORKSPACE_ROLE_NAMES as readonly string[]).includes(normalizeRoleName(name))
+}
+
+/**
+ * Admin: full access to Roles tab. Otherwise require account.members.manage on any assigned
+ * built-in row (organization_default_roles) or custom row (organization_roles).
+ */
+function computeCanManageRoles(
+  currentUserId: string,
+  memberRows: any[] | null | undefined,
+  customOrgRoles: OrganizationRoleRow[],
+  defaultRoleRows: Array<{ role: string; permissions: unknown }> | null | undefined,
+): boolean {
+  const row = (memberRows ?? []).find((m: any) => m.user_id === currentUserId)
+  if (!row) return false
+
+  const assigned: string[] = Array.isArray(row.roles)
+    ? (row.roles.filter((x: any) => typeof x === 'string') as string[])
+    : typeof row.role === 'string'
+      ? [row.role]
+      : ['Member']
+
+  const normalizedAssigned = (assigned.length > 0 ? assigned : ['Member']).map((r) => normalizeRoleName(r))
+
+  if (normalizedAssigned.some((r) => r === 'Admin')) return true
+
+  const defaultByRole = new Map<string, unknown>()
+  for (const d of defaultRoleRows ?? []) {
+    if (d?.role != null) defaultByRole.set(normalizeRoleName(String(d.role)), d.permissions)
+  }
+
+  const customByNameLower = new Map<string, OrganizationRoleRow>()
+  for (const r of customOrgRoles) {
+    customByNameLower.set(normalizeRoleName(r.name).toLowerCase(), r)
+  }
+
+  for (const name of normalizedAssigned) {
+    if (isBuiltInWorkspaceRoleName(name)) {
+      const perms = defaultByRole.get(name)
+      if (permissionsIncludeAccountMembersManage(perms)) return true
+      continue
+    }
+
+    const custom = customByNameLower.get(name.toLowerCase())
+    if (custom && permissionsIncludeAccountMembersManage(custom.permissions)) return true
+  }
+
+  return false
+}
+
 function formatRelativeDate(value: string | Date) {
   const d = typeof value === 'string' ? new Date(value) : value
   if (Number.isNaN(d.getTime())) return 'Unknown'
@@ -152,6 +214,7 @@ export function AccountsPageContent({
   const [membersList, setMembersList] = useState<WorkspaceMember[]>([])
   const [invitesList, setInvitesList] = useState<PendingInvite[]>([])
   const [customRoles, setCustomRoles] = useState<OrganizationRoleRow[]>([])
+  const [canManageRoles, setCanManageRoles] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
@@ -221,17 +284,25 @@ export function AccountsPageContent({
       setError(null)
 
       try {
-        const [{ data: roles, error: rolesError }, { data: members, error: membersError }, { data: invites, error: invitesError }] =
-          await Promise.all([
-            supabase
-              .from('organization_roles')
-              .select('id,name,permissions')
-              .eq('organization_id', selectedOrganizationId)
-              .order('created_at', { ascending: true }),
-            supabase
-              .from('organization_members')
-              .select(
-                `
+        const [
+          { data: orgRolesData, error: orgRolesError },
+          { data: defaultRoleRows, error: defaultRolesError },
+          { data: members, error: membersError },
+          { data: invites, error: invitesError },
+        ] = await Promise.all([
+          supabase
+            .from('organization_roles')
+            .select('id,name,permissions')
+            .eq('organization_id', selectedOrganizationId)
+            .order('created_at', { ascending: true }),
+          supabase
+            .from('organization_default_roles')
+            .select('role,permissions')
+            .eq('organization_id', selectedOrganizationId),
+          supabase
+            .from('organization_members')
+            .select(
+              `
                 id,
                 organization_id,
                 user_id,
@@ -243,20 +314,29 @@ export function AccountsPageContent({
                   email
                 )
               `,
-              )
-              .eq('organization_id', selectedOrganizationId)
-              .order('joined_at', { ascending: true }),
-            supabase
-              .from('team_invitations')
-              .select('id,email,created_at,status')
-              .eq('organization_id', selectedOrganizationId)
-              .eq('status', 'pending')
-              .order('created_at', { ascending: false }),
-          ])
+            )
+            .eq('organization_id', selectedOrganizationId)
+            .order('joined_at', { ascending: true }),
+          supabase
+            .from('team_invitations')
+            .select('id,email,created_at,status')
+            .eq('organization_id', selectedOrganizationId)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false }),
+        ])
 
-        if (rolesError) throw rolesError
+        if (orgRolesError) throw orgRolesError
+        if (defaultRolesError) throw defaultRolesError
         if (membersError) throw membersError
         if (invitesError) throw invitesError
+
+        const customRolesList = (orgRolesData ?? []) as OrganizationRoleRow[]
+        const canManage = computeCanManageRoles(
+          currentUserId,
+          members,
+          customRolesList,
+          defaultRoleRows ?? [],
+        )
 
         const memberUserIds = (members ?? []).map((m: any) => m.user_id as string)
 
@@ -312,7 +392,8 @@ export function AccountsPageContent({
         }))
 
         if (!cancelled) {
-          setCustomRoles((roles ?? []) as OrganizationRoleRow[])
+          setCustomRoles(customRolesList)
+          setCanManageRoles(canManage)
           setMembersList(normalizedMembers)
           setInvitesList(normalizedInvites)
         }
@@ -329,7 +410,13 @@ export function AccountsPageContent({
     return () => {
       cancelled = true
     }
-  }, [selectedOrganizationId])
+  }, [selectedOrganizationId, currentUserId])
+
+  useEffect(() => {
+    if (!canManageRoles && activeTab === 'roles') {
+      setActiveTab('members')
+    }
+  }, [canManageRoles, activeTab])
 
   const handleInvite = async () => {
     const email = inviteEmail.trim().toLowerCase()
@@ -592,20 +679,22 @@ export function AccountsPageContent({
           >
             Teams
           </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('roles')}
-            className={[
-              'pb-3 text-sm font-medium',
-              activeTab === 'roles' ? 'text-gray-900 border-b-2 border-[#7a2233]' : 'text-gray-500 hover:text-gray-700',
-            ].join(' ')}
-          >
-            Roles
-          </button>
+          {canManageRoles ? (
+            <button
+              type="button"
+              onClick={() => setActiveTab('roles')}
+              className={[
+                'pb-3 text-sm font-medium',
+                activeTab === 'roles' ? 'text-gray-900 border-b-2 border-[#7a2233]' : 'text-gray-500 hover:text-gray-700',
+              ].join(' ')}
+            >
+              Roles
+            </button>
+          ) : null}
         </div>
       </div>
 
-      {activeTab === 'roles' ? (
+      {activeTab === 'roles' && canManageRoles ? (
         <div className="pt-2">
           <div className="mb-3 flex items-center justify-end">
             <Dialog

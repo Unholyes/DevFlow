@@ -281,7 +281,7 @@ export function TeamPageContent() {
           </div>
 
           {filtered.length === 0 && (
-            <p className="text-center text-sm text-gray-500 py-8">No members match your filters.</p>
+            <p className="text-center text-sm text-gray-500 py-8">No members match your filters.(DEMO)</p>
           )}
         </CardContent>
       </Card>
