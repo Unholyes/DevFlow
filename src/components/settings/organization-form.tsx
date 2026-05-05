@@ -12,6 +12,9 @@ import { Save, X, Palette, Camera } from 'lucide-react'
 const organizationSchema = z.object({
   name: z.string().min(1, "Organization name is required").max(100, "Organization name must be less than 100 characters"),
   theme_preset: z.enum(['default', 'blue', 'green', 'purple', 'dark', 'custom']).optional(),
+  primary_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
+  secondary_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
+  accent_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
   background_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
   surface_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
   sidebar_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
@@ -47,6 +50,9 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
     defaultValues: {
       name: organization?.name || '',
       theme_preset: organization?.theme_preset || 'default',
+      primary_color: organization?.primary_color || '#3B82F6',
+      secondary_color: organization?.secondary_color || '#64748B',
+      accent_color: organization?.accent_color || '#10B981',
       background_color: organization?.background_color || '#F8FAFC',
       surface_color: organization?.surface_color || '#FFFFFF',
       sidebar_color: organization?.sidebar_color || '#FFFFFF',
@@ -122,6 +128,9 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
     formData.append('organization_id', String(organization?.id ?? ''))
     formData.append('name', data.name)
     if (data.theme_preset) formData.append('theme_preset', data.theme_preset)
+    if (data.primary_color) formData.append('primary_color', data.primary_color)
+    if (data.secondary_color) formData.append('secondary_color', data.secondary_color)
+    if (data.accent_color) formData.append('accent_color', data.accent_color)
     if (data.background_color) formData.append('background_color', data.background_color)
     if (data.surface_color) formData.append('surface_color', data.surface_color)
     if (data.sidebar_color) formData.append('sidebar_color', data.sidebar_color)
