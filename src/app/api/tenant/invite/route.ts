@@ -18,6 +18,35 @@ export async function POST(request: Request) {
   const supabase = createClient()
   const admin = createAdminClient()
 
+  async function findAuthUserIdByEmail(email: string): Promise<string | null> {
+    // NOTE: supabase-js GoTrueAdminApi.listUsers() does not reliably support server-side filtering by email
+    // in stable releases. If `filter` is ignored, it can return unrelated users and break invite logic.
+    // We page through users and match client-side to keep correctness.
+    const normalized = email.trim().toLowerCase()
+    if (!normalized) return null
+
+    const perPage = 200
+    const maxPages = 50 // up to 10k users scanned; keep bounded.
+
+    for (let page = 1; page <= maxPages; page++) {
+      const { data: usersData, error: usersError } = await admin.auth.admin.listUsers({
+        page,
+        perPage,
+      } as any)
+
+      if (usersError) throw usersError
+
+      const users = usersData?.users ?? []
+      const found = users.find((u: any) => String(u?.email ?? '').trim().toLowerCase() === normalized)
+      if (found?.id) return String(found.id)
+
+      // If fewer than perPage results returned, we're at the end.
+      if (users.length < perPage) return null
+    }
+
+    return null
+  }
+
   try {
     const body = await request.json().catch(() => null)
     const email = String(body?.email ?? '').trim().toLowerCase()
@@ -99,18 +128,13 @@ export async function POST(request: Request) {
     // Enforce one-org-per-user:
     // If the invited email already maps to an existing auth user who is attached to ANY org,
     // block the invite to prevent cross-org membership.
-    const { data: usersData, error: usersError } = await admin.auth.admin.listUsers({
-      page: 1,
-      perPage: 1,
-      // GoTrue admin filter syntax.
-      filter: `email=eq.${email}`,
-    } as any)
-
-    if (usersError) {
+    let invitedUserId: string | null = null
+    try {
+      invitedUserId = await findAuthUserIdByEmail(email)
+    } catch (e: any) {
+      console.error('Failed to resolve invited user by email:', e)
       return NextResponse.json({ error: 'Failed to resolve invited user' }, { status: 500 })
     }
-
-    const invitedUserId = usersData?.users?.[0]?.id ?? null
 
     if (invitedUserId) {
       const { data: owned } = await admin

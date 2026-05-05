@@ -331,7 +331,7 @@ CREATE OR REPLACE FUNCTION public.accept_team_invitation(invitation_token TEXT, 
 RETURNS JSON AS $$
 DECLARE
   invitation_record RECORD;
-  result JSON;
+  requested_system_role TEXT;
 BEGIN
   -- Get invitation details
   SELECT * INTO invitation_record
@@ -347,9 +347,14 @@ BEGIN
   SET status = 'accepted', accepted_at = NOW()
   WHERE id = invitation_record.id;
 
+  requested_system_role := COALESCE(invitation_record.system_role, 'Member');
+  IF requested_system_role NOT IN ('Owner', 'Admin', 'Member') THEN
+    requested_system_role := 'Member';
+  END IF;
+
   -- Add user to organization
-  INSERT INTO public.organization_members (organization_id, user_id, roles)
-  VALUES (invitation_record.organization_id, p_user_id, ARRAY['Member']::text[])
+  INSERT INTO public.organization_members (organization_id, user_id, system_role, custom_roles)
+  VALUES (invitation_record.organization_id, p_user_id, requested_system_role, ARRAY[]::text[])
   ON CONFLICT (organization_id, user_id) DO NOTHING;
 
   RETURN json_build_object('success', true, 'organization_id', invitation_record.organization_id);
