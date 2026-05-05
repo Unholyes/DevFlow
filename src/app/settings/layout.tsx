@@ -73,7 +73,7 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
     // Fetch organization theme
     const { data: orgData } = await supabase
       .from('organizations')
-      .select('theme_preset, primary_color, secondary_color, accent_color')
+      .select('theme_preset, primary_color, secondary_color, accent_color, background_color, surface_color, sidebar_color, border_color, text_color, muted_text_color')
       .eq('id', ws.organizationId)
       .single()
 
@@ -84,6 +84,14 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
           primary: orgData.primary_color || '#3B82F6',
           secondary: orgData.secondary_color || '#64748B',
           accent: orgData.accent_color || '#10B981',
+        },
+        tokens: {
+          background: (orgData as any).background_color ?? undefined,
+          surface: (orgData as any).surface_color ?? undefined,
+          sidebar: (orgData as any).sidebar_color ?? undefined,
+          border: (orgData as any).border_color ?? undefined,
+          foreground: (orgData as any).text_color ?? undefined,
+          mutedForeground: (orgData as any).muted_text_color ?? undefined,
         },
       }
     }

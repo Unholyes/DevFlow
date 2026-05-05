@@ -54,9 +54,13 @@ export async function updateProfile(formData: FormData) {
 const updateOrganizationSchema = z.object({
   name: z.string().min(1, "Organization name is required").max(100, "Organization name must be less than 100 characters"),
   theme_preset: z.enum(['default', 'blue', 'green', 'purple', 'dark', 'custom']).optional(),
-  primary_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  secondary_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  accent_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
+  icon_url: z.string().url('Invalid logo URL').optional(),
+  background_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
+  surface_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
+  sidebar_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
+  border_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
+  text_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
+  muted_text_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
 })
 
 export async function updateOrganization(formData: FormData) {
@@ -81,34 +85,32 @@ export async function updateOrganization(formData: FormData) {
       throw new Error('Insufficient permissions')
     }
 
-    // Find the org the user can administer (Owner/Admin system_role)
-    let organizationId: string | null = null
+    const organizationId = String(formData.get('organization_id') ?? '').trim()
+    if (!organizationId) throw new Error('Organization not found')
 
+    // Org-scoped authorization: only allow Owners/Admins to update org settings.
     const { data: membership } = await supabase
       .from('organization_members')
-      .select('organization_id, system_role')
+      .select('system_role')
       .eq('user_id', user.id)
-      .order('joined_at', { ascending: false })
-      .limit(1)
+      .eq('organization_id', organizationId)
       .maybeSingle()
 
     const systemRole = String((membership as any)?.system_role ?? 'Member')
     const canAdmin = systemRole === 'Owner' || systemRole === 'Admin'
-    if (membership?.organization_id && canAdmin) {
-      organizationId = membership.organization_id
-    }
-
-    if (!organizationId) {
-      throw new Error('Organization not found')
-    }
+    if (!canAdmin) throw new Error('Insufficient permissions')
 
     // Validate form data
     const validatedData = updateOrganizationSchema.parse({
       name: formData.get('name'),
       theme_preset: formData.get('theme_preset') || undefined,
-      primary_color: formData.get('primary_color') || undefined,
-      secondary_color: formData.get('secondary_color') || undefined,
-      accent_color: formData.get('accent_color') || undefined,
+      icon_url: formData.get('icon_url') || undefined,
+      background_color: formData.get('background_color') || undefined,
+      surface_color: formData.get('surface_color') || undefined,
+      sidebar_color: formData.get('sidebar_color') || undefined,
+      border_color: formData.get('border_color') || undefined,
+      text_color: formData.get('text_color') || undefined,
+      muted_text_color: formData.get('muted_text_color') || undefined,
     })
 
     // Update organization
@@ -118,9 +120,13 @@ export async function updateOrganization(formData: FormData) {
     }
 
     if (validatedData.theme_preset) updateData.theme_preset = validatedData.theme_preset
-    if (validatedData.primary_color) updateData.primary_color = validatedData.primary_color
-    if (validatedData.secondary_color) updateData.secondary_color = validatedData.secondary_color
-    if (validatedData.accent_color) updateData.accent_color = validatedData.accent_color
+    if (validatedData.icon_url) updateData.icon_url = validatedData.icon_url
+    if (validatedData.background_color) updateData.background_color = validatedData.background_color
+    if (validatedData.surface_color) updateData.surface_color = validatedData.surface_color
+    if (validatedData.sidebar_color) updateData.sidebar_color = validatedData.sidebar_color
+    if (validatedData.border_color) updateData.border_color = validatedData.border_color
+    if (validatedData.text_color) updateData.text_color = validatedData.text_color
+    if (validatedData.muted_text_color) updateData.muted_text_color = validatedData.muted_text_color
 
     console.log('Updating organization:', organizationId, 'with data:', updateData)
 
@@ -140,9 +146,13 @@ export async function updateOrganization(formData: FormData) {
     console.error('Form data received:', {
       name: formData.get('name'),
       theme_preset: formData.get('theme_preset'),
-      primary_color: formData.get('primary_color'),
-      secondary_color: formData.get('secondary_color'),
-      accent_color: formData.get('accent_color'),
+      icon_url: formData.get('icon_url'),
+      background_color: formData.get('background_color'),
+      surface_color: formData.get('surface_color'),
+      sidebar_color: formData.get('sidebar_color'),
+      border_color: formData.get('border_color'),
+      text_color: formData.get('text_color'),
+      muted_text_color: formData.get('muted_text_color'),
     })
     return {
       success: false,

@@ -40,7 +40,7 @@ interface DashboardHeaderProps {
 export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }: DashboardHeaderProps) {
   const router = useRouter()
   const [userInfo, setUserInfo] = useState<HeaderUser | null>(null)
-  const { name: organizationName } = useOrganizationName()
+  const { name: organizationName, icon: organizationIcon } = useOrganizationName()
   const [searchQuery, setSearchQuery] = useState('')
   const [searchSuggestions, setSearchSuggestions] = useState<SearchSuggestion[]>([])
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -178,7 +178,7 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
   }
 
   return (
-    <header className="bg-white/90 backdrop-blur border-b border-gray-200 px-6 py-4">
+    <header className="bg-[var(--theme-surface)]/90 backdrop-blur border-b px-6 py-4" style={{ borderColor: 'var(--theme-border)' }}>
       <div className="flex items-center justify-between">
         {/* Logo & Toggle */}
         <div className="flex items-center space-x-4">
@@ -206,7 +206,8 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
               placeholder="Search projects, settings, and features..."
-              className="pl-10 pr-4 py-2 w-full bg-gray-50 border-gray-200 rounded-full focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="pl-10 pr-4 py-2 w-full rounded-full focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] border"
+              style={{ backgroundColor: 'color-mix(in srgb, var(--theme-surface) 70%, white)', borderColor: 'var(--theme-border)' }}
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               onFocus={() => {
@@ -218,7 +219,10 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
               onKeyDown={handleSearchKeyDown}
             />
             {isSearchOpen && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-80 overflow-y-auto">
+              <div
+                className="absolute top-full left-0 right-0 mt-2 rounded-md shadow-lg z-50 max-h-80 overflow-y-auto border"
+                style={{ backgroundColor: 'var(--theme-surface)', borderColor: 'var(--theme-border)' }}
+              >
                 {isSearchLoading ? (
                   <div className="px-3 py-2 text-sm text-gray-500">Searching...</div>
                 ) : searchSuggestions.length > 0 ? (
@@ -231,7 +235,7 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
                             event.preventDefault()
                             goToSuggestion(suggestion)
                           }}
-                          className={`w-full text-left px-3 py-2 hover:bg-gray-50 transition-colors ${
+                          className={`w-full text-left px-3 py-2 hover:bg-black/5 transition-colors ${
                             index === activeSuggestionIndex ? 'bg-[var(--theme-primary)]/10' : ''
                           }`}
                         >
@@ -256,8 +260,23 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
         <div className="flex items-center space-x-4">
           {/* Organization */}
           {organizationName && (
-            <div className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-200">
-              <Building2 className="h-4 w-4 text-gray-500" />
+            <div
+              className="hidden md:flex items-center gap-2 px-3 py-2 rounded-lg border"
+              style={{ backgroundColor: 'color-mix(in srgb, var(--theme-surface) 70%, white)', borderColor: 'var(--theme-border)' }}
+            >
+              {organizationIcon ? (
+                <img
+                  src={organizationIcon}
+                  alt={`${organizationName} logo`}
+                  className="h-4 w-4 object-contain"
+                  onError={(e) => {
+                    // Hide broken image and show fallback icon
+                    e.currentTarget.style.display = 'none'
+                    e.currentTarget.nextElementSibling?.classList.remove('hidden')
+                  }}
+                />
+              ) : null}
+              <Building2 className={`h-4 w-4 text-gray-500 ${organizationIcon ? 'hidden' : ''}`} />
               <span className="text-sm text-gray-700 truncate max-w-[180px]">
                 {organizationName}
               </span>

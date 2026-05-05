@@ -36,6 +36,15 @@ CREATE TABLE IF NOT EXISTS public.organizations (
   name TEXT NOT NULL,
   -- Used for multi-tenant subdomain routing: {slug}.devflow.com
   slug TEXT NOT NULL,
+  -- Company logo shown in dashboard header/sidebar
+  icon_url TEXT,
+  -- Theme tokens (optional; used when theme_preset = 'custom')
+  background_color TEXT,
+  surface_color TEXT,
+  sidebar_color TEXT,
+  border_color TEXT,
+  text_color TEXT,
+  muted_text_color TEXT,
   owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()

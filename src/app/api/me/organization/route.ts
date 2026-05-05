@@ -20,7 +20,7 @@ export async function GET() {
     // Owner org first
     const { data: ownedOrgs, error: ownedError } = await admin
       .from('organizations')
-      .select('id,name')
+      .select('id,name,icon_url')
       .eq('owner_id', user.id)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -31,7 +31,10 @@ export async function GET() {
     }
 
     if (ownedOrgs && ownedOrgs.length > 0) {
-      return NextResponse.json({ name: ownedOrgs[0]?.name ?? null })
+      return NextResponse.json({
+        name: ownedOrgs[0]?.name ?? null,
+        icon: ownedOrgs[0]?.icon_url ?? null
+      })
     }
 
     // Membership org (pick the first)
@@ -49,12 +52,12 @@ export async function GET() {
 
     const orgId = memberships?.[0]?.organization_id
     if (!orgId) {
-      return NextResponse.json({ name: null })
+      return NextResponse.json({ name: null, icon: null })
     }
 
     const { data: org, error: orgError } = await admin
       .from('organizations')
-      .select('name')
+      .select('name,icon_url')
       .eq('id', orgId)
       .single()
 
@@ -63,7 +66,10 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to fetch organization' }, { status: 500 })
     }
 
-    return NextResponse.json({ name: org?.name ?? null })
+    return NextResponse.json({
+      name: org?.name ?? null,
+      icon: org?.icon_url ?? null
+    })
   } catch (error) {
     console.error('Error in /api/me/organization:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

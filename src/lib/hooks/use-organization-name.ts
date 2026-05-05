@@ -1,19 +1,24 @@
 import { useEffect, useState } from 'react'
 type OrgState = {
   name: string | null
+  icon: string | null
   loading: boolean
 }
 
-async function fetchOrgNameOnce(): Promise<string | null> {
+async function fetchOrgDataOnce(): Promise<{ name: string | null; icon: string | null }> {
   const res = await fetch('/api/me/organization', { credentials: 'include' })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) return null
-  return (data?.name as string | null) ?? null
+  if (!res.ok) return { name: null, icon: null }
+  return {
+    name: (data?.name as string | null) ?? null,
+    icon: (data?.icon as string | null) ?? null
+  }
 }
 
 export function useOrganizationName(): OrgState {
   const [state, setState] = useState<OrgState>({
     name: null,
+    icon: null,
     loading: true,
   })
 
@@ -26,11 +31,11 @@ export function useOrganizationName(): OrgState {
       // before the org exists.
       const maxAttempts = 3
       for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        const name = await fetchOrgNameOnce()
+        const data = await fetchOrgDataOnce()
         if (!alive) return
 
-        if (name) {
-          setState({ name, loading: false })
+        if (data.name) {
+          setState({ name: data.name, icon: data.icon, loading: false })
           return
         }
 
@@ -40,7 +45,7 @@ export function useOrganizationName(): OrgState {
       }
 
       if (!alive) return
-      setState({ name: null, loading: false })
+      setState({ name: null, icon: null, loading: false })
     }
 
     run()
