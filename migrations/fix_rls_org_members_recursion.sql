@@ -34,7 +34,7 @@ as $$
     from public.organization_members om
     where om.organization_id = p_org_id
       and om.user_id = auth.uid()
-      and om.role = 'admin'
+      and ('Admin' = any(om.roles) or 'admin' = any(om.roles))
   );
 $$;
 

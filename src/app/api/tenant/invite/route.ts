@@ -56,12 +56,17 @@ export async function POST(request: Request) {
     if (org.owner_id !== user.id) {
       const { data: membership } = await admin
         .from('organization_members')
-        .select('role')
+        .select('roles')
         .eq('organization_id', org.id)
         .eq('user_id', user.id)
         .maybeSingle()
 
-      if (membership?.role !== 'admin') {
+      const roles = Array.isArray((membership as any)?.roles)
+        ? (((membership as any).roles as unknown[]).filter((r) => typeof r === 'string') as string[])
+        : []
+      const isAdmin = roles.some((r) => r.toLowerCase() === 'admin')
+
+      if (!isAdmin) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
     }

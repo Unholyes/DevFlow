@@ -21,24 +21,33 @@ ALTER TABLE IF EXISTS public.organization_default_roles
 
 -- 2) organization_members: normalize role values and introduce roles[]
 ALTER TABLE IF EXISTS public.organization_members
-  DROP CONSTRAINT IF EXISTS organization_members_role_check;
+  ADD COLUMN IF NOT EXISTS roles TEXT[] NOT NULL DEFAULT ARRAY['Member']::text[];
 
 UPDATE public.organization_members
-SET role = CASE role
-  WHEN 'admin' THEN 'Admin'
-  WHEN 'project_manager' THEN 'Project Manager'
-  WHEN 'member' THEN 'Member'
-  WHEN 'ai_assistant' THEN 'Member'
-  ELSE role
-END
-WHERE role IN ('admin', 'project_manager', 'member', 'ai_assistant');
+SET roles = (
+  SELECT COALESCE(
+    array_agg(
+      CASE trim(lower(r))
+        WHEN 'admin' THEN 'Admin'
+        WHEN 'project_manager' THEN 'Project Manager'
+        WHEN 'member' THEN 'Member'
+        WHEN 'viewer' THEN 'Member'
+        WHEN 'guest' THEN 'Member'
+        WHEN 'ai_assistant' THEN 'Member'
+        ELSE trim(r)
+      END
+    ),
+    ARRAY['Member']::text[]
+  )
+  FROM unnest(roles) AS r
+)
+WHERE roles IS NOT NULL;
 
--- Keep any existing 'admin' rows consistent if they already used Title Case
 UPDATE public.organization_members
-SET role = 'Admin'
-WHERE role = 'admin';
+SET roles = ARRAY['Member']::text[]
+WHERE roles IS NULL OR array_length(roles, 1) IS NULL OR array_length(roles, 1) = 0;
 
--- Update helper function to new role value
+-- Update helper function to array-based check
 CREATE OR REPLACE FUNCTION private.is_org_admin(p_org_id uuid)
 RETURNS boolean
 LANGUAGE sql
@@ -51,18 +60,7 @@ AS $$
     FROM public.organization_members om
     WHERE om.organization_id = p_org_id
       AND om.user_id = auth.uid()
-      AND om.role = 'Admin'
+      AND 'Admin' = ANY(om.roles)
   );
 $$;
-
-ALTER TABLE IF EXISTS public.organization_members
-  ADD CONSTRAINT organization_members_role_check
-  CHECK (role IN ('Admin', 'Project Manager', 'Member'));
-
-ALTER TABLE IF EXISTS public.organization_members
-  ADD COLUMN IF NOT EXISTS roles TEXT[] NOT NULL DEFAULT ARRAY['Member']::text[];
-
-UPDATE public.organization_members
-SET roles = ARRAY[role]::text[]
-WHERE roles IS NULL OR array_length(roles, 1) IS NULL;
 

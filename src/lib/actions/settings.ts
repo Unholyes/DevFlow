@@ -95,13 +95,18 @@ export async function updateOrganization(formData: FormData) {
     } else {
       const { data: membership } = await supabase
         .from('organization_members')
-        .select('organization_id, role')
+        .select('organization_id, roles')
         .eq('user_id', user.id)
         .order('joined_at', { ascending: false })
         .limit(1)
         .maybeSingle()
 
-      if (membership?.organization_id && membership.role === 'admin') {
+      const roles = Array.isArray((membership as any)?.roles)
+        ? (((membership as any).roles as unknown[]).filter((r) => typeof r === 'string') as string[])
+        : []
+      const isAdmin = roles.some((r) => r.toLowerCase() === 'admin')
+
+      if (membership?.organization_id && isAdmin) {
         organizationId = membership.organization_id
       }
     }

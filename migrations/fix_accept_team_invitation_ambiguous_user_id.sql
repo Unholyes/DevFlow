@@ -23,8 +23,8 @@ BEGIN
   WHERE id = invitation_record.id;
 
   -- Add user to organization
-  INSERT INTO public.organization_members (organization_id, user_id, role)
-  VALUES (invitation_record.organization_id, p_user_id, 'member')
+  INSERT INTO public.organization_members (organization_id, user_id, roles)
+  VALUES (invitation_record.organization_id, p_user_id, ARRAY['Member']::text[])
   ON CONFLICT (organization_id, user_id) DO NOTHING;
 
   RETURN json_build_object('success', true, 'organization_id', invitation_record.organization_id);

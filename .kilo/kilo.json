@@ -3,14 +3,18 @@
   "mcp": {
     "context7": {
       "type": "local",
-      "command": [
-        "npx",
-        "-y",
-        "@upstash/context7-mcp"
-      ],
-      "environment": {
-        "DEFAULT_MINIMUM_TOKENS": "{{DEFAULT_MINIMUM_TOKENS}}"
-      }
+      "command": ["cmd", "/c", "npx", "-y", "@upstash/context7-mcp"],
+      "enabled": true,
+      "timeout": 60000
+    },
+    "supabase": {
+      "type": "remote",
+      "url": "https://mcp.supabase.com/mcp?project_ref=sujscuxdttfajpozlkuf&read_only=true",
+      "headers": {
+        "Authorization": "Bearer sbp_d09f13b069c060498d87ce56e7ef87501efacd0f"
+      },
+      "enabled": true,
+      "timeout": 15000
     }
   }
 }

@@ -61,12 +61,16 @@ export async function resolveWorkspaceContext(opts: {
 
   const { data: membership } = await opts.supabase
     .from('organization_members')
-    .select('role')
+    .select('roles')
     .eq('organization_id', organizationId)
     .eq('user_id', opts.userId)
     .maybeSingle()
 
-  const role: UserRole = membership?.role === 'admin' ? 'tenant_admin' : 'team_member'
+  const roles = Array.isArray((membership as any)?.roles)
+    ? (((membership as any).roles as unknown[]).filter((r) => typeof r === 'string') as string[])
+    : []
+  const isAdmin = roles.some((r) => r.toLowerCase() === 'admin')
+  const role: UserRole = isAdmin ? 'tenant_admin' : 'team_member'
 
   return {
     organizationId,

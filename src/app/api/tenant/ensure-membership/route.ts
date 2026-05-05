@@ -75,7 +75,7 @@ export async function POST(request: Request) {
 
     const { data: existing, error: existingError } = await admin
       .from('organization_members')
-      .select('id,role')
+      .select('id,roles')
       .eq('organization_id', org.id)
       .eq('user_id', user.id)
       .maybeSingle()
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
     }
 
     if (existing?.id) {
-      return NextResponse.json({ organizationId: org.id, status: 'exists', role: existing.role })
+      return NextResponse.json({ organizationId: org.id, status: 'exists' })
     }
 
     // IMPORTANT: this endpoint is an *enforcer*, not an auto-join mechanism.

@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { TeamPageContent } from '@/components/dashboard/team-page-content'
+import { TeamPageContent, type TeamPageContentProps } from '@/components/dashboard/team-page-content'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { redirect } from 'next/navigation'
@@ -29,7 +29,7 @@ export default async function DashboardTeamPage() {
   if (!orgId) redirect('/onboarding')
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  const role = profile?.role === 'tenant_admin' ? 'tenant_admin' : 'team_member'
+  const workspaceRole = profile?.role === 'tenant_admin' ? 'tenant_admin' : 'team_member'
 
   const [{ data: ownedOrgs }, { data: memberships }] = await Promise.all([
     supabase
@@ -59,12 +59,13 @@ export default async function DashboardTeamPage() {
 
   const organizations = tenantSlug ? accessibleOrgs.filter((o) => o.id === orgId) : accessibleOrgs
 
-  return (
-    <TeamPageContent
-      organizationId={orgId}
-      currentUserId={user.id}
-      organizations={organizations}
-      role={role}
-    />
-  )
+  // TeamPageContent requires currentUserId + organizations (org switcher / membership); role is optional.
+  const teamProps: TeamPageContentProps = {
+    organizationId: orgId,
+    currentUserId: user.id,
+    organizations,
+    role: workspaceRole,
+  }
+
+  return <TeamPageContent {...teamProps} />
 }

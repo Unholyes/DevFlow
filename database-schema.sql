@@ -87,7 +87,7 @@ AS $$
     FROM public.organization_members om
     WHERE om.organization_id = p_org_id
       AND om.user_id = auth.uid()
-      AND om.role = 'Admin'
+      AND 'Admin' = ANY(om.roles)
   );
 $$;
 
@@ -119,7 +119,6 @@ CREATE TABLE IF NOT EXISTS public.organization_members (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT DEFAULT 'Member' CHECK (role IN ('Admin', 'Project Manager', 'Member')),
   roles TEXT[] NOT NULL DEFAULT ARRAY['Member']::text[],
   joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(organization_id, user_id)
@@ -264,7 +263,7 @@ CREATE POLICY "Organization admins can create invitations" ON public.team_invita
       SELECT 1 FROM public.organization_members om
       WHERE om.organization_id = team_invitations.organization_id
       AND om.user_id = auth.uid()
-      AND om.role = 'Admin'
+      AND 'Admin' = ANY(om.roles)
     )
   );
 
@@ -279,7 +278,7 @@ CREATE POLICY "Organization admins can update invitations" ON public.team_invita
       SELECT 1 FROM public.organization_members om
       WHERE om.organization_id = team_invitations.organization_id
       AND om.user_id = auth.uid()
-      AND om.role = 'Admin'
+      AND 'Admin' = ANY(om.roles)
     )
   );
 
@@ -342,8 +341,8 @@ BEGIN
   WHERE id = invitation_record.id;
 
   -- Add user to organization
-  INSERT INTO public.organization_members (organization_id, user_id, role)
-  VALUES (invitation_record.organization_id, p_user_id, 'member')
+  INSERT INTO public.organization_members (organization_id, user_id, roles)
+  VALUES (invitation_record.organization_id, p_user_id, ARRAY['Member']::text[])
   ON CONFLICT (organization_id, user_id) DO NOTHING;
 
   RETURN json_build_object('success', true, 'organization_id', invitation_record.organization_id);

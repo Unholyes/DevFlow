@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { supabase } from '@/lib/supabase/client'
+import { userCanManageOrganizationRoles } from '@/lib/permissions/can-manage-organization-roles'
 import { PermissionsPageContent } from '@/components/settings/permissions-page-content'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
@@ -49,67 +50,13 @@ type OrganizationRoleRow = {
   permissions: unknown
 }
 
-type AccessibleOrg = { id: string; slug: string; name: string; created_at: string }
+export type AccessibleOrg = { id: string; slug: string; name: string; created_at: string }
 
-function normalizeRoleName(input: string | null | undefined) {
-  return (input || '').trim().replace(/\s+/g, ' ')
-}
-
-function asPermissionStrings(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return value.filter((x): x is string => typeof x === 'string')
-}
-
-function permissionsIncludeAccountMembersManage(permissions: unknown): boolean {
-  return asPermissionStrings(permissions).some((p) => p.toLowerCase() === 'account.members.manage')
-}
-
-const BUILT_IN_WORKSPACE_ROLE_NAMES: WorkspaceRole[] = ['Admin', 'Project Manager', 'Member']
-
-function isBuiltInWorkspaceRoleName(name: string): name is WorkspaceRole {
-  return (BUILT_IN_WORKSPACE_ROLE_NAMES as readonly string[]).includes(normalizeRoleName(name))
-}
-
-/** Uses `organization_members.roles` only (ignores legacy `role`). */
-function computeCanManageRoles(
-  currentUserId: string,
-  memberRows: any[] | null | undefined,
-  customOrgRoles: OrganizationRoleRow[],
-  defaultRoleRows: Array<{ role: string; permissions: unknown }> | null | undefined,
-): boolean {
-  const row = (memberRows ?? []).find((m: any) => m.user_id === currentUserId)
-  if (!row) return false
-
-  const assigned: string[] = Array.isArray(row.roles)
-    ? (row.roles.filter((x: any) => typeof x === 'string') as string[])
-    : []
-
-  const normalizedAssigned = (assigned.length > 0 ? assigned : ['Member']).map((r) => normalizeRoleName(r))
-
-  if (normalizedAssigned.some((r) => r === 'Admin')) return true
-
-  const defaultByRole = new Map<string, unknown>()
-  for (const d of defaultRoleRows ?? []) {
-    if (d?.role != null) defaultByRole.set(normalizeRoleName(String(d.role)), d.permissions)
-  }
-
-  const customByNameLower = new Map<string, OrganizationRoleRow>()
-  for (const r of customOrgRoles) {
-    customByNameLower.set(normalizeRoleName(r.name).toLowerCase(), r)
-  }
-
-  for (const name of normalizedAssigned) {
-    if (isBuiltInWorkspaceRoleName(name)) {
-      const perms = defaultByRole.get(name)
-      if (permissionsIncludeAccountMembersManage(perms)) return true
-      continue
-    }
-
-    const custom = customByNameLower.get(name.toLowerCase())
-    if (custom && permissionsIncludeAccountMembersManage(custom.permissions)) return true
-  }
-
-  return false
+export type TeamPageContentProps = {
+  organizationId: string
+  currentUserId: string
+  organizations: AccessibleOrg[]
+  role?: 'tenant_admin' | 'team_member'
 }
 
 function formatRelativeDate(value: string | Date) {
@@ -123,12 +70,7 @@ export function TeamPageContent({
   currentUserId,
   organizations,
   role = 'team_member',
-}: {
-  organizationId: string
-  currentUserId: string
-  organizations: AccessibleOrg[]
-  role?: 'tenant_admin' | 'team_member'
-}) {
+}: TeamPageContentProps) {
   const [query, setQuery] = useState('')
   const [membersList, setMembersList] = useState<WorkspaceMember[]>([])
   const [invitesList, setInvitesList] = useState<PendingInvite[]>([])
@@ -148,6 +90,11 @@ export function TeamPageContent({
   useEffect(() => {
     setSelectedOrganizationId(organizationId)
   }, [organizationId])
+
+  useEffect(() => {
+    if (isLoading) return
+    if (!canManageRoles && activeTab === 'roles') setActiveTab('members')
+  }, [isLoading, canManageRoles, activeTab])
 
   const roleOptions = useMemo(() => {
     const builtIns: Array<{ value: WorkspaceRole; label: string }> = [
@@ -227,12 +174,7 @@ export function TeamPageContent({
         if (invitesError) throw invitesError
 
         const customRolesList = (orgRolesData ?? []) as OrganizationRoleRow[]
-        const canManage = computeCanManageRoles(
-          currentUserId,
-          members as any[],
-          customRolesList,
-          defaultRoleRows as Array<{ role: string; permissions: unknown }> | null | undefined,
-        )
+        const canManage = await userCanManageOrganizationRoles(supabase, currentUserId, selectedOrganizationId)
 
         const memberUserIds = (members ?? []).map((m: any) => m.user_id as string)
 
@@ -399,10 +341,9 @@ export function TeamPageContent({
     setEditingMemberId(null)
 
     try {
-      const primary = roles[0]
       const { error: updateError } = await supabase
         .from('organization_members')
-        .update({ role: primary, roles })
+        .update({ roles })
         .eq('id', memberId)
         .eq('organization_id', selectedOrganizationId)
 
@@ -530,48 +471,27 @@ export function TeamPageContent({
           >
             Teams
           </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('roles')}
-            className={[
-              'pb-3 text-sm font-medium',
-              activeTab === 'roles'
-                ? 'text-gray-900 border-b-2 border-[#7a2233]'
-                : 'text-gray-500 hover:text-gray-700',
-            ].join(' ')}
-          >
-            Roles
-          </button>
+          {!isLoading && canManageRoles ? (
+            <button
+              type="button"
+              onClick={() => setActiveTab('roles')}
+              className={[
+                'pb-3 text-sm font-medium',
+                activeTab === 'roles'
+                  ? 'text-gray-900 border-b-2 border-[#7a2233]'
+                  : 'text-gray-500 hover:text-gray-700',
+              ].join(' ')}
+            >
+              Roles
+            </button>
+          ) : null}
         </div>
       </div>
 
       {activeTab === 'roles' ? (
-        canManageRoles ? (
-          <div className="pt-2">
-            <PermissionsPageContent organizationId={selectedOrganizationId} embedded />
-          </div>
-        ) : (
-          <div className="pt-6">
-            <Card className="border-gray-200 shadow-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg text-gray-900">Roles</CardTitle>
-                <CardDescription>Manage workspace roles and permissions.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex min-h-[220px] flex-col items-center justify-center rounded-lg border border-amber-200 bg-amber-50/80 px-6 py-10 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
-                    <Shield className="h-6 w-6 text-amber-800" />
-                  </div>
-                  <p className="mt-4 text-base font-semibold text-gray-900">Access restricted</p>
-                  <p className="mt-2 max-w-md text-sm text-gray-600">
-                    You do not have permission to manage roles for this workspace. Ask an administrator if you need
-                    access.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )
+        <div className="pt-2">
+          <PermissionsPageContent organizationId={selectedOrganizationId} currentUserId={currentUserId} embedded />
+        </div>
       ) : activeTab === 'teams' ? (
         <div className="pt-6">
           <Card className="border-gray-200 shadow-sm">

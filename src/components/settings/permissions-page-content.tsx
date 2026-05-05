@@ -1,8 +1,10 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Shield } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
+import { canonicalBuiltinRoleKey, userCanManageOrganizationRoles } from '@/lib/permissions/can-manage-organization-roles'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -99,6 +101,13 @@ function uniqueLower(values: string[]) {
   return out
 }
 
+function permissionListsEqual(a: string[], b: string[]) {
+  const sa = uniqueLower([...a]).sort((x, y) => x.toLowerCase().localeCompare(y.toLowerCase()))
+  const sb = uniqueLower([...b]).sort((x, y) => x.toLowerCase().localeCompare(y.toLowerCase()))
+  if (sa.length !== sb.length) return false
+  return sa.every((v, i) => v.toLowerCase() === sb[i].toLowerCase())
+}
+
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter((x) => typeof x === 'string') as string[]
@@ -122,12 +131,15 @@ const ORDERED_PERMISSION_GROUPS: Array<[PermissionCategory, typeof PERMISSIONS]>
 
 export function PermissionsPageContent({
   organizationId,
+  currentUserId,
   embedded = false,
 }: {
   organizationId: string
+  currentUserId: string
   embedded?: boolean
 }) {
   const [isLoading, setIsLoading] = useState(true)
+  const [accessDenied, setAccessDenied] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [customRoles, setCustomRoles] = useState<Array<{ id: string; name: string; permissions: unknown }>>([])
@@ -148,6 +160,8 @@ export function PermissionsPageContent({
   const [isCreating, setIsCreating] = useState(false)
   const [newRolePerms, setNewRolePerms] = useState<PermissionId[]>([])
   const [newRolePermissionQuery, setNewRolePermissionQuery] = useState('')
+  const [draftPermissions, setDraftPermissions] = useState<string[]>([])
+  const [isSaving, setIsSaving] = useState(false)
 
   const roleList = useMemo<RoleListItem[]>(() => {
     const defaults: RoleListItem[] = DEFAULT_ROLES.map((r) => ({ kind: 'default', role: r.role, label: r.label }))
@@ -159,12 +173,19 @@ export function PermissionsPageContent({
 
   const isAdminSelected = useMemo(() => selected.kind === 'default' && selected.role === 'Admin', [selected])
 
-  const selectedPermissions = useMemo(() => {
+  /** Last-saved permissions for the currently selected role (source of truth from Supabase load). */
+  const savedPermissionsForSelection = useMemo(() => {
     if (isAdminSelected) return allPermissionIds
     if (selected.kind === 'default') return defaultRolePerms[selected.role]
     const role = customRoles.find((r) => r.id === selected.id)
     return uniqueLower(asStringArray(role?.permissions ?? []))
   }, [allPermissionIds, customRoles, defaultRolePerms, isAdminSelected, selected])
+
+  const isDirty = !isAdminSelected && !permissionListsEqual(draftPermissions, savedPermissionsForSelection)
+
+  useEffect(() => {
+    setDraftPermissions(savedPermissionsForSelection)
+  }, [savedPermissionsForSelection])
 
   const selectedTitle = useMemo(() => {
     const label = selected.label
@@ -177,19 +198,13 @@ export function PermissionsPageContent({
     async function load() {
       setIsLoading(true)
       setError(null)
+      setAccessDenied(false)
       try {
-        // Ensure default role rows exist (idempotent).
-        const seedRows = DEFAULT_ROLES.map((r) => ({
-          organization_id: organizationId,
-          role: r.role,
-          permissions: [],
-        }))
-
-        const { error: seedError } = await supabase
-          .from('organization_default_roles')
-          .upsert(seedRows, { onConflict: 'organization_id,role' })
-
-        if (seedError) throw seedError
+        const allowed = await userCanManageOrganizationRoles(supabase, currentUserId, organizationId)
+        if (!allowed) {
+          if (!cancelled) setAccessDenied(true)
+          return
+        }
 
         const [{ data: defaults, error: defaultsError }, { data: customs, error: customsError }] = await Promise.all([
           supabase
@@ -204,8 +219,9 @@ export function PermissionsPageContent({
 
         const nextDefault: Record<DefaultRole, string[]> = { Admin: [], 'Project Manager': [], Member: [] }
         for (const row of defaults ?? []) {
-          const role = row.role as DefaultRole
-          nextDefault[role] = uniqueLower(asStringArray((row as any).permissions))
+          const canon = canonicalBuiltinRoleKey(String((row as { role?: unknown }).role ?? ''))
+          if (!canon) continue
+          nextDefault[canon] = uniqueLower(asStringArray((row as any).permissions))
         }
 
         if (!cancelled) {
@@ -223,51 +239,48 @@ export function PermissionsPageContent({
     return () => {
       cancelled = true
     }
-  }, [organizationId])
+  }, [organizationId, currentUserId])
 
-  async function persistRolePermissions(nextPerms: string[]) {
+  async function savePermissions() {
+    if (isAdminSelected || !isDirty || isSaving) return
+    setIsSaving(true)
     setError(null)
+    try {
+      const body =
+        selected.kind === 'default'
+          ? { target: 'default' as const, role: selected.role, permissions: draftPermissions }
+          : { target: 'custom' as const, roleId: selected.id, permissions: draftPermissions }
 
-    if (selected.kind === 'default') {
-      const prev = defaultRolePerms[selected.role]
-      setDefaultRolePerms((cur) => ({ ...cur, [selected.role]: nextPerms }))
-
-      const { error: updateError } = await supabase
-        .from('organization_default_roles')
-        .update({ permissions: nextPerms })
-        .eq('organization_id', organizationId)
-        .eq('role', selected.role)
-
-      if (updateError) {
-        setDefaultRolePerms((cur) => ({ ...cur, [selected.role]: prev }))
-        setError(updateError.message)
+      const res = await fetch(`/api/organizations/${encodeURIComponent(organizationId)}/role-permissions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'same-origin',
+      })
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(typeof (payload as { error?: string }).error === 'string' ? (payload as { error: string }).error : 'Failed to save permissions.')
       }
-      return
-    }
 
-    const role = customRoles.find((r) => r.id === selected.id)
-    if (!role) return
-    const prevPerms = asStringArray(role.permissions)
-    setCustomRoles((cur) => cur.map((r) => (r.id === selected.id ? { ...r, permissions: nextPerms } : r)))
-
-    const { error: updateError } = await supabase
-      .from('organization_roles')
-      .update({ permissions: nextPerms })
-      .eq('id', selected.id)
-      .eq('organization_id', organizationId)
-
-    if (updateError) {
-      setCustomRoles((cur) => cur.map((r) => (r.id === selected.id ? { ...r, permissions: prevPerms } : r)))
-      setError(updateError.message)
+      if (selected.kind === 'default') {
+        setDefaultRolePerms((cur) => ({ ...cur, [selected.role]: uniqueLower(draftPermissions) }))
+      } else {
+        const next = uniqueLower(draftPermissions)
+        setCustomRoles((cur) => cur.map((r) => (r.id === selected.id ? { ...r, permissions: next } : r)))
+      }
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to save permissions.')
+    } finally {
+      setIsSaving(false)
     }
   }
 
   function togglePermission(id: PermissionId, checked: boolean) {
     if (isAdminSelected) return
-    const next = checked
-      ? uniqueLower([...selectedPermissions, id])
-      : selectedPermissions.filter((p) => p.toLowerCase() !== id.toLowerCase())
-    void persistRolePermissions(next)
+    setDraftPermissions((cur) => {
+      if (checked) return uniqueLower([...cur, id])
+      return cur.filter((p) => p.toLowerCase() !== id.toLowerCase())
+    })
   }
 
   async function createRole() {
@@ -312,6 +325,35 @@ export function PermissionsPageContent({
     } finally {
       setIsCreating(false)
     }
+  }
+
+  if (!isLoading && accessDenied) {
+    return (
+      <div className={embedded ? 'w-full' : 'mx-auto w-full max-w-6xl px-6 py-6'}>
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="pb-4">
+            <CardTitle className={embedded ? 'text-lg text-slate-900' : 'text-xl text-slate-900'}>
+              {embedded ? 'Roles & permissions' : 'Permissions'}
+            </CardTitle>
+            <CardDescription>
+              Manage default roles, custom roles, and the &quot;Manage members&quot; capability for this workspace.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex min-h-[220px] flex-col items-center justify-center rounded-lg border border-amber-200 bg-amber-50/80 px-6 py-10 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
+                <Shield className="h-6 w-6 text-amber-800" />
+              </div>
+              <p className="mt-4 text-base font-semibold text-slate-900">Access restricted</p>
+              <p className="mt-2 max-w-md text-sm text-slate-600">
+                You need the <span className="font-medium">Manage members</span> permission (or the Admin workspace role)
+                to change role definitions. Ask an administrator if you need access.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -550,7 +592,7 @@ export function PermissionsPageContent({
                 <div className="bg-white px-4 py-3 text-sm font-semibold text-slate-700">{category}</div>
                 <div className="divide-y divide-slate-200">
                   {perms.map((p) => {
-                    const checked = selectedPermissions.some((x) => x.toLowerCase() === p.id.toLowerCase())
+                    const checked = draftPermissions.some((x) => x.toLowerCase() === p.id.toLowerCase())
                     return (
                       <label key={p.id} className="flex items-center gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
                         <input
@@ -567,6 +609,26 @@ export function PermissionsPageContent({
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            {isAdminSelected ? (
+              <p className="text-sm text-slate-500">The Admin role always includes every permission.</p>
+            ) : isDirty ? (
+              <p className="text-sm text-amber-800">You have unsaved changes for this role.</p>
+            ) : (
+              <p className="text-sm text-slate-500">Click Save to persist changes to the database.</p>
+            )}
+            {!isAdminSelected ? (
+              <Button
+                type="button"
+                className="bg-[#7a2233] text-white hover:bg-[#651c2a]"
+                disabled={isLoading || !isDirty || isSaving}
+                onClick={() => void savePermissions()}
+              >
+                {isSaving ? 'Saving…' : 'Save changes'}
+              </Button>
+            ) : null}
           </div>
 
           {isLoading ? <div className="mt-3 text-sm text-slate-500">Loading…</div> : null}
