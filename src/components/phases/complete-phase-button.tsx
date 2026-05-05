@@ -18,7 +18,11 @@ export function CompletePhaseButton(props: { phaseId: string; disabled: boolean;
         body: JSON.stringify({ id: props.phaseId, status: 'completed' }),
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json?.error || 'Failed to complete phase')
+      if (!res.ok) {
+        const code = json?.error?.code as string | undefined
+        const message = (json?.error?.message as string | undefined) ?? 'Failed to complete phase'
+        throw new Error(code ? `${message} (${code})` : message)
+      }
       router.refresh()
     } catch (e) {
       console.error(e)

@@ -123,6 +123,47 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     }
   }
 
+  // Per-phase progress (task completion %) for the project overview cards.
+  // Uses the same "done" semantics as the phase page: completed_at OR stage marked is_done.
+  const phaseIdsForProgress = (phases ?? []).map((phase) => phase.id)
+  const { data: workflowStagesForProgress } =
+    phaseIdsForProgress.length > 0
+      ? await supabase
+          .from('workflow_stages')
+          .select('id,phase_id,is_done')
+          .eq('organization_id', orgId)
+          .in('phase_id', phaseIdsForProgress)
+      : { data: [] as any[] }
+
+  const stageIdToPhaseId = new Map<string, string>()
+  const doneStageIds = new Set<string>()
+  for (const s of (workflowStagesForProgress ?? []) as { id: string; phase_id: string; is_done: boolean }[]) {
+    stageIdToPhaseId.set(s.id, s.phase_id)
+    if (s.is_done) doneStageIds.add(s.id)
+  }
+
+  const stageIdsForProgress = Array.from(stageIdToPhaseId.keys())
+  const { data: tasksForProgress } =
+    stageIdsForProgress.length > 0
+      ? await supabase
+          .from('tasks')
+          .select('workflow_stage_id,completed_at')
+          .eq('organization_id', orgId)
+          .eq('project_id', project.id)
+          .in('workflow_stage_id', stageIdsForProgress)
+      : { data: [] as any[] }
+
+  const phaseTotals = new Map<string, { total: number; done: number }>()
+  for (const pid of phaseIdsForProgress) phaseTotals.set(pid, { total: 0, done: 0 })
+  for (const t of (tasksForProgress ?? []) as { workflow_stage_id: string; completed_at: string | null }[]) {
+    const pid = stageIdToPhaseId.get(t.workflow_stage_id)
+    if (!pid) continue
+    const agg = phaseTotals.get(pid) ?? { total: 0, done: 0 }
+    agg.total += 1
+    if (t.completed_at || doneStageIds.has(t.workflow_stage_id)) agg.done += 1
+    phaseTotals.set(pid, agg)
+  }
+
   let phaseProcesses:
     | {
         id: string
@@ -191,6 +232,12 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       dbStatus: p.status as 'active' | 'completed' | 'archived',
       isGated: !!p.is_gated,
       processes,
+      progress: (() => {
+        if (p.status === 'completed') return 100
+        const agg = phaseTotals.get(p.id)
+        if (!agg?.total) return 0
+        return Math.round((agg.done / agg.total) * 100)
+      })(),
     }
   })
 
@@ -255,7 +302,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
               const isCompleted = phase.dbStatus === 'completed'
               const isInProgress = !locked && !isCompleted
               const statusLabel = locked ? 'Locked' : isCompleted ? 'Completed' : 'Active'
-              const progress = isCompleted ? 100 : locked ? 0 : 50
+              const progress = locked ? 0 : phase.progress
 
               const statusBg = isCompleted 
                 ? 'bg-green-50 border-green-200' 
