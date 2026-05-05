@@ -194,4 +194,25 @@ ALTER TABLE IF EXISTS public.team_invitations
   ADD CONSTRAINT team_invitations_system_role_check
   CHECK (system_role IN ('Owner', 'Admin', 'Member'));
 
+-- Update team_invitations RLS policies to stop referencing organization_members.roles (renamed to custom_roles)
+DROP POLICY IF EXISTS "Organization members can view invitations" ON public.team_invitations;
+DROP POLICY IF EXISTS "Organization admins can create invitations" ON public.team_invitations;
+DROP POLICY IF EXISTS "Organization admins can update invitations" ON public.team_invitations;
+
+CREATE POLICY "Organization members can view invitations" ON public.team_invitations
+  FOR SELECT USING (
+    private.is_org_member(team_invitations.organization_id)
+    OR private.is_org_admin(team_invitations.organization_id)
+  );
+
+CREATE POLICY "Organization admins can create invitations" ON public.team_invitations
+  FOR INSERT WITH CHECK (
+    private.is_org_admin(team_invitations.organization_id)
+  );
+
+CREATE POLICY "Organization admins can update invitations" ON public.team_invitations
+  FOR UPDATE USING (
+    private.is_org_admin(team_invitations.organization_id)
+  );
+
 COMMIT;

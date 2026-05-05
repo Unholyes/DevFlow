@@ -69,8 +69,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ organizationId: org.id, status: systemRole.toLowerCase() })
     }
 
-    // IMPORTANT: this endpoint is an *enforcer*, not an auto-join mechanism.
-    // Membership should be created only through explicit flows (invite acceptance or org provisioning).
+    // If the user is a tenant_admin at the app level, treat them as an Owner by default.
+    // (This ensures tenant_admin users have a membership row to satisfy org-scoped queries/RLS.)
+    const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle()
+    if (profile?.role === 'tenant_admin') {
+      const { data: inserted, error: insertError } = await admin
+        .from('organization_members')
+        .insert({
+          organization_id: org.id,
+          user_id: user.id,
+          system_role: 'Owner',
+          custom_roles: [] as unknown[],
+        })
+        .select('id,system_role')
+        .single()
+
+      if (insertError) {
+        return NextResponse.json({ error: insertError.message ?? 'Failed to create membership' }, { status: 500 })
+      }
+
+      return NextResponse.json({ organizationId: org.id, status: String((inserted as any)?.system_role ?? 'Owner').toLowerCase() })
+    }
+
+    // IMPORTANT: this endpoint is an *enforcer*, not an auto-join mechanism for regular users.
     return NextResponse.json({ error: "You don't have access to this organization." }, { status: 403 })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message ?? 'Internal server error' }, { status: 500 })

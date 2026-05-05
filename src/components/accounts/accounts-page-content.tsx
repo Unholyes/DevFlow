@@ -24,18 +24,18 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
-type WorkspaceRole = 'Admin' | 'Project Manager' | 'Member'
+type SystemRole = 'Owner' | 'Admin' | 'Member'
 
 type WorkspaceMember = {
   id: string
   userId: string
   fullName: string
   email: string
-  roles: WorkspaceRole[]
+  systemRole: SystemRole
+  customRoles: string[]
   joinedAt: string
   projects: string[]
 }
@@ -155,8 +155,9 @@ export function AccountsPageContent({
   const [inviteEmail, setInviteEmail] = useState('')
   const [inviteResendLink, setInviteResendLink] = useState<string | null>(null)
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
-  const [draftRoles, setDraftRoles] = useState<WorkspaceRole[]>(['Member'])
-
+  const [draftSystemRole, setDraftSystemRole] = useState<SystemRole>('Member')
+  const [draftCustomRoles, setDraftCustomRoles] = useState<string[]>([])
+  const [inviteSystemRole, setInviteSystemRole] = useState<SystemRole>('Member')
 
   const [isAddRoleModalOpen, setIsAddRoleModalOpen] = useState(false)
   const [roleName, setRoleName] = useState('')
@@ -201,14 +202,8 @@ export function AccountsPageContent({
     return (a + b).toUpperCase()
   }
 
-  const roleOptions = useMemo(() => {
-    const builtIns: Array<{ value: WorkspaceRole; label: string }> = [
-      { value: 'Admin', label: 'Admin' },
-      { value: 'Project Manager', label: 'Project Manager' },
-      { value: 'Member', label: 'Member' },
-    ]
-    return { builtIns }
-  }, [customRoles])
+  const currentMember = useMemo(() => membersList.find((m) => m.userId === currentUserId) ?? null, [membersList, currentUserId])
+  const currentSystemRole: SystemRole = currentMember?.systemRole ?? 'Member'
 
   useEffect(() => {
     let cancelled = false
@@ -240,7 +235,8 @@ export function AccountsPageContent({
                 id,
                 organization_id,
                 user_id,
-                roles,
+                system_role,
+                custom_roles,
                 joined_at,
                 profiles:user_id (
                   full_name,
@@ -297,17 +293,17 @@ export function AccountsPageContent({
         const normalizedMembers: WorkspaceMember[] = (members ?? []).map((m: any) => {
           const fullName = (m.profiles?.full_name as string | null) ?? 'Unknown User'
           const email = (m.profiles?.email as string | null) ?? '—'
-          const roles = Array.isArray(m.roles)
-            ? (m.roles.filter((x: any) => typeof x === 'string') as string[])
-            : typeof m.role === 'string'
-              ? [m.role]
-              : ['Member']
+          const systemRole = (m.system_role as SystemRole | null) ?? 'Member'
+          const customRoles = Array.isArray(m.custom_roles)
+            ? (m.custom_roles.filter((x: any) => typeof x === 'string' && x.trim().length > 0) as string[])
+            : []
           return {
             id: m.id,
             userId: m.user_id,
             fullName,
             email,
-            roles: (roles.length > 0 ? roles : ['Member']) as WorkspaceRole[],
+            systemRole,
+            customRoles,
             joinedAt: formatRelativeDate(m.joined_at),
             projects: projectsByUserId.get(m.user_id) ?? [],
           }
@@ -368,7 +364,7 @@ export function AccountsPageContent({
       const res = await fetch('/api/tenant/invite', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email, organizationId: selectedOrganizationId }),
+        body: JSON.stringify({ email, organizationId: selectedOrganizationId, system_role: inviteSystemRole }),
       })
 
       const payload = await res.json().catch(() => null)
@@ -447,30 +443,68 @@ export function AccountsPageContent({
     }
   }
 
-  const handleRolesChange = async (memberId: string, roles: WorkspaceRole[]) => {
+  const handleSaveMemberAccess = async (memberId: string) => {
     const member = membersList.find((m) => m.id === memberId)
     if (!member) return
-    if (!roles || roles.length === 0) {
-      setError('Select at least one role.')
-      return
+
+    const prevSystemRole = member.systemRole
+    const nextSystemRole = draftSystemRole
+    if (
+      member.userId === currentUserId &&
+      (prevSystemRole === 'Owner' || prevSystemRole === 'Admin') &&
+      nextSystemRole === 'Member'
+    ) {
+      const ok = window.confirm(
+        'You are lowering your own access level. You may lose access to manage members, roles, and invitations until an Owner restores your access.\n\nContinue anyway?',
+      )
+      if (!ok) return
     }
 
     setError(null)
     const prev = membersList
-    setMembersList((cur) => cur.map((m) => (m.id === memberId ? { ...m, roles } : m)))
+    setMembersList((cur) =>
+      cur.map((m) =>
+        m.id === memberId ? { ...m, systemRole: nextSystemRole, customRoles: [...draftCustomRoles] } : m,
+      ),
+    )
     setEditingMemberId(null)
 
     try {
-      const { error: updateError } = await supabase
-        .from('organization_members')
-        .update({ roles })
-        .eq('id', memberId)
-        .eq('organization_id', selectedOrganizationId)
+      if (prevSystemRole !== nextSystemRole) {
+        const res = await fetch(
+          `/api/organizations/${encodeURIComponent(selectedOrganizationId)}/members/${encodeURIComponent(memberId)}/system-role`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ system_role: nextSystemRole }),
+            credentials: 'same-origin',
+          },
+        )
+        const payload = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error((payload as any)?.error ?? 'Failed to update access level.')
+      }
 
-      if (updateError) throw updateError
+      const prevCustom = member.customRoles
+      const nextCustom = draftCustomRoles
+      const changedCustom =
+        prevCustom.length !== nextCustom.length ||
+        prevCustom.some((x) => !nextCustom.some((y) => y.toLowerCase() === x.toLowerCase()))
+      if (changedCustom) {
+        const res = await fetch(
+          `/api/organizations/${encodeURIComponent(selectedOrganizationId)}/members/${encodeURIComponent(memberId)}/custom-roles`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ custom_roles: nextCustom }),
+            credentials: 'same-origin',
+          },
+        )
+        const payload = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error((payload as any)?.error ?? 'Failed to update assigned roles.')
+      }
     } catch (e: any) {
       setMembersList(prev)
-      setError(e?.message ?? 'Failed to update role.')
+      setError(e?.message ?? 'Failed to update member access.')
     }
   }
 
@@ -487,8 +521,8 @@ export function AccountsPageContent({
       return
     }
 
-    const allExisting = [...roleOptions.builtIns.map((r) => r.value)].map((r) => r.toLowerCase())
-    if (allExisting.includes(name.toLowerCase())) {
+    const allBuiltIn = ['Admin', 'Project Manager', 'Member'].map((r) => r.toLowerCase())
+    if (allBuiltIn.includes(name.toLowerCase())) {
       setError('That role already exists.')
       return
     }
@@ -548,7 +582,13 @@ export function AccountsPageContent({
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           {activeTab === 'members' ? (
-            <Dialog open={isInviteModalOpen} onOpenChange={setIsInviteModalOpen}>
+            <Dialog
+              open={isInviteModalOpen}
+              onOpenChange={(v) => {
+                setIsInviteModalOpen(v)
+                if (v) setInviteSystemRole('Member')
+              }}
+            >
               <DialogTrigger asChild>
                 <Button className="shrink-0 bg-blue-600 hover:bg-blue-700 text-white">
                   <UserPlus className="mr-2 h-4 w-4" />
@@ -568,6 +608,23 @@ export function AccountsPageContent({
                       onChange={(e) => setInviteEmail(e.target.value)}
                     />
                   </div>
+                  {currentSystemRole === 'Owner' ? (
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Access level</label>
+                      <Select value={inviteSystemRole} onValueChange={(v) => setInviteSystemRole(v as SystemRole)}>
+                        <SelectTrigger className="bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Owner">Owner</SelectItem>
+                          <SelectItem value="Admin">Admin</SelectItem>
+                          <SelectItem value="Member">Member</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500">Admins can only invite Members.</div>
+                  )}
                   <div className="flex justify-end gap-2">
                     <Button variant="outline" onClick={() => setIsInviteModalOpen(false)}>
                       Cancel
@@ -831,9 +888,9 @@ export function AccountsPageContent({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-gray-900">
-              {membersList.filter((m) => m.roles.includes('Admin')).length}
+              {membersList.filter((m) => m.systemRole === 'Owner' || m.systemRole === 'Admin').length}
             </div>
-            <p className="text-xs text-gray-500 mt-1">Tenant administrators</p>
+            <p className="text-xs text-gray-500 mt-1">Owners and admins</p>
           </CardContent>
         </Card>
 
@@ -885,15 +942,103 @@ export function AccountsPageContent({
                       </AvatarFallback>
                     </Avatar>
                     <p className="font-semibold text-gray-900 truncate">{m.fullName}</p>
-                    <div className="flex flex-wrap items-center gap-1">
-                      {(editingMemberId === m.id ? draftRoles : m.roles).map((r) => (
-                        <Badge key={r} className="border border-slate-200 bg-slate-50 text-slate-700 text-[11px] px-2 py-0.5">
-                          {r}
+                    {editingMemberId !== m.id ? (
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Badge className="border border-slate-200 bg-slate-50 text-slate-700 text-[11px] px-2 py-0.5">
+                          {m.systemRole}
                         </Badge>
-                      ))}
-                    </div>
+                        {m.customRoles.map((r) => (
+                          <Badge
+                            key={r}
+                            className="border border-slate-200 bg-slate-50 text-slate-700 text-[11px] px-2 py-0.5"
+                          >
+                            {r}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                   <p className="text-sm text-gray-500 truncate">{m.email}</p>
+
+                  {editingMemberId === m.id ? (
+                    <div className="mt-3 space-y-3">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="text-sm font-medium text-gray-700">Access Level:</div>
+                        <Select
+                          value={draftSystemRole}
+                          onValueChange={(v) => setDraftSystemRole(v as SystemRole)}
+                          disabled={currentSystemRole !== 'Owner'}
+                        >
+                          <SelectTrigger className="h-9 w-[180px] bg-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Owner">Owner</SelectItem>
+                            <SelectItem value="Admin">Admin</SelectItem>
+                            <SelectItem value="Member">Member</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        {currentSystemRole !== 'Owner' ? (
+                          <span className="text-xs text-gray-500">Only Owners can change access level.</span>
+                        ) : null}
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-sm font-medium text-gray-700">Assigned Roles:</div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {draftCustomRoles.length === 0 ? (
+                            <span className="text-sm text-gray-500">None</span>
+                          ) : (
+                            draftCustomRoles.map((r) => (
+                              <span
+                                key={r}
+                                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700"
+                              >
+                                {r}
+                                <button
+                                  type="button"
+                                  className="rounded-full p-0.5 text-slate-500 hover:text-slate-700"
+                                  onClick={() => setDraftCustomRoles((cur) => cur.filter((x) => x.toLowerCase() !== r.toLowerCase()))}
+                                  aria-label={`Remove ${r}`}
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </span>
+                            ))
+                          )}
+
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
+                                + Add Role
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="min-w-[220px]">
+                              {(customRoles ?? [])
+                                .map((r) => r.name)
+                                .filter((name) => !draftCustomRoles.some((x) => x.toLowerCase() === name.toLowerCase()))
+                                .map((name) => (
+                                  <DropdownMenuCheckboxItem
+                                    key={name}
+                                    checked={false}
+                                    onSelect={(e) => e.preventDefault()}
+                                    onCheckedChange={(next) => {
+                                      if (!next) return
+                                      setDraftCustomRoles((cur) => Array.from(new Set([...cur, name])))
+                                    }}
+                                  >
+                                    {name}
+                                  </DropdownMenuCheckboxItem>
+                                ))}
+                              {customRoles.length === 0 ? (
+                                <div className="px-2 py-1 text-[11px] text-slate-500">No custom roles created yet.</div>
+                              ) : null}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="flex items-center gap-2 mt-2">
                     <span className="text-xs text-gray-400">Projects:</span>
                     {m.projects.length === 0 ? (
@@ -911,40 +1056,10 @@ export function AccountsPageContent({
                   <span className="text-xs text-gray-500">Joined {m.joinedAt}</span>
                   {editingMemberId === m.id ? (
                     <div className="flex gap-1">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
-                            Select roles
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="min-w-[220px]">
-                          {roleOptions.builtIns.map((opt) => {
-                            const checked = draftRoles.includes(opt.value)
-                            return (
-                              <DropdownMenuCheckboxItem
-                                key={opt.value}
-                                checked={checked}
-                                onSelect={(e) => e.preventDefault()}
-                                onCheckedChange={(next) => {
-                                  setDraftRoles((cur) => {
-                                    if (next) return Array.from(new Set([...cur, opt.value]))
-                                    const filtered = cur.filter((x) => x !== opt.value)
-                                    return filtered.length > 0 ? filtered : ['Member']
-                                  })
-                                }}
-                              >
-                                {opt.label}
-                              </DropdownMenuCheckboxItem>
-                            )
-                          })}
-                          <DropdownMenuSeparator />
-                          <div className="px-2 py-1 text-[11px] text-slate-500">Select one or more roles.</div>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => void handleRolesChange(m.id, draftRoles)}
+                        onClick={() => void handleSaveMemberAccess(m.id)}
                         className="h-7 px-2 text-xs"
                       >
                         Save
@@ -954,7 +1069,8 @@ export function AccountsPageContent({
                         variant="ghost"
                         onClick={() => {
                           setEditingMemberId(null)
-                          setDraftRoles(m.roles)
+                          setDraftSystemRole(m.systemRole)
+                          setDraftCustomRoles(m.customRoles)
                         }}
                         className="h-7 px-2 text-xs"
                       >
@@ -968,7 +1084,8 @@ export function AccountsPageContent({
                         variant="ghost"
                         onClick={() => {
                           setEditingMemberId(m.id)
-                          setDraftRoles(m.roles.length > 0 ? m.roles : ['Member'])
+                          setDraftSystemRole(m.systemRole)
+                          setDraftCustomRoles(m.customRoles)
                         }}
                         className="h-7 px-2 text-xs"
                       >
