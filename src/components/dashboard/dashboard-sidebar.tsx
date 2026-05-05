@@ -68,7 +68,7 @@ export function DashboardSidebar({
   const navItems = role === 'tenant_admin' ? tenantAdminNavigation : tenantMemberNavigation
 
   return (
-    <div className={`bg-white min-h-screen border-r border-gray-200 flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`} style={{ borderRightColor: 'var(--theme-secondary)' }}>
+    <div className={`bg-[var(--theme-surface)] min-h-screen border-r border-[var(--theme-secondary)] flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`}>
       {/* Navigation */}
       <nav className="flex-1 px-2 py-6 space-y-2">
         {navItems.map((item) => {

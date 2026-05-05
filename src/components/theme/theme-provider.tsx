@@ -66,6 +66,23 @@ export function ThemeProvider({ children, organizationTheme }: ThemeProviderProp
     const primaryRgb = hexToRgb(theme.colors.primary)
     const secondaryRgb = hexToRgb(theme.colors.secondary)
     const accentRgb = hexToRgb(theme.colors.accent)
+    const surfaceRgb = primaryRgb ?? { r: 59, g: 130, b: 246 }
+
+    const themeBackground = theme.preset === 'dark'
+      ? '#0F172A'
+      : `rgba(${surfaceRgb.r}, ${surfaceRgb.g}, ${surfaceRgb.b}, 0.06)`
+
+    const themeSurface = theme.preset === 'dark'
+      ? '#111827'
+      : `rgba(${surfaceRgb.r}, ${surfaceRgb.g}, ${surfaceRgb.b}, 0.12)`
+
+    root.style.setProperty('--theme-background', themeBackground)
+    root.style.setProperty('--theme-surface', themeSurface)
+    root.style.setProperty('--theme-background-rgb', `${surfaceRgb.r}, ${surfaceRgb.g}, ${surfaceRgb.b}`)
+    root.style.setProperty('--theme-surface-rgb', `${surfaceRgb.r}, ${surfaceRgb.g}, ${surfaceRgb.b}`)
+    root.style.setProperty('--background', themeBackground)
+    root.style.setProperty('--card', themeSurface)
+    root.style.setProperty('--popover', themeSurface)
 
     if (primaryRgb) {
       root.style.setProperty('--theme-primary-rgb', `${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}`)

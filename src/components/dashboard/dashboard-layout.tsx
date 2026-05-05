@@ -19,7 +19,7 @@ export function DashboardLayout({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[var(--theme-background)]">
       {/* Fixed Header */}
       <div className="fixed top-0 left-0 right-0 z-50">
         <DashboardHeader 
@@ -39,7 +39,7 @@ export function DashboardLayout({
           />
         </div>
 
-        <main className={`flex-1 p-6 pt-8 transition-all duration-300 ${isSidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
+        <main className={`flex-1 p-6 pt-8 transition-all duration-300 bg-[var(--theme-surface)] ${isSidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
           {children}
         </main>
       </div>
