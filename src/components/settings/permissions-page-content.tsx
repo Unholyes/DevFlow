@@ -219,7 +219,7 @@ export function PermissionsPageContent({
 
         const nextDefault: Record<DefaultRole, string[]> = { Admin: [], 'Project Manager': [], Member: [] }
         for (const row of defaults ?? []) {
-          const canon = canonicalBuiltinRoleKey(String((row as { role?: unknown }).role ?? ''))
+          const canon = canonicalBuiltinRoleKey(String((row as { role?: unknown }).role ?? '')) as DefaultRole | null
           if (!canon) continue
           nextDefault[canon] = uniqueLower(asStringArray((row as any).permissions))
         }

@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     // Resolve org by slug (admin bypasses RLS)
     const { data: org, error: orgError } = await admin
       .from('organizations')
-      .select('id,owner_id')
+      .select('id')
       .eq('slug', tenantSlug)
       .maybeSingle()
 
@@ -36,27 +36,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Invalid tenant context' }, { status: 400 })
     }
 
-    // Owners implicitly have access; don't create duplicate membership rows.
-    if (org.owner_id === user.id) {
-      return NextResponse.json({ organizationId: org.id, status: 'owner' })
-    }
-
     // Enforce one-org-per-user: user cannot join a different organization once attached.
-    const { data: existingOwned } = await admin
-      .from('organizations')
-      .select('id,slug')
-      .eq('owner_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (existingOwned?.id && existingOwned.id !== org.id) {
-      return NextResponse.json(
-        { error: `User already belongs to organization "${existingOwned.slug}".` },
-        { status: 409 },
-      )
-    }
-
     const { data: existingAnyMembership } = await admin
       .from('organization_members')
       .select('organization_id,organizations:organization_id ( id,slug )')
@@ -75,7 +55,7 @@ export async function POST(request: Request) {
 
     const { data: existing, error: existingError } = await admin
       .from('organization_members')
-      .select('id,roles')
+      .select('id,system_role')
       .eq('organization_id', org.id)
       .eq('user_id', user.id)
       .maybeSingle()
@@ -85,7 +65,8 @@ export async function POST(request: Request) {
     }
 
     if (existing?.id) {
-      return NextResponse.json({ organizationId: org.id, status: 'exists' })
+      const systemRole = String((existing as any)?.system_role ?? 'Member')
+      return NextResponse.json({ organizationId: org.id, status: systemRole.toLowerCase() })
     }
 
     // IMPORTANT: this endpoint is an *enforcer*, not an auto-join mechanism.

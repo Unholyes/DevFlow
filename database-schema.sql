@@ -87,7 +87,7 @@ AS $$
     FROM public.organization_members om
     WHERE om.organization_id = p_org_id
       AND om.user_id = auth.uid()
-      AND 'Admin' = ANY(om.roles)
+      AND om.system_role IN ('Owner', 'Admin')
   );
 $$;
 
@@ -100,9 +100,10 @@ SET search_path = public, auth
 AS $$
   SELECT EXISTS (
     SELECT 1
-    FROM public.organizations o
-    WHERE o.id = p_org_id
-      AND o.owner_id = auth.uid()
+    FROM public.organization_members om
+    WHERE om.organization_id = p_org_id
+      AND om.user_id = auth.uid()
+      AND om.system_role = 'Owner'
   );
 $$;
 
@@ -110,6 +111,24 @@ GRANT USAGE ON SCHEMA private TO authenticated;
 GRANT EXECUTE ON FUNCTION private.is_org_member(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION private.is_org_admin(uuid) TO authenticated;
 GRANT EXECUTE ON FUNCTION private.is_org_owner(uuid) TO authenticated;
+
+CREATE OR REPLACE FUNCTION private.is_org_admin_only(p_org_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM public.organization_members om
+    WHERE om.organization_id = p_org_id
+      AND om.user_id = auth.uid()
+      AND om.system_role = 'Admin'
+  );
+$$;
+
+GRANT EXECUTE ON FUNCTION private.is_org_admin_only(uuid) TO authenticated;
 
 -- =========================================
 -- ORGANIZATION MEMBERS TABLE
@@ -119,7 +138,8 @@ CREATE TABLE IF NOT EXISTS public.organization_members (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id UUID REFERENCES public.organizations(id) ON DELETE CASCADE,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  roles TEXT[] NOT NULL DEFAULT ARRAY['Member']::text[],
+  system_role TEXT NOT NULL DEFAULT 'Member' CHECK (system_role IN ('Owner', 'Admin', 'Member')),
+  custom_roles TEXT[] NOT NULL DEFAULT ARRAY[]::text[],
   joined_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(organization_id, user_id)
 );
@@ -142,22 +162,36 @@ CREATE POLICY "Users can view members of organizations they belong to" ON public
     OR private.is_org_member(organization_id)
   );
 
-CREATE POLICY "Organization admins can insert members" ON public.organization_members
+CREATE POLICY "Owners can insert any member" ON public.organization_members
   FOR INSERT WITH CHECK (
     private.is_org_owner(organization_id)
-    OR private.is_org_admin(organization_id)
   );
 
-CREATE POLICY "Organization admins can update members" ON public.organization_members
+CREATE POLICY "Admins can insert members" ON public.organization_members
+  FOR INSERT WITH CHECK (
+    private.is_org_admin_only(organization_id)
+    AND system_role = 'Member'
+  );
+
+CREATE POLICY "Owners can update any member" ON public.organization_members
   FOR UPDATE USING (
     private.is_org_owner(organization_id)
-    OR private.is_org_admin(organization_id)
+  ) WITH CHECK (
+    private.is_org_owner(organization_id)
   );
 
-CREATE POLICY "Organization admins can delete members" ON public.organization_members
+CREATE POLICY "Admins can update member custom roles" ON public.organization_members
+  FOR UPDATE USING (
+    private.is_org_admin_only(organization_id)
+    AND system_role = 'Member'
+  ) WITH CHECK (
+    private.is_org_admin_only(organization_id)
+    AND system_role = 'Member'
+  );
+
+CREATE POLICY "Owners can delete members" ON public.organization_members
   FOR DELETE USING (
     private.is_org_owner(organization_id)
-    OR private.is_org_admin(organization_id)
   );
 
 -- =========================================
@@ -228,6 +262,7 @@ CREATE TABLE IF NOT EXISTS public.team_invitations (
   email TEXT NOT NULL,
   token TEXT UNIQUE NOT NULL,
   inviter_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  system_role TEXT NOT NULL DEFAULT 'Member' CHECK (system_role IN ('Owner', 'Admin', 'Member')),
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'expired')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   accepted_at TIMESTAMP WITH TIME ZONE,
@@ -240,46 +275,18 @@ ALTER TABLE public.team_invitations ENABLE ROW LEVEL SECURITY;
 -- Team invitations policies
 CREATE POLICY "Organization members can view invitations" ON public.team_invitations
   FOR SELECT USING (
-    EXISTS (
-      SELECT 1 FROM public.organization_members
-      WHERE organization_id = team_invitations.organization_id
-      AND user_id = auth.uid()
-    ) OR
-    EXISTS (
-      SELECT 1 FROM public.organizations
-      WHERE id = team_invitations.organization_id
-      AND owner_id = auth.uid()
-    )
+    private.is_org_member(team_invitations.organization_id)
+    OR private.is_org_admin(team_invitations.organization_id)
   );
 
 CREATE POLICY "Organization admins can create invitations" ON public.team_invitations
   FOR INSERT WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.organizations
-      WHERE id = team_invitations.organization_id
-      AND owner_id = auth.uid()
-    ) OR
-    EXISTS (
-      SELECT 1 FROM public.organization_members om
-      WHERE om.organization_id = team_invitations.organization_id
-      AND om.user_id = auth.uid()
-      AND 'Admin' = ANY(om.roles)
-    )
+    private.is_org_admin(team_invitations.organization_id)
   );
 
 CREATE POLICY "Organization admins can update invitations" ON public.team_invitations
   FOR UPDATE USING (
-    EXISTS (
-      SELECT 1 FROM public.organizations
-      WHERE id = team_invitations.organization_id
-      AND owner_id = auth.uid()
-    ) OR
-    EXISTS (
-      SELECT 1 FROM public.organization_members om
-      WHERE om.organization_id = team_invitations.organization_id
-      AND om.user_id = auth.uid()
-      AND 'Admin' = ANY(om.roles)
-    )
+    private.is_org_admin(team_invitations.organization_id)
   );
 
 -- =========================================

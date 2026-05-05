@@ -81,34 +81,21 @@ export async function updateOrganization(formData: FormData) {
       throw new Error('Insufficient permissions')
     }
 
-    // Find the org the user can administer (owner OR org admin member)
+    // Find the org the user can administer (Owner/Admin system_role)
     let organizationId: string | null = null
 
-    const { data: ownedOrg } = await supabase
-      .from('organizations')
-      .select('id')
-      .eq('owner_id', user.id)
+    const { data: membership } = await supabase
+      .from('organization_members')
+      .select('organization_id, system_role')
+      .eq('user_id', user.id)
+      .order('joined_at', { ascending: false })
+      .limit(1)
       .maybeSingle()
 
-    if (ownedOrg?.id) {
-      organizationId = ownedOrg.id
-    } else {
-      const { data: membership } = await supabase
-        .from('organization_members')
-        .select('organization_id, roles')
-        .eq('user_id', user.id)
-        .order('joined_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      const roles = Array.isArray((membership as any)?.roles)
-        ? (((membership as any).roles as unknown[]).filter((r) => typeof r === 'string') as string[])
-        : []
-      const isAdmin = roles.some((r) => r.toLowerCase() === 'admin')
-
-      if (membership?.organization_id && isAdmin) {
-        organizationId = membership.organization_id
-      }
+    const systemRole = String((membership as any)?.system_role ?? 'Member')
+    const canAdmin = systemRole === 'Owner' || systemRole === 'Admin'
+    if (membership?.organization_id && canAdmin) {
+      organizationId = membership.organization_id
     }
 
     if (!organizationId) {

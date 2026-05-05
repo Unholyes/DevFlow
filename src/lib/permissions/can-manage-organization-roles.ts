@@ -6,7 +6,7 @@ export type OrganizationRoleRow = {
   permissions: unknown
 }
 
-type BuiltinRoleKey = 'Admin' | 'Project Manager' | 'Member'
+export type BuiltinRoleKey = 'Admin' | 'Project Manager' | 'Member'
 
 function normalizeRoleName(input: string) {
   return input.trim().replace(/\s+/g, ' ')
@@ -33,62 +33,25 @@ export function canonicalBuiltinRoleKey(name: string): BuiltinRoleKey | null {
   return null
 }
 
-/** Matches DB semantics: user is a workspace admin if any element of `roles[]` is Admin (any casing). */
-function isAssignedWorkspaceAdminFromRolesArray(assignedStrings: string[]): boolean {
-  const effective = assignedStrings.length > 0 ? assignedStrings : ['Member']
-  return effective.some((r) => canonicalBuiltinRoleKey(r) === 'Admin')
-}
-
 /**
- * Org membership required. Does not include owner / profile checks — use `userCanManageOrganizationRoles`.
- *
- * 1. If `roles[]` contains the workspace **Admin** builtin (any casing), including alongside Member → allowed.
- * 2. Otherwise, for each entry in `roles[]`, resolve permissions from `organization_default_roles` /
- *    `organization_roles` and allow if any includes `account.members.manage`.
+ * For members (system_role=Member), custom role names are stored on `organization_members.custom_roles[]`.
+ * If any assigned custom role includes `account.members.manage`, the user may manage members/roles.
  */
-export function computeCanManageOrgRoles(
-  currentUserId: string,
-  memberRows: any[] | null | undefined,
+export function customRolesIncludeManageMembers(
+  assignedCustomRoles: string[],
   customOrgRoles: OrganizationRoleRow[],
-  defaultRoleRows: Array<{ role: string; permissions: unknown }> | null | undefined,
 ): boolean {
-  const row = (memberRows ?? []).find((m: any) => m.user_id === currentUserId)
-  if (!row) return false
-
-  const assignedStrings: string[] = Array.isArray(row.roles)
-    ? (row.roles.filter((x: any) => typeof x === 'string') as string[])
-    : []
-
-  if (isAssignedWorkspaceAdminFromRolesArray(assignedStrings)) return true
-
-  const normalizedAssigned = (assignedStrings.length > 0 ? assignedStrings : ['Member']).map((r) =>
-    normalizeRoleName(r),
-  )
-
-  const defaultByRole = new Map<string, unknown>()
-  for (const d of defaultRoleRows ?? []) {
-    if (d?.role != null) {
-      const key = normalizeRoleName(String(d.role))
-      defaultByRole.set(key, d.permissions)
-      const canon = canonicalBuiltinRoleKey(key)
-      if (canon) defaultByRole.set(canon, d.permissions)
-    }
-  }
+  if (!Array.isArray(assignedCustomRoles) || assignedCustomRoles.length === 0) return false
 
   const customByNameLower = new Map<string, OrganizationRoleRow>()
   for (const r of customOrgRoles) {
     customByNameLower.set(normalizeRoleName(r.name).toLowerCase(), r)
   }
 
-  for (const name of normalizedAssigned) {
-    const builtinKey = canonicalBuiltinRoleKey(name)
-    if (builtinKey) {
-      const perms = defaultByRole.get(builtinKey) ?? defaultByRole.get(name)
-      if (permissionsIncludeAccountMembersManage(perms)) return true
-      continue
-    }
-
-    const custom = customByNameLower.get(name.toLowerCase())
+  for (const rawName of assignedCustomRoles) {
+    if (typeof rawName !== 'string') continue
+    const key = normalizeRoleName(rawName).toLowerCase()
+    const custom = customByNameLower.get(key)
     if (custom && permissionsIncludeAccountMembersManage(custom.permissions)) return true
   }
 
@@ -97,45 +60,38 @@ export function computeCanManageOrgRoles(
 
 /**
  * Supabase-backed rule order:
- * 1. **Organization owner** (`organizations.owner_id`).
- * 2. **Global admin** (`profiles.role` = `super_admin`) — not scoped to membership.
- * 3. Must be an **organization member** (`organization_members` row).
- * 4. **App-level tenant admin** (`profiles.role` = `tenant_admin`).
- * 5. **Workspace Admin** in `organization_members.roles[]` or **Manage members** derived from `roles[]`
- *    via `organization_default_roles` / `organization_roles` (`computeCanManageOrgRoles`).
+ * 1. **Global admin** (`profiles.role` = `super_admin`) — not scoped to membership.
+ * 2. Must be an **organization member** (`organization_members` row).
+ * 3. If `system_role` ∈ {Owner, Admin} → allowed.
+ * 4. Otherwise, allow if any assigned `custom_roles[]` role includes `account.members.manage`.
  */
 export async function userCanManageOrganizationRoles(
   supabase: SupabaseClient,
   userId: string,
   organizationId: string,
 ): Promise<boolean> {
-  const [{ data: orgRow }, { data: profileRow }, { data: memberRow }, { data: defaultRows }, { data: customRows }] =
-    await Promise.all([
-      supabase.from('organizations').select('owner_id').eq('id', organizationId).maybeSingle(),
-      supabase.from('profiles').select('role').eq('id', userId).maybeSingle(),
-      supabase
-        .from('organization_members')
-        .select('user_id,roles')
-        .eq('organization_id', organizationId)
-        .eq('user_id', userId)
-        .maybeSingle(),
-      supabase.from('organization_default_roles').select('role,permissions').eq('organization_id', organizationId),
-      supabase.from('organization_roles').select('id,name,permissions').eq('organization_id', organizationId),
-    ])
-
-  if (orgRow?.owner_id === userId) return true
+  const [{ data: profileRow }, { data: memberRow }, { data: customRows }] = await Promise.all([
+    supabase.from('profiles').select('role').eq('id', userId).maybeSingle(),
+    supabase
+      .from('organization_members')
+      .select('user_id,system_role,custom_roles')
+      .eq('organization_id', organizationId)
+      .eq('user_id', userId)
+      .maybeSingle(),
+    supabase.from('organization_roles').select('id,name,permissions').eq('organization_id', organizationId),
+  ])
 
   const appRole = profileRow?.role as string | undefined
   if (appRole === 'super_admin') return true
 
   if (!memberRow) return false
 
-  if (appRole === 'tenant_admin') return true
+  const systemRole = String((memberRow as any)?.system_role ?? 'Member')
+  if (systemRole === 'Owner' || systemRole === 'Admin') return true
 
-  return computeCanManageOrgRoles(
-    userId,
-    [memberRow],
-    (customRows ?? []) as OrganizationRoleRow[],
-    defaultRows ?? [],
-  )
+  const assigned = Array.isArray((memberRow as any)?.custom_roles)
+    ? (((memberRow as any).custom_roles as unknown[]).filter((r) => typeof r === 'string') as string[])
+    : []
+
+  return customRolesIncludeManageMembers(assigned, (customRows ?? []) as OrganizationRoleRow[])
 }

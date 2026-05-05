@@ -23,6 +23,7 @@ export async function POST(request: Request) {
     const email = String(body?.email ?? '').trim().toLowerCase()
     if (!email) return NextResponse.json({ error: 'Email is required' }, { status: 400 })
     const organizationIdFromBody = String(body?.organizationId ?? '').trim() || null
+    const requestedSystemRoleRaw = body?.system_role ?? body?.systemRole ?? null
 
     const {
       data: { user },
@@ -52,24 +53,34 @@ export async function POST(request: Request) {
     if (orgError) return NextResponse.json({ error: 'Failed to resolve organization' }, { status: 500 })
     if (!org?.id) return NextResponse.json({ error: 'Invalid tenant context' }, { status: 400 })
 
-    // Only owner/admin can invite
-    if (org.owner_id !== user.id) {
-      const { data: membership } = await admin
-        .from('organization_members')
-        .select('roles')
-        .eq('organization_id', org.id)
-        .eq('user_id', user.id)
-        .maybeSingle()
+    // Invite permissions are derived from organization_members.system_role:
+    // - Owner: can invite Owners/Admins/Members
+    // - Admin: can invite Members only
+    const { data: inviterMembership, error: inviterError } = await admin
+      .from('organization_members')
+      .select('system_role')
+      .eq('organization_id', org.id)
+      .eq('user_id', user.id)
+      .maybeSingle()
 
-      const roles = Array.isArray((membership as any)?.roles)
-        ? (((membership as any).roles as unknown[]).filter((r) => typeof r === 'string') as string[])
-        : []
-      const isAdmin = roles.some((r) => r.toLowerCase() === 'admin')
+    if (inviterError) return NextResponse.json({ error: inviterError.message }, { status: 500 })
+    const inviterSystemRole = String((inviterMembership as any)?.system_role ?? 'Member')
+    const isOwner = inviterSystemRole === 'Owner'
+    const isAdmin = inviterSystemRole === 'Admin'
 
-      if (!isAdmin) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
+    if (!isOwner && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+
+    // Decide invited system_role (Admins are forced to Member invites)
+    const requested = typeof requestedSystemRoleRaw === 'string' ? requestedSystemRoleRaw : ''
+    const normalizedRequested = requested.trim()
+    const requestedSystemRole =
+      normalizedRequested === 'Owner' || normalizedRequested === 'Admin' || normalizedRequested === 'Member'
+        ? (normalizedRequested as 'Owner' | 'Admin' | 'Member')
+        : 'Member'
+
+    const invitedSystemRole = isOwner ? requestedSystemRole : 'Member'
 
     // Enforce uniqueness: no multiple pending invites for same email
     const { data: existing } = await admin
@@ -146,6 +157,7 @@ export async function POST(request: Request) {
         email,
         token,
         inviter_id: user.id,
+        system_role: invitedSystemRole,
         status: 'pending',
       })
       .select('id,email,created_at')
