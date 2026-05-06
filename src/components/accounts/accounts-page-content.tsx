@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { Mail, Search, Shield, UserPlus, Users, Trash2, X, Plus } from 'lucide-react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -44,6 +46,14 @@ type PendingInvite = {
   id: string
   email: string
   sentAt: string
+}
+
+type TeamRow = {
+  id: string
+  organization_id: string
+  name: string
+  description: string | null
+  created_at: string
 }
 
 type OrganizationRoleRow = {
@@ -136,8 +146,14 @@ export function AccountsPageContent({
   currentUserId: string
   organizations: AccessibleOrg[]
 }) {
+  const router = useRouter()
   const [activeTab, setActiveTab] = useState<'members' | 'teams' | 'roles'>('members')
   const [teamsQuery, setTeamsQuery] = useState('')
+  const [teamsList, setTeamsList] = useState<TeamRow[]>([])
+  const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false)
+  const [createTeamName, setCreateTeamName] = useState('')
+  const [createTeamDescription, setCreateTeamDescription] = useState('')
+  const [isCreatingTeam, setIsCreatingTeam] = useState(false)
 
   const [isAssignRoleOpen, setIsAssignRoleOpen] = useState(false)
   const [assignRoleName, setAssignRoleName] = useState('Member')
@@ -164,6 +180,12 @@ export function AccountsPageContent({
   const [selectedRolePermissions, setSelectedRolePermissions] = useState<RolePermission[]>([])
   const [isSubmittingRole, setIsSubmittingRole] = useState(false)
   const [rolePermissionQuery, setRolePermissionQuery] = useState('')
+
+  const filteredTeams = useMemo(() => {
+    const q = teamsQuery.trim().toLowerCase()
+    if (!q) return teamsList
+    return teamsList.filter((t) => t.name.toLowerCase().includes(q))
+  }, [teamsQuery, teamsList])
 
   const filteredMembers = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -218,6 +240,7 @@ export function AccountsPageContent({
           { data: defaultRoleRows, error: defaultRolesError },
           { data: members, error: membersError },
           { data: invites, error: invitesError },
+          { data: teams, error: teamsError },
         ] = await Promise.all([
           supabase
             .from('organization_roles')
@@ -252,12 +275,18 @@ export function AccountsPageContent({
             .eq('organization_id', selectedOrganizationId)
             .eq('status', 'pending')
             .order('created_at', { ascending: false }),
+          supabase
+            .from('teams')
+            .select('id,organization_id,name,description,created_at')
+            .eq('organization_id', selectedOrganizationId)
+            .order('created_at', { ascending: true }),
         ])
 
         if (orgRolesError) throw orgRolesError
         if (defaultRolesError) throw defaultRolesError
         if (membersError) throw membersError
         if (invitesError) throw invitesError
+        if (teamsError) throw teamsError
 
         const customRolesList = (orgRolesData ?? []) as OrganizationRoleRow[]
         const canManage = await userCanManageOrganizationRoles(supabase, currentUserId, selectedOrganizationId)
@@ -320,6 +349,7 @@ export function AccountsPageContent({
           setCanManageRoles(canManage)
           setMembersList(normalizedMembers)
           setInvitesList(normalizedInvites)
+          setTeamsList((teams ?? []) as any)
         }
       } catch (e: any) {
         if (!cancelled) {
@@ -335,6 +365,41 @@ export function AccountsPageContent({
       cancelled = true
     }
   }, [selectedOrganizationId, currentUserId])
+
+  async function handleCreateTeam() {
+    if (isCreatingTeam) return
+    setIsCreatingTeam(true)
+    setError(null)
+
+    const name = createTeamName.trim().replace(/\s+/g, ' ')
+    const description = createTeamDescription.trim()
+
+    try {
+      const res = await fetch(`/api/organizations/${encodeURIComponent(selectedOrganizationId)}/teams`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name, description: description.length ? description : null }),
+      })
+
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) {
+        throw new Error(payload?.error ?? 'Failed to create team.')
+      }
+
+      const team = payload?.team as TeamRow | undefined
+      if (!team?.id) throw new Error(payload?.error ?? 'Failed to create team.')
+
+      setTeamsList((cur) => [...cur, team])
+      setIsCreateTeamOpen(false)
+      setCreateTeamName('')
+      setCreateTeamDescription('')
+      router.push(`/dashboard/teams/${encodeURIComponent(team.id)}`)
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to create team.')
+    } finally {
+      setIsCreatingTeam(false)
+    }
+  }
 
   useEffect(() => {
     if (isLoading) return
@@ -805,8 +870,68 @@ export function AccountsPageContent({
         <div className="pt-6">
           <Card className="border-gray-200 shadow-sm">
             <CardHeader className="pb-4">
-              <CardTitle className="text-lg text-gray-900">Teams</CardTitle>
-              <CardDescription>Group members into teams for easier management.</CardDescription>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle className="text-lg text-gray-900">Teams</CardTitle>
+                  <CardDescription>Group members into teams for easier management.</CardDescription>
+                </div>
+
+                <Dialog
+                  open={isCreateTeamOpen}
+                  onOpenChange={(v) => {
+                    setIsCreateTeamOpen(v)
+                    if (!v) {
+                      setCreateTeamName('')
+                      setCreateTeamDescription('')
+                    }
+                  }}
+                >
+                  <DialogTrigger asChild>
+                    <Button className="bg-blue-600 text-white hover:bg-blue-700">
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Team
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle>Create team</DialogTitle>
+                      <DialogDescription>Create a team, then add members.</DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">Team name</label>
+                        <Input
+                          placeholder="e.g. Engineering"
+                          value={createTeamName}
+                          onChange={(e) => setCreateTeamName(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-sm font-medium text-gray-700">Description (optional)</label>
+                        <Input
+                          placeholder="What does this team own?"
+                          value={createTeamDescription}
+                          onChange={(e) => setCreateTeamDescription(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setIsCreateTeamOpen(false)} disabled={isCreatingTeam}>
+                        Cancel
+                      </Button>
+                      <Button
+                        className="bg-blue-600 text-white hover:bg-blue-700"
+                        onClick={handleCreateTeam}
+                        disabled={isCreatingTeam}
+                      >
+                        {isCreatingTeam ? 'Creating…' : 'Create'}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="relative">
@@ -819,19 +944,39 @@ export function AccountsPageContent({
                 />
               </div>
 
-              <div className="flex min-h-[360px] items-center justify-center">
-                <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50">
-                    <Users className="h-6 w-6 text-blue-600" />
+              {filteredTeams.length === 0 ? (
+                <div className="flex min-h-[360px] items-center justify-center">
+                  <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-8 text-center shadow-sm">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-50">
+                      <Users className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div className="mt-4 text-base font-semibold text-gray-900">No teams created yet.</div>
+                    <div className="mt-1 text-sm text-gray-500">Start by creating a team!</div>
+                    <Button className="mt-5 bg-blue-600 text-white hover:bg-blue-700" onClick={() => setIsCreateTeamOpen(true)}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create Team
+                    </Button>
                   </div>
-                  <div className="mt-4 text-base font-semibold text-gray-900">No teams created yet.</div>
-                  <div className="mt-1 text-sm text-gray-500">Start by creating a team!</div>
-                  <Button className="mt-5 bg-blue-600 text-white hover:bg-blue-700">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Create Team
-                  </Button>
                 </div>
-              </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredTeams.map((t) => (
+                    <Link
+                      key={t.id}
+                      href={`/dashboard/teams/${encodeURIComponent(t.id)}`}
+                      className="block rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:bg-gray-50"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold text-gray-900">{t.name}</div>
+                          {t.description ? <div className="truncate text-sm text-gray-500">{t.description}</div> : null}
+                        </div>
+                        <div className="text-sm text-gray-500">Open</div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
