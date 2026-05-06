@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { requireSuperAdmin } from '@/lib/auth/guards'
 
@@ -12,7 +12,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
-    const supabase = createClient()
+    const supabase = createAdminClient()
 
     // Get organization owner to suspend their auth
     const { data: organization } = await supabase

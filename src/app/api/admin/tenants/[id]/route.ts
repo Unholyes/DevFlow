@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { requireSuperAdmin } from '@/lib/auth/guards'
 
@@ -12,31 +12,23 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
-    const supabase = createClient()
+    // Use service-role client to bypass RLS for super-admin management.
+    const supabase = createAdminClient()
     const { data: organization, error } = await supabase
       .from('organizations')
       .select(`
         id,
         name,
+        slug,
+        owner_id,
         created_at,
         updated_at,
-        owner:profiles!organizations_owner_id_fkey(
-          id,
-          full_name,
-          email,
-          avatar_url,
-          role
-        ),
         organization_members(
           id,
           user_id,
-          role,
-          joined_at,
-          profile:profiles!organization_members_user_id_fkey(
-            full_name,
-            email,
-            avatar_url
-          )
+          system_role,
+          custom_roles,
+          joined_at
         ),
         projects(
           id,
@@ -54,7 +46,53 @@ export async function GET(
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ organization })
+    const ownerId = organization.owner_id as string | null
+    const memberUserIds = Array.from(
+      new Set((organization.organization_members ?? []).map((m: { user_id: string | null }) => m.user_id).filter(Boolean))
+    ) as string[]
+
+    const [ownerProfileRes, ownerUserRes, memberProfilesRes, memberUsers] = await Promise.all([
+      ownerId
+        ? supabase.from('profiles').select('id, full_name, avatar_url, role').eq('id', ownerId).single()
+        : Promise.resolve({ data: null }),
+      ownerId ? supabase.auth.admin.getUserById(ownerId) : Promise.resolve({ data: { user: null } }),
+      memberUserIds.length
+        ? supabase.from('profiles').select('id, full_name, avatar_url').in('id', memberUserIds)
+        : Promise.resolve({ data: [] as Array<{ id: string; full_name: string | null; avatar_url: string | null }> }),
+      Promise.all(
+        memberUserIds.map(async (id) => {
+          const { data } = await supabase.auth.admin.getUserById(id)
+          return [id, data?.user?.email ?? null] as const
+        })
+      ),
+    ])
+
+    const memberProfileById = new Map((memberProfilesRes.data ?? []).map((p) => [p.id, p]))
+    const memberEmailById = new Map(memberUsers)
+
+    return NextResponse.json({
+      organization: {
+        ...organization,
+        owner: {
+          id: ownerId ?? '',
+          full_name: ownerProfileRes.data?.full_name ?? null,
+          email: ownerUserRes.data?.user?.email ?? 'Unknown',
+          avatar_url: ownerProfileRes.data?.avatar_url ?? null,
+          role: ownerProfileRes.data?.role ?? null,
+        },
+        organization_members: (organization.organization_members ?? []).map((m: { user_id: string }) => {
+          const profile = memberProfileById.get(m.user_id)
+          return {
+            ...m,
+            profile: {
+              full_name: profile?.full_name ?? null,
+              email: memberEmailById.get(m.user_id) ?? 'Unknown',
+              avatar_url: profile?.avatar_url ?? null,
+            },
+          }
+        }),
+      },
+    })
   } catch (error) {
     console.error('Error fetching tenant:', error)
     return NextResponse.json(
@@ -75,7 +113,7 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const supabase = createClient()
+    const supabase = createAdminClient()
 
     const { data: organization, error } = await supabase
       .from('organizations')
@@ -111,7 +149,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
-    const supabase = createClient()
+    const supabase = createAdminClient()
     const { error } = await supabase
       .from('organizations')
       .delete()

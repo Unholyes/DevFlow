@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 import { requireSuperAdmin } from '@/lib/auth/guards'
 
@@ -12,12 +12,12 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
-    const supabase = createClient()
+    // Use service-role client to bypass RLS for super-admin management.
+    const supabase = createAdminClient()
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const search = searchParams.get('search') || ''
-    const status = searchParams.get('status') || 'all'
 
     const from = (page - 1) * limit
     const to = from + limit - 1
@@ -28,14 +28,10 @@ export async function GET(request: Request) {
       .select(`
         id,
         name,
+        slug,
+        owner_id,
         created_at,
         updated_at,
-        owner:profiles!organizations_owner_id_fkey(
-          id,
-          full_name,
-          email,
-          avatar_url
-        ),
         organization_members(count),
         projects(count)
       `, { count: 'exact' })
@@ -46,14 +42,56 @@ export async function GET(request: Request) {
       query = query.ilike('name', `%${search}%`)
     }
 
-    const { data: organizations, error, count } = await query.range(from, to)
+    const { data: organizationsRaw, error, count } = await query.range(from, to)
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    const organizations = organizationsRaw ?? []
+    const ownerIds = Array.from(
+      new Set(organizations.map((o) => o.owner_id).filter(Boolean))
+    ) as string[]
+
+    const [{ data: ownerProfiles }, ownerEmails] = await Promise.all([
+      ownerIds.length
+        ? supabase
+            .from('profiles')
+            .select('id, full_name, avatar_url')
+            .in('id', ownerIds)
+        : Promise.resolve({ data: [] as Array<{ id: string; full_name: string | null; avatar_url: string | null }> }),
+      Promise.all(
+        ownerIds.map(async (id) => {
+          const { data } = await supabase.auth.admin.getUserById(id)
+          return [id, data?.user?.email ?? null] as const
+        })
+      ),
+    ])
+
+    const ownerProfileById = new Map((ownerProfiles ?? []).map((p) => [p.id, p]))
+    const ownerEmailById = new Map(ownerEmails)
+
     return NextResponse.json({
-      organizations,
+      organizations: organizations.map((o) => {
+        const ownerProfile = o.owner_id ? ownerProfileById.get(o.owner_id) : null
+        const ownerEmail = o.owner_id ? ownerEmailById.get(o.owner_id) : null
+
+        return {
+          id: o.id,
+          name: o.name,
+          slug: o.slug,
+          created_at: o.created_at,
+          updated_at: o.updated_at,
+          owner: {
+            id: o.owner_id ?? '',
+            full_name: ownerProfile?.full_name ?? null,
+            email: ownerEmail ?? 'Unknown',
+            avatar_url: ownerProfile?.avatar_url ?? null,
+          },
+          organization_members: o.organization_members,
+          projects: o.projects,
+        }
+      }),
       pagination: {
         page,
         limit,

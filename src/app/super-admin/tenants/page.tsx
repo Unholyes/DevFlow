@@ -31,6 +31,7 @@ import { Label } from '@/components/ui/label'
 interface Organization {
   id: string
   name: string
+  slug?: string
   created_at: string
   updated_at: string
   owner: {
@@ -46,9 +47,11 @@ interface Organization {
 export default function TenantsPage() {
   const [organizations, setOrganizations] = useState<Organization[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
   const [selectedOrg, setSelectedOrg] = useState<Organization | null>(null)
   const [actionDialog, setActionDialog] = useState<{ open: boolean; action: string }>({ open: false, action: '' })
   const [editDialog, setEditDialog] = useState<{ open: boolean; org: Organization | null }>({ open: false, org: null })
@@ -61,6 +64,7 @@ export default function TenantsPage() {
   const fetchOrganizations = async () => {
     try {
       setLoading(true)
+      setError(null)
       const params = new URLSearchParams({
         page: page.toString(),
         limit: '20',
@@ -73,11 +77,12 @@ export default function TenantsPage() {
       if (response.ok) {
         setOrganizations(data.organizations)
         setTotalPages(data.pagination.totalPages)
+        setTotal(data.pagination.total)
       } else {
-        console.error('Error fetching organizations:', data.error)
+        setError(data.error || 'Failed to load tenants')
       }
     } catch (error) {
-      console.error('Error fetching organizations:', error)
+      setError('Failed to load tenants')
     } finally {
       setLoading(false)
     }
@@ -161,12 +166,41 @@ export default function TenantsPage() {
     }
   }
 
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+    } catch {
+      // Fallback for environments where clipboard API is blocked
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.left = '-9999px'
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+    }
+  }
+
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Tenants</h1>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Tenants</h1>
+            <p className="mt-2 text-gray-600">
+              Manage all tenant organizations on the platform
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={fetchOrganizations} disabled={loading}>
+              Refresh
+            </Button>
+          </div>
+        </div>
         <p className="mt-2 text-gray-600">
-          Manage all tenant organizations on the platform
+          {loading ? 'Loading tenants…' : `${total} total tenant${total === 1 ? '' : 's'}`}
         </p>
       </div>
 
@@ -185,6 +219,15 @@ export default function TenantsPage() {
           />
         </div>
       </div>
+
+      {error && (
+        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 flex items-center justify-between gap-3">
+          <span>{error}</span>
+          <Button variant="outline" size="sm" onClick={fetchOrganizations} disabled={loading}>
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* Organizations Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
@@ -222,7 +265,10 @@ export default function TenantsPage() {
                       </div>
                       <div>
                         <p className="font-medium text-gray-900">{org.name}</p>
-                        <p className="text-sm text-gray-500">{org.id.slice(0, 8)}...</p>
+                        <p className="text-sm text-gray-500">
+                          {org.slug ? `${org.slug} • ` : ''}
+                          {org.id.slice(0, 8)}...
+                        </p>
                       </div>
                     </div>
                   </TableCell>
@@ -259,6 +305,24 @@ export default function TenantsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={async () => {
+                            await copyToClipboard(org.id)
+                            alert('Organization ID copied')
+                          }}
+                        >
+                          Copy ID
+                        </DropdownMenuItem>
+                        {org.slug && (
+                          <DropdownMenuItem
+                            onClick={async () => {
+                              await copyToClipboard(org.slug!)
+                              alert('Organization slug copied')
+                            }}
+                          >
+                            Copy slug
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem onClick={() => handleEdit(org)}>
                           <Edit className="h-4 w-4 mr-2" />
                           Edit
