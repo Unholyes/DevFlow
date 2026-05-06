@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 interface Organization {
   id: string
@@ -49,6 +50,7 @@ export default function TenantsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<'created_desc' | 'created_asc' | 'name_asc' | 'name_desc'>('created_desc')
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [total, setTotal] = useState(0)
@@ -57,9 +59,16 @@ export default function TenantsPage() {
   const [editDialog, setEditDialog] = useState<{ open: boolean; org: Organization | null }>({ open: false, org: null })
   const [editName, setEditName] = useState('')
 
+  const [projectsDialog, setProjectsDialog] = useState<{ open: boolean; org: Organization | null }>({ open: false, org: null })
+  const [projectsFrom, setProjectsFrom] = useState('')
+  const [projectsTo, setProjectsTo] = useState('')
+  const [projectsLoading, setProjectsLoading] = useState(false)
+  const [projectsError, setProjectsError] = useState<string | null>(null)
+  const [projects, setProjects] = useState<Array<{ id: string; name: string; status: string; created_at: string }>>([])
+
   useEffect(() => {
     fetchOrganizations()
-  }, [page, search])
+  }, [page, search, sort])
 
   const fetchOrganizations = async () => {
     try {
@@ -69,6 +78,7 @@ export default function TenantsPage() {
         page: page.toString(),
         limit: '20',
         ...(search && { search }),
+        sort,
       })
 
       const response = await fetch(`/api/admin/tenants?${params}`)
@@ -85,6 +95,46 @@ export default function TenantsPage() {
       setError('Failed to load tenants')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const openProjectsDialog = (org: Organization) => {
+    setProjects([])
+    setProjectsError(null)
+    setProjectsFrom('')
+    setProjectsTo('')
+    setProjectsDialog({ open: true, org })
+  }
+
+  const fetchProjectsInRange = async () => {
+    if (!projectsDialog.org) return
+
+    try {
+      setProjectsLoading(true)
+      setProjectsError(null)
+
+      const params = new URLSearchParams()
+      if (projectsFrom) params.set('from', new Date(projectsFrom).toISOString())
+      if (projectsTo) {
+        // make "to" inclusive by pushing to end-of-day
+        const end = new Date(projectsTo)
+        end.setHours(23, 59, 59, 999)
+        params.set('to', end.toISOString())
+      }
+
+      const response = await fetch(`/api/admin/tenants/${projectsDialog.org.id}/projects?${params}`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        setProjectsError(data.error || 'Failed to load projects')
+        return
+      }
+
+      setProjects(data.projects || [])
+    } catch {
+      setProjectsError('Failed to load projects')
+    } finally {
+      setProjectsLoading(false)
     }
   }
 
@@ -218,6 +268,25 @@ export default function TenantsPage() {
             className="pl-10"
           />
         </div>
+        <div className="w-56">
+          <Select
+            value={sort}
+            onValueChange={(v) => {
+              setSort(v as any)
+              setPage(1)
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="created_desc">Newest first</SelectItem>
+              <SelectItem value="created_asc">Oldest first</SelectItem>
+              <SelectItem value="name_asc">Name (A–Z)</SelectItem>
+              <SelectItem value="name_desc">Name (Z–A)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {error && (
@@ -323,6 +392,9 @@ export default function TenantsPage() {
                             Copy slug
                           </DropdownMenuItem>
                         )}
+                        <DropdownMenuItem onClick={() => openProjectsDialog(org)}>
+                          View projects (date range)
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleEdit(org)}>
                           <Edit className="h-4 w-4 mr-2" />
                           Edit
@@ -442,6 +514,78 @@ export default function TenantsPage() {
             </Button>
             <Button onClick={handleSaveEdit}>
               Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Projects Date Range Dialog */}
+      <Dialog open={projectsDialog.open} onOpenChange={(open: boolean) => setProjectsDialog({ open, org: null })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Projects in date range</DialogTitle>
+            <DialogDescription>
+              {projectsDialog.org ? `Organization: ${projectsDialog.org.name}` : 'Select an organization'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="projects-from">From</Label>
+              <Input
+                id="projects-from"
+                type="date"
+                value={projectsFrom}
+                onChange={(e) => setProjectsFrom(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="projects-to">To</Label>
+              <Input
+                id="projects-to"
+                type="date"
+                value={projectsTo}
+                onChange={(e) => setProjectsTo(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {projectsError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              {projectsError}
+            </div>
+          )}
+
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
+            {projectsLoading
+              ? 'Loading projects…'
+              : projects.length === 0
+                ? 'No projects loaded yet.'
+                : `${projects.length} project${projects.length === 1 ? '' : 's'} found`}
+          </div>
+
+          {projects.length > 0 && (
+            <div className="max-h-60 overflow-auto rounded-lg border border-gray-200">
+              <div className="divide-y divide-gray-200">
+                {projects.map((p) => (
+                  <div key={p.id} className="px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="font-medium text-gray-900">{p.name}</p>
+                      <p className="text-xs text-gray-500">{new Date(p.created_at).toLocaleDateString()}</p>
+                    </div>
+                    <p className="text-xs text-gray-500">Status: {p.status}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProjectsDialog({ open: false, org: null })}>
+              Close
+            </Button>
+            <Button onClick={fetchProjectsInRange} disabled={projectsLoading || !projectsDialog.org}>
+              Apply filter
             </Button>
           </DialogFooter>
         </DialogContent>

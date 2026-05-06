@@ -18,6 +18,7 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const search = searchParams.get('search') || ''
+    const sort = searchParams.get('sort') || 'created_desc'
 
     const from = (page - 1) * limit
     const to = from + limit - 1
@@ -35,7 +36,17 @@ export async function GET(request: Request) {
         organization_members(count),
         projects(count)
       `, { count: 'exact' })
-      .order('created_at', { ascending: false })
+
+    // Sorting (server-side so pagination is correct)
+    if (sort === 'name_asc') {
+      query = query.order('name', { ascending: true })
+    } else if (sort === 'name_desc') {
+      query = query.order('name', { ascending: false })
+    } else if (sort === 'created_asc') {
+      query = query.order('created_at', { ascending: true })
+    } else {
+      query = query.order('created_at', { ascending: false })
+    }
 
     // Add search filter
     if (search) {

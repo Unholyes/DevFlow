@@ -1,8 +1,21 @@
-import { createClient } from '@/lib/supabase/server'
+import Link from 'next/link'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { Building2, Users, FolderKanban, TrendingUp } from 'lucide-react'
 
-async function getOverviewStats() {
-  const supabase = createClient()
+export const dynamic = 'force-dynamic'
+
+type TimeRange = '7d' | '30d' | '90d'
+
+function getSinceDate(range: TimeRange) {
+  const now = new Date()
+  const days = range === '7d' ? 7 : range === '30d' ? 30 : 90
+  now.setDate(now.getDate() - days)
+  return now.toISOString()
+}
+
+async function getOverviewStats(range: TimeRange) {
+  const supabase = createAdminClient()
+  const since = getSinceDate(range)
   
   try {
     // Get total organizations
@@ -10,43 +23,50 @@ async function getOverviewStats() {
       .from('organizations')
       .select('*', { count: 'exact', head: true })
 
-    // Get total users by role
-    const { data: usersByRole } = await supabase
-      .from('profiles')
-      .select('role')
-
-    const roleCounts = usersByRole?.reduce((acc, user) => {
-      acc[user.role] = (acc[user.role] || 0) + 1
-      return acc
-    }, {} as Record<string, number>) || { super_admin: 0, tenant_admin: 0, team_member: 0 }
+    const [
+      { count: userCount },
+      { count: superAdminCount },
+      { count: tenantAdminCount },
+      { count: teamMemberCount },
+    ] = await Promise.all([
+      supabase.from('profiles').select('*', { count: 'exact', head: true }),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'super_admin'),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'tenant_admin'),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'team_member'),
+    ])
 
     // Get total projects
     const { count: projectCount } = await supabase
       .from('projects')
       .select('*', { count: 'exact', head: true })
 
-    // Get organizations created in last 30 days
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-
     const { count: newOrgCount } = await supabase
       .from('organizations')
       .select('*', { count: 'exact', head: true })
-      .gte('created_at', thirtyDaysAgo.toISOString())
+      .gte('created_at', since)
 
-    // Get users created in last 30 days
     const { count: newUserCount } = await supabase
       .from('profiles')
       .select('*', { count: 'exact', head: true })
-      .gte('created_at', thirtyDaysAgo.toISOString())
+      .gte('created_at', since)
+
+    const { count: newProjectCount } = await supabase
+      .from('projects')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', since)
 
     return {
       totalOrganizations: orgCount || 0,
-      totalUsers: usersByRole?.length || 0,
-      usersByRole: roleCounts,
+      totalUsers: userCount || 0,
+      usersByRole: {
+        super_admin: superAdminCount || 0,
+        tenant_admin: tenantAdminCount || 0,
+        team_member: teamMemberCount || 0,
+      },
       totalProjects: projectCount || 0,
       newOrganizations: newOrgCount || 0,
       newUsers: newUserCount || 0,
+      newProjects: newProjectCount || 0,
     }
   } catch (error) {
     console.error('Error fetching overview stats:', error)
@@ -57,23 +77,61 @@ async function getOverviewStats() {
       totalProjects: 0,
       newOrganizations: 0,
       newUsers: 0,
+      newProjects: 0,
     }
   }
 }
 
 async function getRecentActivity() {
-  const supabase = createClient()
+  const supabase = createAdminClient()
   
   try {
     // Get recent organizations
     const { data: recentOrgs } = await supabase
       .from('organizations')
-      .select('id, name, created_at')
+      // Keep this string single-line: Supabase's type-level parser is sensitive to whitespace/newlines.
+      .select('id,name,slug,owner_id,created_at')
       .order('created_at', { ascending: false })
       .limit(5)
 
+    const ownerIds = Array.from(
+      new Set((recentOrgs ?? []).map((o) => o.owner_id).filter(Boolean))
+    ) as string[]
+
+    const [{ data: ownerProfiles }, ownerEmails] = await Promise.all([
+      ownerIds.length
+        ? supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', ownerIds)
+        : Promise.resolve({ data: [] as Array<{ id: string; full_name: string | null }> }),
+      Promise.all(
+        ownerIds.map(async (id) => {
+          const { data } = await supabase.auth.admin.getUserById(id)
+          return [id, data?.user?.email ?? null] as const
+        })
+      ),
+    ])
+
+    const ownerProfileById = new Map((ownerProfiles ?? []).map((p) => [p.id, p]))
+    const ownerEmailById = new Map(ownerEmails)
+
     return {
-      recentOrganizations: recentOrgs || [],
+      recentOrganizations: (recentOrgs ?? []).map((o) => {
+        const ownerProfile = o.owner_id ? ownerProfileById.get(o.owner_id) : null
+        const ownerEmail = o.owner_id ? ownerEmailById.get(o.owner_id) : null
+
+        return {
+          id: o.id,
+          name: o.name,
+          slug: o.slug,
+          created_at: o.created_at,
+          owner: {
+            full_name: ownerProfile?.full_name ?? null,
+            email: ownerEmail ?? null,
+          },
+        }
+      }),
     }
   } catch (error) {
     console.error('Error fetching recent activity:', error)
@@ -84,7 +142,9 @@ async function getRecentActivity() {
 }
 
 export default async function AdminOverview() {
-  const stats = await getOverviewStats()
+  // Default to 30d for consistency with dashboard.
+  const range: TimeRange = '30d'
+  const stats = await getOverviewStats(range)
   const activity = await getRecentActivity()
 
   const metricCards = [
@@ -92,7 +152,7 @@ export default async function AdminOverview() {
       title: 'Total Organizations',
       value: stats.totalOrganizations,
       change: stats.newOrganizations,
-      changeLabel: 'new in 30 days',
+      changeLabel: `new in ${range}`,
       icon: Building2,
       color: 'bg-blue-500',
     },
@@ -100,15 +160,15 @@ export default async function AdminOverview() {
       title: 'Total Users',
       value: stats.totalUsers,
       change: stats.newUsers,
-      changeLabel: 'new in 30 days',
+      changeLabel: `new in ${range}`,
       icon: Users,
       color: 'bg-green-500',
     },
     {
       title: 'Total Projects',
       value: stats.totalProjects,
-      change: 0,
-      changeLabel: 'across all tenants',
+      change: stats.newProjects,
+      changeLabel: `new in ${range}`,
       icon: FolderKanban,
       color: 'bg-purple-500',
     },
@@ -123,9 +183,30 @@ export default async function AdminOverview() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Overview</h1>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Overview</h1>
+            <p className="mt-2 text-gray-600">
+              Platform-wide analytics and metrics
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={`/super-admin/overview?t=${Date.now()}`}
+              className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Refresh
+            </Link>
+            <Link
+              href="/super-admin/tenants"
+              className="rounded-md bg-purple-600 px-3 py-2 text-sm font-medium text-white hover:bg-purple-700"
+            >
+              Manage tenants
+            </Link>
+          </div>
+        </div>
         <p className="mt-2 text-gray-600">
-          Platform-wide analytics and metrics
+          Totals plus growth for the last {range}.
         </p>
       </div>
 
@@ -180,14 +261,20 @@ export default async function AdminOverview() {
           <div className="space-y-4">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">New Organizations (30 days)</span>
+                <span className="text-sm font-medium text-gray-700">New Organizations ({range})</span>
                 <span className="text-sm font-bold text-gray-900">{stats.newOrganizations}</span>
               </div>
             </div>
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700">New Users (30 days)</span>
+                <span className="text-sm font-medium text-gray-700">New Users ({range})</span>
                 <span className="text-sm font-bold text-gray-900">{stats.newUsers}</span>
+              </div>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">New Projects ({range})</span>
+                <span className="text-sm font-bold text-gray-900">{stats.newProjects}</span>
               </div>
             </div>
           </div>
@@ -213,7 +300,10 @@ export default async function AdminOverview() {
                   </div>
                   <div>
                     <p className="font-medium text-gray-900">{org.name}</p>
-                    <p className="text-xs text-gray-500">{new Date(org.created_at).toLocaleDateString()}</p>
+                    <p className="text-xs text-gray-500">
+                      {org.slug ? `${org.slug} • ` : ''}
+                      Owner: {org.owner?.full_name || org.owner?.email || 'Unknown'} • {new Date(org.created_at).toLocaleDateString()}
+                    </p>
                   </div>
                 </div>
               </div>
