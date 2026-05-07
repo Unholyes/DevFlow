@@ -121,6 +121,14 @@ export default async function ProcessBacklogPage({
 
   if (!orgId) redirect('/onboarding')
 
+  const { data: orgTeams } = await supabase
+    .from('teams')
+    .select('id,name')
+    .eq('organization_id', orgId)
+    .order('name')
+
+  const teamsForOrg = (orgTeams ?? []) as { id: string; name: string }[]
+
   const { data: project } = await supabase
     .from('projects')
     .select('id')
@@ -155,7 +163,7 @@ export default async function ProcessBacklogPage({
 
   const { data: tasks } = await supabase
     .from('tasks')
-    .select('id,title,description,priority,story_points,assignee_id,position')
+    .select('id,title,description,priority,story_points,assignee_id,position,team_id')
     .eq('project_id', project.id)
     .eq('organization_id', orgId)
     .eq('process_id', process.id)
@@ -171,6 +179,7 @@ export default async function ProcessBacklogPage({
       backlogStageId={backlogStageId}
       phaseTitle={phase.title}
       methodology={(process.methodology as 'scrum' | 'kanban') ?? 'scrum'}
+      teams={teamsForOrg}
       tasks={(tasks ?? []) as any}
     />
   )

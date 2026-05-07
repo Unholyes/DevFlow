@@ -1,9 +1,17 @@
 "use client"
 
-import { useCallback, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Badge } from '@/components/ui/badge'
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { KanbanTaskDetailModal, type TaskRowLite } from '@/components/project/KanbanTaskDetailModal'
 import {
   DndContext,
   DragOverlay,
@@ -43,6 +51,8 @@ type TaskRow = {
   workflow_stage_id: string | null
   completed_at: string | null
   position: number | null
+  team_id?: string | null
+  assignee_id?: string | null
 }
 
 const UNASSIGNED_STAGE_ID = '__unassigned__'
@@ -78,6 +88,9 @@ function findContainer(id: UniqueIdentifier, columns: Record<string, string[]>) 
   return undefined
 }
 
+/** Movement past this (px) between pointer down and click → treat as drag, do not open details. */
+const CARD_CLICK_MAX_MOVE_PX = 12
+
 async function reorderStage(
   projectId: string,
   processId: string,
@@ -97,14 +110,22 @@ function SortableScrumCard({
   task,
   locked,
   moving,
+  teamsList,
+  onOpen,
 }: {
   task: TaskRow
   locked: boolean
   moving: boolean
+  teamsList: { id: string; name: string }[]
+  onOpen: (task: TaskRow) => void
 }) {
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null)
+  const disabled = locked || moving
+  const teamName = task.team_id ? teamsList.find((x) => x.id === task.team_id)?.name : null
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
-    disabled: locked || moving,
+    disabled,
   })
 
   const style = {
@@ -119,12 +140,35 @@ function SortableScrumCard({
       style={style}
       {...attributes}
       {...listeners}
+      onPointerDown={(e) => {
+        pointerStartRef.current = { x: e.clientX, y: e.clientY }
+        listeners?.onPointerDown?.(e)
+      }}
+      onClick={(e) => {
+        if (disabled) return
+        const start = pointerStartRef.current
+        pointerStartRef.current = null
+        if (start) {
+          const moved = Math.hypot(e.clientX - start.x, e.clientY - start.y)
+          if (moved > CARD_CLICK_MAX_MOVE_PX) return
+        }
+        onOpen(task)
+      }}
+      onKeyDown={(e: KeyboardEvent) => {
+        listeners?.onKeyDown?.(e)
+        if (e.defaultPrevented) return
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          if (!disabled) onOpen(task)
+        }
+      }}
       className={cn(
-        'bg-white p-4 rounded-xl border shadow-sm transition-shadow touch-none select-none',
+        'bg-white p-4 rounded-xl border shadow-sm transition-shadow touch-none select-none text-left outline-none',
         locked
           ? 'cursor-not-allowed opacity-95'
           : 'hover:shadow-md cursor-grab active:cursor-grabbing',
-        moving ? 'opacity-60' : 'border-gray-100'
+        moving ? 'opacity-60' : 'border-gray-100',
+        !locked && 'focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1'
       )}
     >
       <div className="flex justify-between items-center mb-3">
@@ -136,7 +180,14 @@ function SortableScrumCard({
         </div>
       </div>
 
-      <h4 className="text-[13px] font-semibold text-gray-900 leading-tight mb-4">{task.title}</h4>
+      <h4 className="text-[13px] font-semibold text-gray-900 leading-tight mb-1">{task.title}</h4>
+      {teamName ? (
+        <p className="text-[11px] text-gray-500 mb-3 truncate" title={teamName}>
+          {teamName}
+        </p>
+      ) : (
+        <div className="mb-3" />
+      )}
 
       <div className="flex justify-between items-end">
         <div className={cn('text-[11px] px-2 py-1 rounded-full font-bold capitalize', priorityBadge(task.priority))}>
@@ -151,21 +202,25 @@ function ScrumColumn({
   stage,
   stageTasks,
   orderedIds,
-  locked,
+  interactionsLocked,
   movingTaskId,
+  teamsList,
+  onOpenTask,
 }: {
   stage: Stage
   stageTasks: TaskRow[]
   orderedIds: string[]
-  locked: boolean
+  interactionsLocked: boolean
   movingTaskId: string | null
+  teamsList: { id: string; name: string }[]
+  onOpenTask: (task: TaskRow) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id })
   return (
     <div
       className={cn(
         'bg-gray-50/50 rounded-2xl p-4 border min-h-[600px] space-y-4 transition-colors border-gray-100',
-        !locked && isOver && 'border-blue-300 bg-blue-50/40'
+        !interactionsLocked && isOver && 'border-blue-300 bg-blue-50/40'
       )}
     >
       <div className="flex justify-between items-center px-1">
@@ -181,8 +236,10 @@ function ScrumColumn({
             <SortableScrumCard
               key={task.id}
               task={task}
-              locked={locked}
+              locked={interactionsLocked}
               moving={movingTaskId === task.id}
+              teamsList={teamsList}
+              onOpen={onOpenTask}
             />
           ))}
         </SortableContext>
@@ -203,18 +260,70 @@ export default function ScrumView(props: {
   sprint: { id: string; name: string; status: 'planned' | 'active' | 'closed' } | null
   stages: Stage[]
   tasks: TaskRow[]
+  teams?: { id: string; name: string }[]
 }) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const teamsList = props.teams ?? []
   const [tasks, setTasks] = useState<TaskRow[]>(props.tasks)
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null)
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
   const isLocked = props.sprint?.status === 'closed'
+
+  const teamFilterId = (searchParams.get('teamId') ?? '').trim()
+  const teamFilterActive = teamFilterId.length > 0
+
+  const setTeamFilter = useCallback(
+    (id: string) => {
+      const p = new URLSearchParams(searchParams.toString())
+      if (!id) p.delete('teamId')
+      else p.set('teamId', id)
+      const q = p.toString()
+      router.push(q ? `${pathname}?${q}` : pathname)
+    },
+    [pathname, router, searchParams]
+  )
+
+  useEffect(() => {
+    setTasks(props.tasks)
+  }, [props.tasks])
+
+  const openTaskDetail = useCallback((task: TaskRow) => {
+    setDetailTaskId(task.id)
+  }, [])
+
+  const handleDetailSaved = useCallback(
+    (row: TaskRowLite) => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === row.id
+            ? {
+                ...t,
+                title: row.title,
+                team_id: row.team_id !== undefined ? row.team_id : t.team_id,
+                assignee_id: row.assignee_id !== undefined ? row.assignee_id : t.assignee_id,
+              }
+            : t
+        )
+      )
+      router.refresh()
+    },
+    [router]
+  )
 
   const stages = useMemo(() => [...props.stages].sort((a, b) => a.stage_order - b.stage_order), [props.stages])
   const stageById = useMemo(() => Object.fromEntries(stages.map((s) => [s.id, s])), [stages])
 
-  const totalPoints = tasks.reduce((sum, t) => sum + (t.story_points || 0), 0)
-  const donePoints = tasks.reduce(
+  const tasksForBoard = useMemo(
+    () => (teamFilterActive ? tasks.filter((t) => t.team_id === teamFilterId) : tasks),
+    [tasks, teamFilterActive, teamFilterId]
+  )
+
+  const metricsTasks = teamFilterActive ? tasksForBoard : tasks
+  const totalPoints = metricsTasks.reduce((sum, t) => sum + (t.story_points || 0), 0)
+  const donePoints = metricsTasks.reduce(
     (sum, t) =>
       sum +
       ((t.completed_at || (t.workflow_stage_id ? stageById[t.workflow_stage_id]?.is_done : false))
@@ -255,16 +364,16 @@ export default function ScrumView(props: {
     const m: Record<string, string[]> = {}
     for (const s of boardStages) {
       if (s.id === UNASSIGNED_STAGE_ID) {
-        m[s.id] = tasks
+        m[s.id] = tasksForBoard
           .filter((t) => !t.workflow_stage_id || !stageById[t.workflow_stage_id])
           .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
           .map((t) => t.id)
       } else {
-        m[s.id] = stageTaskIds(tasks, s.id)
+        m[s.id] = stageTaskIds(tasksForBoard, s.id)
       }
     }
     return m
-  }, [tasks, boardStages, stageById])
+  }, [tasksForBoard, boardStages, stageById])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -323,7 +432,7 @@ export default function ScrumView(props: {
     (event: DragEndEvent) => {
       const { active, over } = event
       setActiveId(null)
-      if (isLocked) return
+      if (isLocked || teamFilterActive) return
       if (!over) return
 
       const activeTaskId = String(active.id)
@@ -436,10 +545,12 @@ export default function ScrumView(props: {
         }
       })()
     },
-    [columns, isLocked, persistReorderIfPossible, props.processId, props.projectId, router, stageById, tasks]
+    [columns, isLocked, teamFilterActive, persistReorderIfPossible, props.processId, props.projectId, router, stageById, tasks]
   )
 
   const activeTask = activeId ? tasks.find((t) => t.id === String(activeId)) : null
+
+  const interactionsLocked = isLocked || teamFilterActive
 
   if (!props.sprint) {
     return (
@@ -465,6 +576,16 @@ export default function ScrumView(props: {
 
   return (
     <div className="space-y-6">
+      <KanbanTaskDetailModal
+        taskId={detailTaskId}
+        open={detailTaskId !== null}
+        onOpenChange={(o) => {
+          if (!o) setDetailTaskId(null)
+        }}
+        onTaskSaved={handleDetailSaved}
+        flowAdvancedFields={false}
+      />
+
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
         <div className="flex justify-between items-center mb-1">
           <div className="flex items-center gap-3">
@@ -523,6 +644,34 @@ export default function ScrumView(props: {
           </span>
           {isLocked ? <span className="ml-2 text-xs text-gray-500">(Locked)</span> : null}
         </p>
+        {teamsList.length > 0 ? (
+          <div className="mt-4 ml-16 flex flex-wrap items-end gap-4 rounded-lg border border-gray-100 bg-slate-50/90 p-3">
+            <div className="grid gap-1.5">
+              <Label className="text-xs font-medium text-gray-600">Filter by team</Label>
+              <Select
+                value={teamFilterId || '__all__'}
+                onValueChange={(v) => setTeamFilter(v === '__all__' ? '' : v)}
+              >
+                <SelectTrigger className="h-9 w-[220px] bg-white">
+                  <SelectValue placeholder="All teams" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All teams</SelectItem>
+                  {teamsList.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {teamFilterActive ? (
+              <p className="max-w-md text-xs text-amber-800">
+                Team filter is on — card drag-and-drop is disabled until you show all teams again.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <DndContext
@@ -536,10 +685,10 @@ export default function ScrumView(props: {
           {boardStages.map((stage) => {
             const stageTasks =
               stage.id === UNASSIGNED_STAGE_ID
-                ? tasks
+                ? tasksForBoard
                     .filter((t) => !t.workflow_stage_id || !stageById[t.workflow_stage_id])
                     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-                : tasks
+                : tasksForBoard
                     .filter((t) => t.workflow_stage_id === stage.id)
                     .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
             const ids = columns[stage.id] ?? []
@@ -550,8 +699,10 @@ export default function ScrumView(props: {
                 stage={stage}
                 stageTasks={stageTasks}
                 orderedIds={ids}
-                locked={isLocked}
+                interactionsLocked={interactionsLocked}
                 movingTaskId={movingTaskId}
+                teamsList={teamsList}
+                onOpenTask={openTaskDetail}
               />
             )
           })}

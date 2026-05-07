@@ -1,14 +1,22 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Plus, Search, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 type BacklogTask = {
   id: string
@@ -18,6 +26,7 @@ type BacklogTask = {
   story_points: number | null
   assignee_id: string | null
   position: number | null
+  team_id?: string | null
 }
 
 export function ProductBacklogPageClient(props: {
@@ -27,9 +36,13 @@ export function ProductBacklogPageClient(props: {
   backlogStageId?: string
   phaseTitle: string
   methodology?: 'scrum' | 'kanban'
+  teams?: { id: string; name: string }[]
   tasks: BacklogTask[]
 }) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const teamsList = props.teams ?? []
   const [tasks, setTasks] = useState<BacklogTask[]>(props.tasks)
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
@@ -39,7 +52,26 @@ export function ProductBacklogPageClient(props: {
   const [createDescription, setCreateDescription] = useState('')
   const [createPriority, setCreatePriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium')
   const [createStoryPoints, setCreateStoryPoints] = useState<string>('0')
+  const [createTeamId, setCreateTeamId] = useState<string>('')
   const [createLoading, setCreateLoading] = useState(false)
+
+  useEffect(() => {
+    setTasks(props.tasks)
+  }, [props.tasks])
+
+  const teamFilterId = (searchParams.get('teamId') ?? '').trim()
+  const teamFilterActive = teamFilterId.length > 0
+
+  const setTeamFilter = useCallback(
+    (id: string) => {
+      const p = new URLSearchParams(searchParams.toString())
+      if (!id) p.delete('teamId')
+      else p.set('teamId', id)
+      const q = p.toString()
+      router.push(q ? `${pathname}?${q}` : pathname)
+    },
+    [pathname, router, searchParams]
+  )
 
   const isKanban = props.methodology === 'kanban'
 
@@ -49,9 +81,10 @@ export function ProductBacklogPageClient(props: {
         (task.title?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
         (task.description?.toLowerCase() || '').includes(searchQuery.toLowerCase())
       const matchesFilter = filterPriority === 'all' || task.priority === filterPriority
-      return matchesSearch && matchesFilter
+      const matchesTeam = !teamFilterActive || task.team_id === teamFilterId
+      return matchesSearch && matchesFilter && matchesTeam
     })
-  }, [tasks, searchQuery, filterPriority])
+  }, [tasks, searchQuery, filterPriority, teamFilterActive, teamFilterId])
 
   const totalStoryPoints = filteredTasks.reduce((sum, task) => sum + (task.story_points || 0), 0)
   const kanbanDetailedCount = filteredTasks.filter((t) => (t.description?.trim()?.length ?? 0) > 0).length
@@ -94,19 +127,22 @@ export function ProductBacklogPageClient(props: {
 
     setCreateLoading(true)
     try {
+      const payload: Record<string, unknown> = {
+        project_id: props.projectId,
+        process_id: props.processId,
+        workflow_stage_id: props.backlogStageId,
+        title,
+        priority: createPriority,
+        story_points: isKanban ? null : safeStoryPoints,
+        description: desc.length > 0 ? desc : null,
+        sprint_id: null,
+      }
+      if (createTeamId) payload.team_id = createTeamId
+
       const res = await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: props.projectId,
-          process_id: props.processId,
-          workflow_stage_id: props.backlogStageId,
-          title,
-          priority: createPriority,
-          story_points: isKanban ? null : safeStoryPoints,
-          description: desc.length > 0 ? desc : null,
-          sprint_id: null,
-        }),
+        body: JSON.stringify(payload),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || 'Failed to create task')
@@ -122,6 +158,7 @@ export function ProductBacklogPageClient(props: {
             story_points: (created.story_points ?? (isKanban ? null : safeStoryPoints)) as any,
             assignee_id: (created.assignee_id ?? null) as any,
             position: (created.position ?? null) as any,
+            team_id: (created.team_id ?? (createTeamId || null)) as any,
           },
           ...prev.filter((t) => t.id !== created.id),
         ])
@@ -131,6 +168,7 @@ export function ProductBacklogPageClient(props: {
       setCreateDescription('')
       setCreatePriority('medium')
       setCreateStoryPoints('0')
+      setCreateTeamId('')
       setIsCreating(false)
       router.refresh() // keep as safety net for server-rendered state
     } catch (e) {
@@ -211,6 +249,27 @@ export function ProductBacklogPageClient(props: {
                       <option value="critical">Critical</option>
                     </select>
                   </div>
+                  {teamsList.length > 0 ? (
+                    <div className="md:col-span-12 md:max-w-md">
+                      <Label className="text-sm font-medium text-gray-700 mb-1 block">Team (optional)</Label>
+                      <Select
+                        value={createTeamId || '__none__'}
+                        onValueChange={(v) => setCreateTeamId(v === '__none__' ? '' : v)}
+                      >
+                        <SelectTrigger className="h-10 bg-white">
+                          <SelectValue placeholder="No team" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">No team</SelectItem>
+                          {teamsList.map((t) => (
+                            <SelectItem key={t.id} value={t.id}>
+                              {t.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
                   <div className="md:col-span-12">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                     <Textarea
@@ -222,7 +281,7 @@ export function ProductBacklogPageClient(props: {
                   </div>
                 </div>
                 <div className="flex gap-2 justify-end">
-                  <Button variant="outline" onClick={() => setIsCreating(false)} disabled={createLoading}>
+                  <Button variant="outline" onClick={() => { setIsCreating(false); setCreateTeamId('') }} disabled={createLoading}>
                     Cancel
                   </Button>
                   <Button
@@ -265,8 +324,29 @@ export function ProductBacklogPageClient(props: {
                     onChange={(e) => setCreateStoryPoints(e.target.value)}
                   />
                 </div>
+                {teamsList.length > 0 ? (
+                  <div className="md:col-span-12 md:max-w-md">
+                    <Label className="text-sm font-medium text-gray-700 mb-1 block">Team (optional)</Label>
+                    <Select
+                      value={createTeamId || '__none__'}
+                      onValueChange={(v) => setCreateTeamId(v === '__none__' ? '' : v)}
+                    >
+                      <SelectTrigger className="h-10 bg-white">
+                        <SelectValue placeholder="No team" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">No team</SelectItem>
+                        {teamsList.map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : null}
                 <div className="md:col-span-12 flex gap-2 justify-end pt-2">
-                  <Button variant="outline" onClick={() => setIsCreating(false)} disabled={createLoading}>
+                  <Button variant="outline" onClick={() => { setIsCreating(false); setCreateTeamId('') }} disabled={createLoading}>
                     Cancel
                   </Button>
                   <Button
@@ -314,8 +394,8 @@ export function ProductBacklogPageClient(props: {
 
       <Card className="border-gray-200 shadow-sm">
         <CardContent className="p-4">
-          <div className="flex gap-4">
-            <div className="flex-1 relative">
+          <div className="flex flex-col gap-4 lg:flex-row lg:flex-wrap lg:items-end">
+            <div className="flex-1 relative min-w-[200px]">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
                 placeholder="Search tasks..."
@@ -336,6 +416,27 @@ export function ProductBacklogPageClient(props: {
                 </Button>
               ))}
             </div>
+            {teamsList.length > 0 ? (
+              <div className="grid gap-1.5">
+                <Label className="text-xs text-gray-600">Team</Label>
+                <Select
+                  value={teamFilterId || '__all__'}
+                  onValueChange={(v) => setTeamFilter(v === '__all__' ? '' : v)}
+                >
+                  <SelectTrigger className="h-10 w-[200px] bg-white">
+                    <SelectValue placeholder="All teams" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">All teams</SelectItem>
+                    {teamsList.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : null}
           </div>
         </CardContent>
       </Card>
@@ -389,6 +490,11 @@ export function ProductBacklogPageClient(props: {
                       <Badge variant="outline" className="text-xs">
                         Priority: {task.priority}
                       </Badge>
+                      {task.team_id ? (
+                        <Badge variant="outline" className="text-xs text-gray-700">
+                          {teamsList.find((x) => x.id === task.team_id)?.name ?? 'Team'}
+                        </Badge>
+                      ) : null}
                       {isKanban ? (
                         task.description?.trim() ? (
                           <Badge variant="outline" className="text-xs text-gray-600">

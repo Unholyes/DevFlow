@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { NextResponse } from 'next/server'
+import { resolveAssigneeIdForTask, resolveTeamIdForTask } from '@/lib/tasks/validate-task-assignments'
 
 function isUniqueViolation(error: unknown) {
   return typeof error === 'object' && error !== null && (error as any).code === '23505'
@@ -53,6 +54,11 @@ export async function GET(request: Request) {
       query = query.eq('process_id', processId)
     }
 
+    const teamIdFilter = searchParams.get('teamId')
+    if (teamIdFilter && teamIdFilter.match(/^[0-9a-f-]{36}$/i)) {
+      query = query.eq('team_id', teamIdFilter)
+    }
+
     const { data, error } = await query.order('position', { ascending: true })
 
     if (error) {
@@ -90,6 +96,7 @@ export async function POST(request: Request) {
       sprint_id,
       size_band: sizeBandRaw,
       service_class: serviceClassRaw,
+      team_id: teamIdRaw,
     } = body;
 
     const story_points =
@@ -124,6 +131,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'project_id is required', data: null }, { status: 400 })
     }
 
+    const teamResolved = await resolveTeamIdForTask(supabase, orgId, teamIdRaw)
+    if (!teamResolved.ok) {
+      return NextResponse.json(
+        { error: teamResolved.error, code: teamResolved.code, data: null },
+        { status: teamResolved.status }
+      )
+    }
+
+    const assigneeResolved = await resolveAssigneeIdForTask(supabase, orgId, assignee_id)
+    if (!assigneeResolved.ok) {
+      return NextResponse.json(
+        { error: assigneeResolved.error, code: assigneeResolved.code, data: null },
+        { status: assigneeResolved.status }
+      )
+    }
+
     // Get the highest position for ordering
     let newPosition = 0;
     if (validProjectId) {
@@ -141,29 +164,30 @@ export async function POST(request: Request) {
 
     const nowIso = new Date().toISOString()
 
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert({
-        organization_id: orgId,
-        project_id: validProjectId,
-        process_id: process_id ?? null,
-        title,
-        description,
-        priority,
-        story_points,
-        due_date,
-        assignee_id,
-        workflow_stage_id,
-        sprint_id,
-        position: newPosition,
-        size_band,
-        service_class,
-        current_stage_entered_at: nowIso,
-        // Temporarily skip created_by_id to avoid RLS recursion
-        // created_by_id: (await supabase.auth.getUser()).data.user?.id,
-      })
-      .select()
-      .single()
+    const insertRow: Record<string, unknown> = {
+      organization_id: orgId,
+      project_id: validProjectId,
+      process_id: process_id ?? null,
+      title,
+      description,
+      priority,
+      story_points,
+      due_date,
+      workflow_stage_id,
+      sprint_id,
+      position: newPosition,
+      size_band,
+      service_class,
+      current_stage_entered_at: nowIso,
+    }
+    if (teamResolved.teamId !== undefined) {
+      insertRow.team_id = teamResolved.teamId
+    }
+    if (assigneeResolved.assigneeId !== undefined) {
+      insertRow.assignee_id = assigneeResolved.assigneeId
+    }
+
+    const { data, error } = await supabase.from('tasks').insert(insertRow).select().single()
 
     if (error) throw error
 
@@ -189,6 +213,22 @@ export async function PATCH(request: Request) {
 
     const body = await request.json()
     const { id, ...updates } = body as Record<string, unknown> & { id?: string }
+
+    if (updates.team_id !== undefined) {
+      const tr = await resolveTeamIdForTask(supabase, orgId, updates.team_id)
+      if (!tr.ok) {
+        return NextResponse.json({ error: tr.error, code: tr.code }, { status: tr.status })
+      }
+      updates.team_id = tr.teamId
+    }
+
+    if (updates.assignee_id !== undefined) {
+      const ar = await resolveAssigneeIdForTask(supabase, orgId, updates.assignee_id)
+      if (!ar.ok) {
+        return NextResponse.json({ error: ar.error, code: ar.code }, { status: ar.status })
+      }
+      updates.assignee_id = ar.assigneeId
+    }
 
     if (updates.workflow_stage_id !== undefined && typeof updates.workflow_stage_id === 'string') {
       const { data: existing } = await supabase

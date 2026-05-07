@@ -38,7 +38,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
     if (taskError) throw taskError
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
 
-    const [stageRes, commentsRes, assigneeRes] = await Promise.all([
+    const [stageRes, commentsRes, assigneeRes, teamRes] = await Promise.all([
       supabase.from('workflow_stages').select('id, name, is_done, is_backlog').eq('id', task.workflow_stage_id).maybeSingle(),
       supabase
         .from('task_comments')
@@ -47,6 +47,9 @@ export async function GET(_request: Request, { params }: { params: { id: string 
         .order('created_at', { ascending: true }),
       task.assignee_id
         ? supabase.from('profiles').select('id, full_name, avatar_url').eq('id', task.assignee_id).maybeSingle()
+        : Promise.resolve({ data: null } as const),
+      (task as { team_id?: string | null }).team_id
+        ? supabase.from('teams').select('id, name').eq('id', (task as { team_id: string }).team_id).maybeSingle()
         : Promise.resolve({ data: null } as const),
     ])
 
@@ -67,6 +70,7 @@ export async function GET(_request: Request, { params }: { params: { id: string 
       task,
       stage: stageRes.data ?? null,
       assignee: assigneeRes.data ?? null,
+      team: teamRes.data ?? null,
       comments,
     })
   } catch (e: unknown) {

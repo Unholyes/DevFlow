@@ -23,6 +23,9 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase/client'
+
+const UNASSIGNED = '__unassigned__'
 
 export type TaskRowLite = {
   id: string
@@ -36,6 +39,8 @@ export type TaskRowLite = {
   current_stage_entered_at?: string | null
   size_band?: 'xs' | 's' | 'm' | 'l' | 'xl' | null
   service_class?: 'standard' | 'fixed_date' | 'expedite' | null
+  assignee_id?: string | null
+  team_id?: string | null
 }
 
 type TaskDetailResponse = {
@@ -49,6 +54,8 @@ type TaskDetailResponse = {
     completed_at?: string | null
     due_date?: string | null
     assignee_id?: string | null
+    team_id?: string | null
+    organization_id?: string
     blocked?: boolean
     blocked_reason?: string | null
     position?: number | null
@@ -60,6 +67,7 @@ type TaskDetailResponse = {
   }
   stage: { id: string; name: string; is_done: boolean; is_backlog: boolean } | null
   assignee: { id: string; full_name: string | null; avatar_url: string | null } | null
+  team: { id: string; name: string } | null
   comments: Array<{
     id: string
     content: string
@@ -106,11 +114,14 @@ export function KanbanTaskDetailModal({
   open,
   onOpenChange,
   onTaskSaved,
+  flowAdvancedFields = false,
 }: {
   taskId: string | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onTaskSaved: (row: TaskRowLite) => void
+  /** When true, show and edit T‑shirt size and class of service (Kanban). When false, omit from save payload. */
+  flowAdvancedFields?: boolean
 }) {
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -128,6 +139,13 @@ export function KanbanTaskDetailModal({
 
   const [commentText, setCommentText] = useState('')
   const [commentLoading, setCommentLoading] = useState(false)
+
+  const [assignmentTeamId, setAssignmentTeamId] = useState<string | null>(null)
+  const [assignmentAssigneeId, setAssignmentAssigneeId] = useState<string | null>(null)
+  const [teamOptions, setTeamOptions] = useState<{ id: string; name: string }[]>([])
+  const [memberOptions, setMemberOptions] = useState<{ user_id: string; full_name: string | null; email: string | null }[]>(
+    []
+  )
 
   const load = useCallback(async () => {
     if (!taskId) return
@@ -148,6 +166,8 @@ export function KanbanTaskDetailModal({
       setDueDate(t.due_date ? String(t.due_date).slice(0, 10) : '')
       setBlocked(!!t.blocked)
       setBlockedReason(t.blocked_reason ?? '')
+      setAssignmentTeamId((t as { team_id?: string | null }).team_id ?? null)
+      setAssignmentAssigneeId(t.assignee_id ?? null)
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Failed to load')
       setDetail(null)
@@ -155,6 +175,53 @@ export function KanbanTaskDetailModal({
       setLoading(false)
     }
   }, [taskId])
+
+  useEffect(() => {
+    if (!open || !detail?.task?.organization_id) return
+    const orgId = detail.task.organization_id
+    let cancelled = false
+
+    async function loadAssignmentOptions() {
+      const [teamsRes, membersRes] = await Promise.all([
+        supabase.from('teams').select('id,name').eq('organization_id', orgId).order('name', { ascending: true }),
+        supabase
+          .from('organization_members')
+          .select(
+            `
+            user_id,
+            profiles:user_id ( full_name, email )
+          `
+          )
+          .eq('organization_id', orgId)
+          .order('joined_at', { ascending: true }),
+      ])
+      if (cancelled) return
+      if (!teamsRes.error) {
+        setTeamOptions((teamsRes.data ?? []) as { id: string; name: string }[])
+      }
+      if (!membersRes.error) {
+        const raw = (membersRes.data ?? []) as {
+          user_id: string
+          profiles?: { full_name: string | null; email: string | null } | { full_name: string | null; email: string | null }[] | null
+        }[]
+        setMemberOptions(
+          raw.map((r) => {
+            const p = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles
+            return {
+              user_id: r.user_id,
+              full_name: p?.full_name ?? null,
+              email: p?.email ?? null,
+            }
+          })
+        )
+      }
+    }
+
+    void loadAssignmentOptions()
+    return () => {
+      cancelled = true
+    }
+  }, [open, detail?.task?.organization_id])
 
   useEffect(() => {
     if (open && taskId) void load()
@@ -172,31 +239,43 @@ export function KanbanTaskDetailModal({
 
     setSaveLoading(true)
     try {
+      const payload: Record<string, unknown> = {
+        id: taskId,
+        title: title.trim(),
+        description: description.trim() || null,
+        priority,
+        story_points: null,
+        due_date: dueDate.trim() || null,
+        blocked,
+        blocked_reason: blocked ? blockedReason.trim() || null : null,
+        team_id: assignmentTeamId,
+        assignee_id: assignmentAssigneeId,
+      }
+      if (flowAdvancedFields) {
+        payload.size_band = sizeBand === 'none' ? null : sizeBand
+        payload.service_class = serviceClass || 'standard'
+      }
+
       const res = await fetch('/api/tasks', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: taskId,
-          title: title.trim(),
-          description: description.trim() || null,
-          priority,
-          story_points: null,
-          size_band: sizeBand === 'none' ? null : sizeBand,
-          service_class: serviceClass || 'standard',
-          due_date: dueDate.trim() || null,
-          blocked,
-          blocked_reason: blocked ? blockedReason.trim() || null : null,
-        }),
+        body: JSON.stringify(payload),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || 'Failed to save')
 
       const updated = json.data as TaskDetailResponse['task']
+      const teamMeta = assignmentTeamId ? teamOptions.find((x) => x.id === assignmentTeamId) : null
+      const mem = assignmentAssigneeId ? memberOptions.find((x) => x.user_id === assignmentAssigneeId) : null
       setDetail((d) =>
         d
           ? {
               ...d,
               task: { ...d.task, ...updated },
+              team: teamMeta ? { id: teamMeta.id, name: teamMeta.name } : null,
+              assignee: mem
+                ? { id: mem.user_id, full_name: mem.full_name, avatar_url: d.assignee?.avatar_url ?? null }
+                : null,
             }
           : d
       )
@@ -213,6 +292,8 @@ export function KanbanTaskDetailModal({
         current_stage_entered_at: updated.current_stage_entered_at ?? null,
         size_band: updated.size_band ?? null,
         service_class: updated.service_class ?? null,
+        team_id: (updated as { team_id?: string | null }).team_id ?? assignmentTeamId,
+        assignee_id: (updated as { assignee_id?: string | null }).assignee_id ?? assignmentAssigneeId,
       })
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Save failed')
@@ -251,8 +332,14 @@ export function KanbanTaskDetailModal({
         <DialogHeader>
           <DialogTitle className="pr-8">Task details</DialogTitle>
           <DialogDescription>
-            Kanban work item — optional size and class of service replace story points. Stage moves stay on the board.
-            Metrics use dates, not estimates.
+            {flowAdvancedFields ? (
+              <>
+                Kanban work item — optional size and class of service replace story points. Stage moves stay on the
+                board. Metrics use dates, not estimates.
+              </>
+            ) : (
+              <>Edit title, description, priority, assignments, and blocking. Stage moves stay on the board.</>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -295,7 +382,40 @@ export function KanbanTaskDetailModal({
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {flowAdvancedFields ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label>Priority</Label>
+                  <Select value={priority} onValueChange={(v) => setPriority(v as TaskRowLite['priority'])}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-2">
+                  <Label>Size (T‑shirt)</Label>
+                  <Select value={sizeBand} onValueChange={setSizeBand}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Optional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="xs">XS</SelectItem>
+                      <SelectItem value="s">S</SelectItem>
+                      <SelectItem value="m">M</SelectItem>
+                      <SelectItem value="l">L</SelectItem>
+                      <SelectItem value="xl">XL</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            ) : (
               <div className="grid gap-2">
                 <Label>Priority</Label>
                 <Select value={priority} onValueChange={(v) => setPriority(v as TaskRowLite['priority'])}>
@@ -310,41 +430,68 @@ export function KanbanTaskDetailModal({
                   </SelectContent>
                 </Select>
               </div>
+            )}
+
+            {flowAdvancedFields ? (
               <div className="grid gap-2">
-                <Label>Size (T‑shirt)</Label>
-                <Select value={sizeBand} onValueChange={setSizeBand}>
+                <Label>Class of service</Label>
+                <Select value={serviceClass} onValueChange={setServiceClass}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Optional" />
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    <SelectItem value="xs">XS</SelectItem>
-                    <SelectItem value="s">S</SelectItem>
-                    <SelectItem value="m">M</SelectItem>
-                    <SelectItem value="l">L</SelectItem>
-                    <SelectItem value="xl">XL</SelectItem>
+                    <SelectItem value="standard">Standard</SelectItem>
+                    <SelectItem value="fixed_date">Fixed date</SelectItem>
+                    <SelectItem value="expedite">Expedite</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Class of service</Label>
-              <Select value={serviceClass} onValueChange={setServiceClass}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="standard">Standard</SelectItem>
-                  <SelectItem value="fixed_date">Fixed date</SelectItem>
-                  <SelectItem value="expedite">Expedite</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            ) : null}
 
             <div className="grid gap-2">
               <Label htmlFor="task-due">Due date</Label>
               <Input id="task-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Team</Label>
+                <Select
+                  value={assignmentTeamId ?? UNASSIGNED}
+                  onValueChange={(v) => setAssignmentTeamId(v === UNASSIGNED ? null : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Unassigned" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
+                    {teamOptions.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <Label>Assignee</Label>
+                <Select
+                  value={assignmentAssigneeId ?? UNASSIGNED}
+                  onValueChange={(v) => setAssignmentAssigneeId(v === UNASSIGNED ? null : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Unassigned" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={UNASSIGNED}>Unassigned</SelectItem>
+                    {memberOptions.map((m) => (
+                      <SelectItem key={m.user_id} value={m.user_id}>
+                        {m.full_name?.trim() || m.email || 'Member'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4 space-y-3">
@@ -388,12 +535,6 @@ export function KanbanTaskDetailModal({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-500">
-              <div>
-                <span className="font-medium text-gray-600">Assignee</span>
-                <p className="mt-0.5 text-gray-800">
-                  {detail?.assignee?.full_name?.trim() || 'Unassigned'}
-                </p>
-              </div>
               <div>
                 <span className="font-medium text-gray-600">Updated</span>
                 <p className="mt-0.5 text-gray-800">

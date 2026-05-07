@@ -30,6 +30,14 @@ export default async function ProcessBoardPage({
 
   if (!orgId) redirect('/onboarding')
 
+  const { data: orgTeams } = await supabase
+    .from('teams')
+    .select('id,name')
+    .eq('organization_id', orgId)
+    .order('name')
+
+  const teamsForOrg = (orgTeams ?? []) as { id: string; name: string }[]
+
   const { data: project } = await supabase
     .from('projects')
     .select('id,phase_gating_enabled')
@@ -118,7 +126,7 @@ export default async function ProcessBoardPage({
       sprintRow?.id && stageIds.length > 0
         ? await supabase
             .from('tasks')
-            .select('id,title,priority,story_points,workflow_stage_id,completed_at,position')
+            .select('id,title,priority,story_points,workflow_stage_id,completed_at,position,team_id,assignee_id')
             .eq('project_id', project.id)
             .eq('organization_id', orgId)
             .eq('process_id', process.id)
@@ -170,6 +178,7 @@ export default async function ProcessBoardPage({
           }
           stages={(stages ?? []) as any}
           tasks={(sprintTasks ?? []) as any}
+          teams={teamsForOrg}
         />
       </div>
     )
@@ -182,9 +191,9 @@ export default async function ProcessBoardPage({
   // If migrations/kanban_flow_metrics.sql has not been applied, selecting flow columns fails and
   // PostgREST returns no rows — we retry with a base column list so cards still load.
   const kanbanTaskColumnsExtended =
-    'id,title,description,priority,story_points,workflow_stage_id,completed_at,position,current_stage_entered_at,size_band,service_class'
+    'id,title,description,priority,story_points,workflow_stage_id,completed_at,position,current_stage_entered_at,size_band,service_class,team_id,assignee_id'
   const kanbanTaskColumnsBase =
-    'id,title,description,priority,story_points,workflow_stage_id,completed_at,position'
+    'id,title,description,priority,story_points,workflow_stage_id,completed_at,position,team_id,assignee_id'
 
   let tasks: any[] | null = null
   let tasksError: { message?: string; code?: string } | null = null
@@ -307,6 +316,7 @@ export default async function ProcessBoardPage({
         processId={process.id}
         stages={(stages ?? []) as any}
         tasks={(tasks ?? []) as any}
+        teams={teamsForOrg}
         flowMetrics={{
           throughput7d: throughput7d ?? 0,
           avgLeadTimeDays30d,

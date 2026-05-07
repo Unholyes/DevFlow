@@ -8,8 +8,9 @@ import {
   useState,
   type HTMLAttributes,
   type KeyboardEvent,
+  type ReactNode,
 } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   DndContext,
@@ -55,8 +56,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { GripVertical, LayoutList, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { GripVertical, HelpCircle, LayoutList, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { KanbanTaskDetailModal, type TaskRowLite } from '@/components/project/KanbanTaskDetailModal'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 type Stage = {
   id: string
@@ -79,11 +81,45 @@ type TaskRow = {
   current_stage_entered_at?: string | null
   size_band?: 'xs' | 's' | 'm' | 'l' | 'xl' | null
   service_class?: 'standard' | 'fixed_date' | 'expedite' | null
+  team_id?: string | null
+  assignee_id?: string | null
 }
 
 export type KanbanFlowMetrics = {
   throughput7d: number
   avgLeadTimeDays30d: number | null
+}
+
+const KANBAN_FLOW_ADVANCED_STORAGE_KEY = 'devflow:kanban-flow-advanced-fields'
+
+function HelpTip({
+  label,
+  children,
+  className,
+}: {
+  label: string
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            'inline-flex shrink-0 rounded-full p-0.5 text-gray-400 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+            className
+          )}
+          aria-label={label}
+        >
+          <HelpCircle className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs text-xs leading-relaxed">
+        {children}
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 function formatAgeInStage(iso: string | null | undefined): string | null {
@@ -232,11 +268,15 @@ function SortableCard({
   stage,
   disabled,
   onOpen,
+  teamsList,
+  showFlowAdvanced,
 }: {
   task: TaskRow
   stage: Stage
   disabled: boolean
   onOpen: (task: TaskRow) => void
+  teamsList: { id: string; name: string }[]
+  showFlowAdvanced: boolean
 }) {
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -251,6 +291,8 @@ function SortableCard({
 
   const ageLabel = !stage.is_done ? formatAgeInStage(task.current_stage_entered_at) : null
   const svc = task.service_class ?? 'standard'
+  const teamName = task.team_id ? teamsList.find((x) => x.id === task.team_id)?.name : null
+  const showSvcChrome = showFlowAdvanced && (svc === 'expedite' || svc === 'fixed_date')
 
   return (
     <div
@@ -283,16 +325,25 @@ function SortableCard({
       className={cn(
         'bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all touch-none select-none p-3 text-left outline-none cursor-grab active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1',
         disabled && 'cursor-not-allowed opacity-60',
-        svc === 'expedite' && 'border-l-[3px] border-l-red-500',
-        svc === 'fixed_date' && 'border-l-[3px] border-l-amber-400'
+        showFlowAdvanced && svc === 'expedite' && 'border-l-[3px] border-l-red-500',
+        showFlowAdvanced && svc === 'fixed_date' && 'border-l-[3px] border-l-amber-400'
       )}
     >
       <div className="flex justify-end items-start mb-2">
-        <Badge variant="outline" className={`text-[10px] font-bold ${priorityStyle(task.priority)}`}>
-          {task.priority === 'critical' ? 'high' : task.priority}
+        <Badge
+          variant="outline"
+          title={`Priority: ${task.priority === 'critical' ? 'high' : task.priority}`}
+          className={`text-[10px] font-bold ${priorityStyle(task.priority)}`}
+        >
+          Priority · {task.priority === 'critical' ? 'high' : task.priority}
         </Badge>
       </div>
       <h4 className="text-sm font-bold text-gray-800 mb-2 leading-snug">{task.title}</h4>
+      {teamName ? (
+        <p className="text-[10px] font-medium text-blue-700 mb-1 truncate" title={teamName}>
+          {teamName}
+        </p>
+      ) : null}
       <div className="pt-3 border-t border-gray-50 space-y-2 min-h-[2rem]">
         {task.description?.trim() ? (
           <p className="text-[10px] text-gray-500 line-clamp-2">{task.description}</p>
@@ -303,15 +354,17 @@ function SortableCard({
               {ageLabel} in column
             </span>
           ) : null}
-          {task.size_band ? (
+          {task.size_band && showFlowAdvanced ? (
             <Badge variant="outline" className="text-[9px] px-1 py-0 font-semibold uppercase tracking-wide">
               {task.size_band}
             </Badge>
           ) : null}
-          {svc === 'expedite' ? (
-            <span className="font-semibold text-red-600">Expedite</span>
-          ) : svc === 'fixed_date' ? (
-            <span className="font-medium text-amber-700">Fixed date</span>
+          {showSvcChrome ? (
+            svc === 'expedite' ? (
+              <span className="font-semibold text-red-600">Expedite</span>
+            ) : (
+              <span className="font-medium text-amber-700">Fixed date</span>
+            )
           ) : null}
         </div>
       </div>
@@ -327,6 +380,8 @@ function KanbanColumn({
   onRequestDelete,
   onEditWip,
   onOpenTask,
+  teamsList,
+  showFlowAdvanced,
   columnDragHandleProps,
 }: {
   stage: Stage
@@ -336,6 +391,8 @@ function KanbanColumn({
   onRequestDelete?: () => void
   onEditWip?: () => void
   onOpenTask: (task: TaskRow) => void
+  teamsList: { id: string; name: string }[]
+  showFlowAdvanced: boolean
   /** When set, shows a Jira-style column drag handle (listeners should stay on this control only). */
   columnDragHandleProps?: HTMLAttributes<HTMLButtonElement>
 }) {
@@ -421,7 +478,15 @@ function KanbanColumn({
       >
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
           {tasksInColumn.map((task) => (
-            <SortableCard key={task.id} task={task} stage={stage} disabled={disabled} onOpen={onOpenTask} />
+            <SortableCard
+              key={task.id}
+              task={task}
+              stage={stage}
+              disabled={disabled}
+              onOpen={onOpenTask}
+              teamsList={teamsList}
+              showFlowAdvanced={showFlowAdvanced}
+            />
           ))}
         </SortableContext>
         {tasksInColumn.length === 0 ? (
@@ -442,6 +507,8 @@ function SortableKanbanColumn({
   onRequestDelete,
   onEditWip,
   onOpenTask,
+  teamsList,
+  showFlowAdvanced,
 }: {
   stage: Stage
   tasksInColumn: TaskRow[]
@@ -450,6 +517,8 @@ function SortableKanbanColumn({
   onRequestDelete?: () => void
   onEditWip?: () => void
   onOpenTask: (task: TaskRow) => void
+  teamsList: { id: string; name: string }[]
+  showFlowAdvanced: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: boardColSortableId(stage.id),
@@ -474,6 +543,8 @@ function SortableKanbanColumn({
         onRequestDelete={onRequestDelete}
         onEditWip={onEditWip}
         onOpenTask={onOpenTask}
+        teamsList={teamsList}
+        showFlowAdvanced={showFlowAdvanced}
         columnDragHandleProps={{ ...attributes, ...listeners }}
       />
     </div>
@@ -518,9 +589,14 @@ export default function KanbanView(props: {
   stages: Stage[]
   tasks: TaskRow[]
   flowMetrics?: KanbanFlowMetrics
+  /** Workspace teams for labels + filter (optional). */
+  teams?: { id: string; name: string }[]
 }) {
   const flowMetrics = props.flowMetrics ?? { throughput7d: 0, avgLeadTimeDays30d: null as number | null }
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const teamsList = props.teams ?? []
   const [tasks, setTasks] = useState<TaskRow[]>(props.tasks)
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null)
   const [persisting, setPersisting] = useState(false)
@@ -552,6 +628,7 @@ export default function KanbanView(props: {
   const [backlogCreateLoading, setBacklogCreateLoading] = useState(false)
   const [backlogCreateSize, setBacklogCreateSize] = useState<string>('')
   const [backlogCreateService, setBacklogCreateService] = useState<string>('standard')
+  const [showAdvancedFlowFields, setShowAdvancedFlowFields] = useState(false)
 
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
   const [wipBlockedInfo, setWipBlockedInfo] = useState<{
@@ -559,6 +636,39 @@ export default function KanbanView(props: {
     limit: number
     openCount: number
   } | null>(null)
+
+  const teamFilterId = (searchParams.get('teamId') ?? '').trim()
+  const teamFilterActive = teamFilterId.length > 0
+
+  const setTeamFilter = useCallback(
+    (id: string) => {
+      const p = new URLSearchParams(searchParams.toString())
+      if (!id) p.delete('teamId')
+      else p.set('teamId', id)
+      const q = p.toString()
+      router.push(q ? `${pathname}?${q}` : pathname)
+    },
+    [pathname, router, searchParams]
+  )
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(KANBAN_FLOW_ADVANCED_STORAGE_KEY) === '1') {
+        setShowAdvancedFlowFields(true)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const persistAdvancedFlowFields = useCallback((on: boolean) => {
+    setShowAdvancedFlowFields(on)
+    try {
+      localStorage.setItem(KANBAN_FLOW_ADVANCED_STORAGE_KEY, on ? '1' : '0')
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
   useEffect(() => {
     setTasks(props.tasks)
@@ -568,6 +678,13 @@ export default function KanbanView(props: {
   useEffect(() => {
     tasksRef.current = tasks
   }, [tasks])
+
+  const tasksForBoard = useMemo(
+    () => (teamFilterActive ? tasks.filter((t) => t.team_id === teamFilterId) : tasks),
+    [tasks, teamFilterActive, teamFilterId]
+  )
+
+  const statsTasks = teamFilterActive ? tasksForBoard : tasks
 
   const stageById = useMemo(() => Object.fromEntries(props.stages.map((s) => [s.id, s])), [props.stages])
 
@@ -614,36 +731,36 @@ export default function KanbanView(props: {
   const columns = useMemo(() => {
     const m: Record<string, string[]> = {}
     for (const s of boardStages) {
-      m[s.id] = stageTaskIds(tasks, s.id)
+      m[s.id] = stageTaskIds(tasksForBoard, s.id)
     }
     if (backlogStageId) {
-      m[backlogStageId] = stageTaskIds(tasks, backlogStageId)
+      m[backlogStageId] = stageTaskIds(tasksForBoard, backlogStageId)
     }
     return m
-  }, [tasks, boardStages, backlogStageId])
+  }, [tasksForBoard, boardStages, backlogStageId])
 
   const totalBoardTasks = useMemo(
-    () => tasks.filter((t) => boardStageIds.has(t.workflow_stage_id)).length,
-    [tasks, boardStageIds]
+    () => statsTasks.filter((t) => boardStageIds.has(t.workflow_stage_id)).length,
+    [statsTasks, boardStageIds]
   )
 
   /** Tasks on the board in non-terminal columns (incl. e.g. “To Do”) that are not completed. */
   const openNotDoneCount = useMemo(
     () =>
-      tasks.filter((t) => {
+      statsTasks.filter((t) => {
         const st = stageById[t.workflow_stage_id]
         return st && boardStageIds.has(st.id) && !st.is_backlog && !st.is_done && !t.completed_at
       }).length,
-    [tasks, stageById, boardStageIds]
+    [statsTasks, stageById, boardStageIds]
   )
 
   const completedCount = useMemo(
     () =>
-      tasks.filter((t) => {
+      statsTasks.filter((t) => {
         const st = stageById[t.workflow_stage_id]
         return st && boardStageIds.has(st.id) && (st.is_done || !!t.completed_at)
       }).length,
-    [tasks, stageById, boardStageIds]
+    [statsTasks, stageById, boardStageIds]
   )
 
   const sensors = useSensors(
@@ -691,6 +808,8 @@ export default function KanbanView(props: {
                 current_stage_entered_at: row.current_stage_entered_at ?? t.current_stage_entered_at,
                 size_band: row.size_band ?? t.size_band,
                 service_class: row.service_class ?? t.service_class,
+                team_id: row.team_id !== undefined ? row.team_id : t.team_id,
+                assignee_id: row.assignee_id !== undefined ? row.assignee_id : t.assignee_id,
               }
             : t
         )
@@ -940,21 +1059,25 @@ export default function KanbanView(props: {
 
     setBacklogCreateLoading(true)
     try {
+      const body: Record<string, unknown> = {
+        project_id: props.projectId,
+        process_id: props.processId,
+        workflow_stage_id: backlogStageId,
+        title,
+        priority: backlogCreatePriority,
+        story_points: null,
+        description: desc.length > 0 ? desc : null,
+        sprint_id: null,
+      }
+      if (showAdvancedFlowFields) {
+        body.size_band = backlogCreateSize.trim() || null
+        body.service_class = backlogCreateService || 'standard'
+      }
+
       const res = await fetch('/api/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: props.projectId,
-          process_id: props.processId,
-          workflow_stage_id: backlogStageId,
-          title,
-          priority: backlogCreatePriority,
-          story_points: null,
-          description: desc.length > 0 ? desc : null,
-          sprint_id: null,
-          size_band: backlogCreateSize.trim() || null,
-          service_class: backlogCreateService || 'standard',
-        }),
+        body: JSON.stringify(body),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json?.error || 'Failed to create task')
@@ -1098,7 +1221,8 @@ export default function KanbanView(props: {
   }, [])
 
   return (
-    <div className="space-y-6">
+    <TooltipProvider delayDuration={250}>
+      <div className="space-y-6">
       <KanbanTaskDetailModal
         taskId={detailTaskId}
         open={detailTaskId !== null}
@@ -1106,16 +1230,37 @@ export default function KanbanView(props: {
           if (!o) setDetailTaskId(null)
         }}
         onTaskSaved={handleDetailSaved}
+        flowAdvancedFields={showAdvancedFlowFields}
       />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {[
-          { label: 'On board', value: String(totalBoardTasks), color: 'text-gray-900' },
-          { label: 'Open (not done)', value: String(openNotDoneCount), color: 'text-blue-600' },
-          { label: 'Done', value: String(completedCount), color: 'text-green-600' },
-        ].map((stat, i) => (
+        {(
+          [
+            {
+              label: 'On board',
+              value: String(totalBoardTasks),
+              color: 'text-gray-900',
+              tip: 'Work items on this Kanban process in any column (including backlog when shown on this page).',
+            },
+            {
+              label: 'Open (not done)',
+              value: String(openNotDoneCount),
+              color: 'text-blue-600',
+              tip: 'Items still in progress — not in a done column and not marked completed.',
+            },
+            {
+              label: 'Done',
+              value: String(completedCount),
+              color: 'text-green-600',
+              tip: 'Items completed on this process (done column or completed timestamp).',
+            },
+          ] as const
+        ).map((stat, i) => (
           <div key={i} className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-            <p className="text-xs font-medium text-gray-500 mb-1">{stat.label}</p>
+            <div className="flex items-center gap-1 mb-1">
+              <p className="text-xs font-medium text-gray-500">{stat.label}</p>
+              <HelpTip label={`About ${stat.label}`}>{stat.tip}</HelpTip>
+            </div>
             <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
           </div>
         ))}
@@ -1123,62 +1268,119 @@ export default function KanbanView(props: {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-          <p className="text-xs font-medium text-gray-500 mb-1">Throughput (7 days)</p>
+          <div className="flex items-center gap-1 mb-1">
+            <p className="text-xs font-medium text-gray-500">Throughput (7 days)</p>
+            <HelpTip label="About throughput">
+              Count of items completed on this process in the last 7 days — a simple flow signal, not weighted by
+              estimate.
+            </HelpTip>
+          </div>
           <p className="text-2xl font-bold text-gray-900">{flowMetrics.throughput7d}</p>
-          <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
-            Items completed on this process in the last week — a simple count for flow (not weighted by estimate).
-          </p>
         </div>
         <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-          <p className="text-xs font-medium text-gray-500 mb-1">Avg lead time (30 days)</p>
+          <div className="flex items-center gap-1 mb-1">
+            <p className="text-xs font-medium text-gray-500">Avg lead time (30 days)</p>
+            <HelpTip label="About average lead time">
+              Average calendar days from created → completed for tasks that finished in the last 30 days on this
+              process (observed, not estimated).
+            </HelpTip>
+          </div>
           <p className="text-2xl font-bold text-indigo-600 tabular-nums">
             {flowMetrics.avgLeadTimeDays30d != null ? `${flowMetrics.avgLeadTimeDays30d.toFixed(1)} days` : '—'}
-          </p>
-          <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
-            Mean calendar days from created → completed for tasks finished in the last 30 days (observed, not estimated).
           </p>
         </div>
       </div>
 
       <Card className="border-gray-100 shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <CardTitle>Kanban board</CardTitle>
+        <CardHeader className="flex flex-col gap-2 pb-2">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex flex-wrap items-center gap-2">
+              <CardTitle className="text-lg">Kanban board</CardTitle>
+              <HelpTip label="Board tips">
+                <div className="space-y-2">
+                  <p>Drag cards between columns. Drag the grip on a column header to reorder columns.</p>
+                  <p>
+                    Card footers show time in the current column. Enable <strong>Advanced</strong> below for optional
+                    T‑shirt size and class of service on cards and in task details.
+                  </p>
+                  <p>This process does not use story points — use throughput and average lead time for flow health.</p>
+                </div>
+              </HelpTip>
               <Badge variant="secondary" className="text-xs font-normal text-gray-600">
                 Kanban
               </Badge>
             </div>
-            <p className="text-sm text-gray-500 mt-1 max-w-2xl">
-              Drag cards to move them; drag the column header grip to reorder columns. Card footer shows{' '}
-              <span className="font-medium text-gray-700">time in column</span> (aging), optional{' '}
-              <span className="font-medium text-gray-700">size</span> (XS–XL), and{' '}
-              <span className="font-medium text-gray-700">class of service</span>. This board does not use story
-              points — use throughput and lead time above.
-            </p>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {persisting ? (
+                <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Saving…
+                </span>
+              ) : null}
+              {reorderingColumns ? (
+                <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Reordering columns…
+                </span>
+              ) : null}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            {persisting ? (
-              <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Saving…
-              </span>
-            ) : null}
-            {reorderingColumns ? (
-              <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Reordering columns…
-              </span>
-            ) : null}
-            <Button variant="outline" size="sm" asChild>
-              <Link href={backlogHref} className="inline-flex items-center gap-1">
-                <LayoutList className="h-4 w-4" />
-                Backlog
-              </Link>
-            </Button>
-          </div>
+          <p className="text-sm text-gray-500">Drag cards to move work; use column grips to reorder.</p>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between rounded-lg border border-gray-100 bg-slate-50/90 p-3">
+            <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+              {teamsList.length > 0 ? (
+                <div className="grid gap-1.5">
+                  <span className="text-xs font-medium text-gray-600">Filter by team</span>
+                  <Select
+                    value={teamFilterId || '__all__'}
+                    onValueChange={(v) => setTeamFilter(v === '__all__' ? '' : v)}
+                  >
+                    <SelectTrigger className="h-9 w-[220px] bg-white">
+                      <SelectValue placeholder="All teams" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All teams</SelectItem>
+                      {teamsList.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {teamFilterActive ? (
+                    <p className="max-w-md text-xs text-amber-800">
+                      Team filter on — card drag-and-drop is paused until you show all teams.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="flex items-start gap-1.5">
+                <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300"
+                    checked={showAdvancedFlowFields}
+                    onChange={(e) => persistAdvancedFlowFields(e.target.checked)}
+                  />
+                  Advanced: size &amp; class of service
+                </label>
+                <HelpTip label="Advanced fields">
+                  Optional T‑shirt size and class of service for Kanban policy. Off by default; existing values stay
+                  saved when hidden.
+                </HelpTip>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 sm:ml-auto">
+              <Button variant="outline" size="sm" asChild>
+                <Link href={backlogHref} className="inline-flex items-center gap-1">
+                  <LayoutList className="h-4 w-4" />
+                  Backlog
+                </Link>
+              </Button>
+            </div>
+          </div>
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
@@ -1389,42 +1591,44 @@ export default function KanbanView(props: {
                     <option value="critical">Critical</option>
                   </select>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="grid gap-2">
-                    <Label htmlFor="bl-size">Size (optional)</Label>
-                    <select
-                      id="bl-size"
-                      className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm"
-                      value={backlogCreateSize}
-                      onChange={(e) => setBacklogCreateSize(e.target.value)}
-                    >
-                      <option value="">— None —</option>
-                      <option value="xs">XS</option>
-                      <option value="s">S</option>
-                      <option value="m">M</option>
-                      <option value="l">L</option>
-                      <option value="xl">XL</option>
-                    </select>
+                {showAdvancedFlowFields ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="grid gap-2">
+                      <Label htmlFor="bl-size">Size (optional)</Label>
+                      <select
+                        id="bl-size"
+                        className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm"
+                        value={backlogCreateSize}
+                        onChange={(e) => setBacklogCreateSize(e.target.value)}
+                      >
+                        <option value="">— None —</option>
+                        <option value="xs">XS</option>
+                        <option value="s">S</option>
+                        <option value="m">M</option>
+                        <option value="l">L</option>
+                        <option value="xl">XL</option>
+                      </select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="bl-svc">Class of service</Label>
+                      <select
+                        id="bl-svc"
+                        className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm"
+                        value={backlogCreateService}
+                        onChange={(e) => setBacklogCreateService(e.target.value)}
+                      >
+                        <option value="standard">Standard</option>
+                        <option value="fixed_date">Fixed date</option>
+                        <option value="expedite">Expedite</option>
+                      </select>
+                      <p className="text-xs text-gray-500 leading-relaxed">
+                        Used when the card is on the board: standard work vs deadline-sensitive (fixed date) vs expedite
+                        (team policy—often “interrupt” lanes). It does not bypass WIP limits unless you configure rules
+                        that do.
+                      </p>
+                    </div>
                   </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="bl-svc">Class of service</Label>
-                    <select
-                      id="bl-svc"
-                      className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm"
-                      value={backlogCreateService}
-                      onChange={(e) => setBacklogCreateService(e.target.value)}
-                    >
-                      <option value="standard">Standard</option>
-                      <option value="fixed_date">Fixed date</option>
-                      <option value="expedite">Expedite</option>
-                    </select>
-                    <p className="text-xs text-gray-500 leading-relaxed">
-                      Used when the card is on the board: standard work vs deadline-sensitive (fixed date) vs expedite
-                      (team policy—often “interrupt” lanes). It does not bypass WIP limits unless you configure rules
-                      that do.
-                    </p>
-                  </div>
-                </div>
+                ) : null}
               </div>
               <DialogFooter>
                 <Button variant="outline" type="button" onClick={() => setBacklogCreateOpen(false)}>
@@ -1466,7 +1670,7 @@ export default function KanbanView(props: {
               >
                 <div className="flex gap-2 overflow-x-auto pb-6 items-stretch">
                   {boardStages.map((stage) => {
-                    const colTasks = tasks
+                    const colTasks = tasksForBoard
                       .filter((t) => t.workflow_stage_id === stage.id && boardStageIds.has(stage.id))
                       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
 
@@ -1476,13 +1680,15 @@ export default function KanbanView(props: {
                         stage={stage}
                         tasksInColumn={colTasks}
                         stageById={stageById}
-                        disabled={columnMutation || reorderingColumns}
+                        disabled={columnMutation || reorderingColumns || teamFilterActive}
                         onRequestDelete={() => setDeleteStage(stage)}
                         onEditWip={() => {
                           setWipEditStage(stage)
                           setWipEditValue(stage.wip_limit != null ? String(stage.wip_limit) : '')
                         }}
                         onOpenTask={openTaskDetail}
+                        teamsList={teamsList}
+                        showFlowAdvanced={showAdvancedFlowFields}
                       />
                     )
                   })}
@@ -1498,12 +1704,15 @@ export default function KanbanView(props: {
                   <div className="flex flex-wrap items-end justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-semibold text-gray-900">Product backlog</h3>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        Add tasks here or drag cards onto the board when you start work.{' '}
+                      <p className="text-xs text-gray-500 mt-0.5 inline-flex flex-wrap items-center gap-1">
+                        <span>Queued work for this process.</span>
                         <Link href={backlogHref} className="text-blue-600 hover:underline font-medium">
-                          Open full page
+                          Full backlog page
                         </Link>
-                        .
+                        <HelpTip label="About this strip">
+                          Add tasks here or drag cards back from the board. For bulk edits and filters, open the full
+                          backlog page.
+                        </HelpTip>
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -1521,7 +1730,7 @@ export default function KanbanView(props: {
                   </div>
                   <BacklogDropZone stageId={backlogStageId}>
                     {(() => {
-                      const backlogTasks = tasks
+                      const backlogTasks = tasksForBoard
                         .filter((t) => t.workflow_stage_id === backlogStageId)
                         .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
                       const backlogIds = backlogTasks.map((t) => t.id)
@@ -1534,19 +1743,21 @@ export default function KanbanView(props: {
                                     <SortableCard
                                       task={task}
                                       stage={backlogStageEntity}
-                                      disabled={columnMutation || reorderingColumns}
+                                      disabled={columnMutation || reorderingColumns || teamFilterActive}
                                       onOpen={openTaskDetail}
+                                      teamsList={teamsList}
+                                      showFlowAdvanced={showAdvancedFlowFields}
                                     />
                                   </div>
                                 ))
                               : null}
                             {backlogTasks.length === 0 ? (
-                              <p className="text-xs text-gray-400 py-6 px-2">
-                                No items yet. Add a task above, use{' '}
-                                <Link href={backlogHref} className="text-blue-600 hover:underline font-medium">
-                                  Backlog
-                                </Link>{' '}
-                                in the header for the full view, or drag cards back here from the board.
+                              <p className="text-xs text-gray-400 py-6 px-2 inline-flex flex-wrap items-center gap-1">
+                                <span>Nothing here yet — add a task or drag cards from the board.</span>
+                                <HelpTip label="Backlog strip">
+                                  Use <span className="font-medium">Add task</span> for a quick create, or the full
+                                  backlog page for search and team filters.
+                                </HelpTip>
                               </p>
                             ) : null}
                           </div>
@@ -1577,5 +1788,6 @@ export default function KanbanView(props: {
         </CardContent>
       </Card>
     </div>
+    </TooltipProvider>
   )
 }
