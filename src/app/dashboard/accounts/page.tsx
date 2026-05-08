@@ -80,15 +80,17 @@ export default async function AccountsPage({
     redirect('/dashboard')
   }
 
-  // Org-scoped authorization: only allow admins/owners to access Accounts for this org.
+  // Org-scoped authorization: allow opening this page for any org member,
+  // but restrict write actions to tenant_admin users (Owner/Admin).
   const ws = await resolveWorkspaceContext({
     supabase: supabase as any,
     userId: user.id,
     fallbackOrgSlug: tenantSlug ? null : searchParams?.org ?? null,
   })
-  if (ws.role !== 'tenant_admin' || ws.organizationId !== organizationId) {
+  if (ws.organizationId !== organizationId) {
     redirect('/dashboard')
   }
+  const canManageAccounts = ws.role === 'tenant_admin'
 
   const [{ data: ownedOrgs }, { data: memberships }] = await Promise.all([
     supabase
@@ -120,6 +122,7 @@ export default async function AccountsPage({
       organizationId={organizationId}
       currentUserId={user.id}
       organizations={organizations as any}
+      canManageAccounts={canManageAccounts}
     />
   )
 }

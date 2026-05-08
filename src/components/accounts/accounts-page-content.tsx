@@ -152,10 +152,12 @@ export function AccountsPageContent({
   organizationId,
   currentUserId,
   organizations,
+  canManageAccounts,
 }: {
   organizationId: string
   currentUserId: string
   organizations: AccessibleOrg[]
+  canManageAccounts: boolean
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -197,8 +199,9 @@ export function AccountsPageContent({
   const [selectedRolePermissions, setSelectedRolePermissions] = useState<RolePermission[]>([])
   const [isSubmittingRole, setIsSubmittingRole] = useState(false)
   const [rolePermissionQuery, setRolePermissionQuery] = useState('')
-  const [membersSort, setMembersSort] = useState<'role_level' | 'projects' | 'join_date'>('role_level')
+  const [membersSort, setMembersSort] = useState<'role_level' | 'role_specific' | 'projects' | 'join_date'>('role_level')
   const [projectSortSelection, setProjectSortSelection] = useState<string[]>([])
+  const [roleSortSelection, setRoleSortSelection] = useState<string[]>([])
 
   const filteredTeams = useMemo(() => {
     const q = teamsQuery.trim().toLowerCase()
@@ -224,6 +227,27 @@ export function AccountsPageContent({
     }
     return Array.from(set).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
   }, [membersList])
+
+  const availableRolesForSort = useMemo(() => {
+    const set = new Set<string>()
+    // System roles
+    set.add('Owner')
+    set.add('Admin')
+    set.add('Member')
+    // Custom roles (from org config)
+    for (const r of customRoles ?? []) {
+      const name = String(r.name ?? '').trim()
+      if (name) set.add(name)
+    }
+    // Assigned custom roles (from members)
+    for (const m of membersList) {
+      for (const r of m.customRoles) {
+        const name = String(r ?? '').trim()
+        if (name) set.add(name)
+      }
+    }
+    return Array.from(set).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+  }, [customRoles, membersList])
 
   const sortedMembers = useMemo(() => {
     const roleRank: Record<SystemRole, number> = { Owner: 3, Admin: 2, Member: 1 }
@@ -261,6 +285,23 @@ export function AccountsPageContent({
       return byName(a, b)
     }
 
+    const memberHasRole = (m: WorkspaceMember, roleName: string) => {
+      const r = roleName.toLowerCase()
+      if (m.systemRole.toLowerCase() === r) return true
+      return m.customRoles.some((x) => String(x).toLowerCase() === r)
+    }
+
+    const bySelectedRolesFirst = (a: WorkspaceMember, b: WorkspaceMember) => {
+      const selected = new Set(roleSortSelection.map((r) => r.toLowerCase()))
+      const aMatchCount = Array.from(selected).filter((r) => memberHasRole(a, r)).length
+      const bMatchCount = Array.from(selected).filter((r) => memberHasRole(b, r)).length
+      const aHas = aMatchCount > 0
+      const bHas = bMatchCount > 0
+      if (aHas !== bHas) return aHas ? -1 : 1
+      if (bMatchCount !== aMatchCount) return bMatchCount - aMatchCount
+      return byName(a, b)
+    }
+
     const byRoleLevelDesc = (a: WorkspaceMember, b: WorkspaceMember) => {
       const ar = roleRank[a.systemRole] ?? 0
       const br = roleRank[b.systemRole] ?? 0
@@ -270,10 +311,11 @@ export function AccountsPageContent({
 
     const out = [...filteredMembers]
     if (membersSort === 'join_date') out.sort(byJoinDateDesc)
+    else if (membersSort === 'role_specific') out.sort(roleSortSelection.length ? bySelectedRolesFirst : byRoleLevelDesc)
     else if (membersSort === 'projects') out.sort(projectSortSelection.length ? bySelectedProjectsFirst : byProjectsDesc)
     else out.sort(byRoleLevelDesc)
     return out
-  }, [filteredMembers, membersSort, projectSortSelection])
+  }, [filteredMembers, membersSort, projectSortSelection, roleSortSelection])
 
   const assignCandidates = useMemo(() => {
     const q = assignQuery.trim().toLowerCase()
@@ -738,7 +780,7 @@ export function AccountsPageContent({
           ) : null}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {activeTab === 'members' ? (
+          {canManageAccounts && activeTab === 'members' ? (
             <Dialog
               open={isInviteModalOpen}
               onOpenChange={(v) => {
@@ -819,7 +861,7 @@ export function AccountsPageContent({
           >
             Teams
           </button>
-          {!isLoading && canManageRoles ? (
+          {!isLoading && canManageAccounts && canManageRoles ? (
             <button
               type="button"
               onClick={() => setActiveTab('roles')}
@@ -979,7 +1021,7 @@ export function AccountsPageContent({
                   }}
                 >
                   <DialogTrigger asChild>
-                    <Button className="bg-blue-600 text-white hover:bg-blue-700">
+                    <Button className="bg-blue-600 text-white hover:bg-blue-700" disabled={!canManageAccounts}>
                       <Plus className="mr-2 h-4 w-4" />
                       Create Team
                     </Button>
@@ -1016,7 +1058,7 @@ export function AccountsPageContent({
                       <Button
                         className="bg-blue-600 text-white hover:bg-blue-700"
                         onClick={handleCreateTeam}
-                        disabled={isCreatingTeam}
+                        disabled={!canManageAccounts || isCreatingTeam}
                       >
                         {isCreatingTeam ? 'Creating…' : 'Create'}
                       </Button>
@@ -1044,7 +1086,11 @@ export function AccountsPageContent({
                     </div>
                     <div className="mt-4 text-base font-semibold text-gray-900">No teams created yet.</div>
                     <div className="mt-1 text-sm text-gray-500">Start by creating a team!</div>
-                    <Button className="mt-5 bg-blue-600 text-white hover:bg-blue-700" onClick={() => setIsCreateTeamOpen(true)}>
+                    <Button
+                      className="mt-5 bg-blue-600 text-white hover:bg-blue-700"
+                      onClick={() => setIsCreateTeamOpen(true)}
+                      disabled={!canManageAccounts}
+                    >
                       <Plus className="mr-2 h-4 w-4" />
                       Create Team
                     </Button>
@@ -1170,6 +1216,10 @@ export function AccountsPageContent({
                   <Button variant="outline" className="h-9 w-[220px] justify-start text-left" disabled={isLoading}>
                     {membersSort === 'role_level'
                       ? 'Role level'
+                      : membersSort === 'role_specific'
+                        ? roleSortSelection.length
+                          ? `Specific role (${roleSortSelection.length})`
+                          : 'Specific role'
                       : membersSort === 'join_date'
                         ? 'Join date'
                         : projectSortSelection.length
@@ -1183,6 +1233,7 @@ export function AccountsPageContent({
                     onValueChange={(v) => {
                       setMembersSort(v as any)
                       if (v !== 'projects') setProjectSortSelection([])
+                      if (v !== 'role_specific') setRoleSortSelection([])
                     }}
                   >
                     <DropdownMenuRadioItem value="role_level">Role level</DropdownMenuRadioItem>
@@ -1190,6 +1241,82 @@ export function AccountsPageContent({
                   </DropdownMenuRadioGroup>
 
                   <DropdownMenuSeparator />
+
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger
+                      onPointerEnter={() => {
+                        setMembersSort('role_specific')
+                      }}
+                      onFocus={() => setMembersSort('role_specific')}
+                    >
+                      Specific role
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="p-0">
+                      <div className="flex min-w-[520px]">
+                        <div className="max-h-[360px] w-[320px] overflow-auto p-2">
+                          <DropdownMenuLabel className="px-2 py-1.5 text-xs text-slate-600">Roles</DropdownMenuLabel>
+                          {availableRolesForSort.length === 0 ? (
+                            <div className="px-2 py-2 text-sm text-slate-500">No roles found.</div>
+                          ) : (
+                            availableRolesForSort.map((name) => {
+                              const checked = roleSortSelection.some((r) => r.toLowerCase() === name.toLowerCase())
+                              return (
+                                <DropdownMenuCheckboxItem
+                                  key={name}
+                                  checked={checked}
+                                  onSelect={(e) => e.preventDefault()}
+                                  onCheckedChange={(next) => {
+                                    setMembersSort('role_specific')
+                                    setRoleSortSelection((cur) => {
+                                      if (!next) return cur.filter((r) => r.toLowerCase() !== name.toLowerCase())
+                                      return Array.from(new Set([...cur, name]))
+                                    })
+                                  }}
+                                >
+                                  {name}
+                                </DropdownMenuCheckboxItem>
+                              )
+                            })
+                          )}
+                        </div>
+
+                        <div className="w-[200px] border-l border-slate-200 p-2">
+                          <DropdownMenuLabel className="px-2 py-1.5 text-xs text-slate-600">Selected</DropdownMenuLabel>
+                          <DropdownMenuItem
+                            onSelect={(e) => {
+                              e.preventDefault()
+                              setMembersSort('role_specific')
+                              setRoleSortSelection([])
+                            }}
+                            className={roleSortSelection.length === 0 ? 'bg-accent' : undefined}
+                          >
+                            All
+                          </DropdownMenuItem>
+                          {roleSortSelection.length > 0 ? <DropdownMenuSeparator /> : null}
+                          {roleSortSelection.length > 0 ? (
+                            <div className="max-h-[280px] overflow-auto">
+                              {roleSortSelection
+                                .slice()
+                                .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+                                .map((name) => (
+                                  <DropdownMenuItem
+                                    key={name}
+                                    onSelect={(e) => {
+                                      e.preventDefault()
+                                      setRoleSortSelection((cur) =>
+                                        cur.filter((r) => r.toLowerCase() !== name.toLowerCase()),
+                                      )
+                                    }}
+                                  >
+                                    {name}
+                                  </DropdownMenuItem>
+                                ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
 
                   <DropdownMenuSub>
                     <DropdownMenuSubTrigger
@@ -1433,6 +1560,7 @@ export function AccountsPageContent({
                           setDraftCustomRoles(m.customRoles)
                         }}
                         className="h-7 px-2 text-xs"
+                        disabled={!canManageAccounts}
                       >
                         Edit Roles
                       </Button>
@@ -1441,7 +1569,7 @@ export function AccountsPageContent({
                         variant="ghost"
                         onClick={() => void handleRemoveMember(m.id)}
                         className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                        disabled={m.userId === currentUserId}
+                        disabled={!canManageAccounts || m.userId === currentUserId}
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
@@ -1465,33 +1593,37 @@ export function AccountsPageContent({
           <CardDescription>Manage pending invitations</CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <p className="text-center text-sm text-gray-500 py-8">Loading invites…</p>
-          ) : invitesList.length === 0 ? (
-            <p className="text-center text-sm text-gray-500 py-8">No pending invites.</p>
+          {!canManageAccounts ? (
+            <p className="text-center text-sm text-gray-500 py-8">Only Owners and Admins can view and manage invites.</p>
           ) : (
-            <div className="space-y-2">
-              {invitesList.map((invite, idx) => (
-                <div
-                  key={invite.id ?? idx}
-                  className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
-                >
-                  <div className="min-w-0">
-                    <p className="font-medium text-gray-900 truncate">{invite.email}</p>
-                    <p className="text-sm text-gray-500">Sent {invite.sentAt}</p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => void handleRevokeInvite(invite.id)}
-                    className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+            isLoading ? (
+              <p className="text-center text-sm text-gray-500 py-8">Loading invites…</p>
+            ) : invitesList.length === 0 ? (
+              <p className="text-center text-sm text-gray-500 py-8">No pending invites.</p>
+            ) : (
+              <div className="space-y-2">
+                {invitesList.map((invite, idx) => (
+                  <div
+                    key={invite.id ?? idx}
+                    className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
                   >
-                    <X className="h-3 w-3 mr-1" />
-                    Revoke
-                  </Button>
-                </div>
-              ))}
-            </div>
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-900 truncate">{invite.email}</p>
+                      <p className="text-sm text-gray-500">Sent {invite.sentAt}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void handleRevokeInvite(invite.id)}
+                      className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Revoke
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )
           )}
         </CardContent>
       </Card>
