@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DevFlow
 
-## Getting Started
+DevFlow is a **multi-tenant project/work tracking app** built with **Next.js 14** and **Supabase**. Tenancy is resolved from the request host (e.g. `{orgSlug}.localhost` in dev, `{orgSlug}.{baseDomain}` in production), and most API routes scope data using the injected tenant context.
 
-First, run the development server:
+## Tech stack
+
+- **Next.js (App Router)**: UI + API routes (`src/app/api/*`)
+- **Supabase**: Auth + Postgres + RLS (`src/lib/supabase/*`, `supabase/migrations/*`)
+- **Tailwind + Radix UI**: component styling and primitives
+
+## Local development
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Create a `.env.local` with the variables below (example values shown):
+
+```bash
+# Supabase (required)
+NEXT_PUBLIC_SUPABASE_URL="https://YOUR_PROJECT.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY="YOUR_ANON_KEY"
+
+# Supabase admin (required for server-side admin actions)
+SUPABASE_SERVICE_ROLE_KEY="YOUR_SERVICE_ROLE_KEY"
+
+# Multi-tenant routing (optional)
+# When set, tenant slugs resolve as {slug}.{NEXT_PUBLIC_BASE_DOMAIN}
+# When not set, local dev supports {slug}.localhost (and base domain is localhost)
+NEXT_PUBLIC_BASE_DOMAIN="devflow.app"
+
+# ImageKit (optional; required only if you use /api/imagekit/auth)
+NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY="YOUR_IMAGEKIT_PUBLIC_KEY"
+IMAGEKIT_PRIVATE_KEY="YOUR_IMAGEKIT_PRIVATE_KEY"
+
+# Super admin bootstrap (optional; defaults to a dev fallback if unset)
+NEXT_PUBLIC_SUPER_ADMIN_SECRET_KEY="change-me"
+```
+
+Run the dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Base domain (non-tenant): `http://localhost:3000`
+- Tenant domain (dev): `http://<org-slug>.localhost:3000`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Database / Supabase migrations
 
-## Learn More
+This repo includes Supabase migrations in `supabase/migrations/`.
 
-To learn more about Next.js, take a look at the following resources:
+- If you use **Supabase hosted**, apply the migrations to your project (via Supabase SQL editor or CLI).
+- If you use **Supabase local development**, initialize and run the local stack with the Supabase CLI, then apply migrations.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Useful scripts
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm run dev     # start dev server
+npm run build   # production build
+npm run start   # run production server
+npm run lint    # eslint
+```
