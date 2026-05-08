@@ -17,7 +17,7 @@ import {
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { CheckCircle2 } from 'lucide-react'
-import ScrollStack, { ScrollStackItem } from '@/components/react-bits/ScrollStack/ScrollStack'
+import Stepper, { Step } from '@/components/react-bits/Stepper/Stepper'
 
 const organizationApplicationSchema = z.object({
   organizationName: z.string().min(2, 'Organization name must be at least 2 characters'),
@@ -67,14 +67,16 @@ export function CreateOrganizationModal({
   onSubmitted,
 }: CreateOrganizationModalProps) {
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [showError, setShowError] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
 
   const {
     register,
-    handleSubmit,
     formState: { errors },
     reset,
+    trigger,
+    getValues,
   } = useForm<OrganizationApplicationFormData>({
     resolver: zodResolver(organizationApplicationSchema),
     defaultValues: {
@@ -82,9 +84,10 @@ export function CreateOrganizationModal({
     },
   })
 
-  const onSubmit = async (data: OrganizationApplicationFormData) => {
+  const submitApplication = async (data: OrganizationApplicationFormData): Promise<boolean> => {
     setIsLoading(true)
-    setError(null)
+    setErrorMessage(null)
+    setShowError(false)
 
     try {
       const response = await fetch('/api/organization-applications', {
@@ -98,34 +101,51 @@ export function CreateOrganizationModal({
       const result = await response.json()
 
       if (!response.ok) {
-        setError(result.error || 'Failed to submit application')
-        return
+        setErrorMessage(result.error || 'Failed to submit application')
+        setShowError(true)
+        return false
       }
 
       reset()
-      onOpenChange(false)
       setShowSuccess(true)
       onSubmitted?.()
+      return true
     } catch (err) {
-      setError('An unexpected error occurred')
+      setErrorMessage('An unexpected error occurred')
+      setShowError(true)
+      return false
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleClose = () => {
-    reset()
-    setError(null)
-    onOpenChange(false)
+  const onInvalid = () => {
+    setErrorMessage('Please fill out all required fields before submitting.')
+    setShowError(true)
+  }
+
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    // Only reset local state when the main dialog is actually closing.
+    if (!nextOpen) {
+      reset()
+      setErrorMessage(null)
+      setShowError(false)
+    }
+    onOpenChange(nextOpen)
   }
 
   const handleSuccessClose = () => {
     setShowSuccess(false)
+    onOpenChange(false)
+  }
+
+  const handleErrorClose = () => {
+    setShowError(false)
   }
 
   return (
     <>
-      <Dialog open={open} onOpenChange={handleClose}>
+      <Dialog open={open} onOpenChange={handleDialogOpenChange}>
         <DialogContent className="flex h-[min(90vh,920px)] max-h-[92vh] w-[min(100vw-1.5rem,56rem)] max-w-none flex-col gap-3 overflow-hidden p-6 sm:max-w-4xl">
           <DialogHeader className="shrink-0 space-y-1.5 pr-10 text-left">
             <DialogTitle>Create Organization Application</DialogTitle>
@@ -134,139 +154,168 @@ export function CreateOrganizationModal({
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="flex min-h-0 flex-1 flex-col gap-3">
+          <form onSubmit={(e) => e.preventDefault()} className="flex min-h-0 flex-1 flex-col gap-3">
             <div className="min-h-0 flex-1 basis-0">
-              <ScrollStack className="h-full scroll-stack--onboarding-modal" itemDistance={140} stackPosition="12%">
-                <ScrollStackItem itemClassName="scroll-stack-card--theme-slate">
-                  <div className="space-y-5">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">Basics</h3>
-                      <p className="mt-1 text-sm text-gray-600">Tell us what your organization is called and where we can learn more.</p>
-                    </div>
+              <div className="h-full">
+                <Stepper
+                  initialStep={1}
+                  onFinalStepCompleted={async () => {
+                    const valid = await trigger()
+                    if (!valid) {
+                      onInvalid()
+                      return false
+                    }
+                    return await submitApplication(getValues())
+                  }}
+                  disableStepIndicators={false}
+                  uniformContentHeight
+                  className="rb-stepper__outer-container--modal"
+                  contentClassName="rb-stepper__content--modal"
+                  backButtonText="Previous"
+                  nextButtonText="Next"
+                  completeButtonText={isLoading ? 'Submitting…' : 'Submit'}
+                  nextButtonProps={{ disabled: isLoading }}
+                >
+                  <Step>
+                    <div className="space-y-5">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">Basics</h3>
+                        <p className="mt-1 text-sm text-gray-600">
+                          Tell us what your organization is called and where we can learn more.
+                        </p>
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="organizationName">Organization Name *</Label>
-                      <Input id="organizationName" placeholder="Your Company Name" {...register('organizationName')} />
-                      {errors.organizationName && <p className="text-sm text-red-600">{errors.organizationName.message}</p>}
-                    </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="organizationName">Organization Name *</Label>
+                        <Input id="organizationName" placeholder="Your Company Name" {...register('organizationName')} />
+                        {errors.organizationName && (
+                          <p className="text-sm text-red-600">{errors.organizationName.message}</p>
+                        )}
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="websiteUrl">Website URL (Optional)</Label>
-                      <Input id="websiteUrl" type="url" placeholder="https://www.yourcompany.com" {...register('websiteUrl')} />
-                      {errors.websiteUrl && <p className="text-sm text-red-600">{errors.websiteUrl.message}</p>}
+                      <div className="space-y-2">
+                        <Label htmlFor="websiteUrl">Website URL (Optional)</Label>
+                        <Input
+                          id="websiteUrl"
+                          type="url"
+                          placeholder="https://www.yourcompany.com"
+                          {...register('websiteUrl')}
+                        />
+                        {errors.websiteUrl && <p className="text-sm text-red-600">{errors.websiteUrl.message}</p>}
+                      </div>
                     </div>
-                  </div>
-                </ScrollStackItem>
+                  </Step>
 
-                <ScrollStackItem itemClassName="scroll-stack-card--theme-violet">
-                  <div className="space-y-5">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">Contact</h3>
-                      <p className="mt-1 text-sm text-gray-600">We’ll use this for review follow-ups.</p>
-                    </div>
+                  <Step>
+                    <div className="space-y-5">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">Contact</h3>
+                        <p className="mt-1 text-sm text-gray-600">We’ll use this for review follow-ups.</p>
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="contactEmail">Contact Email *</Label>
-                      <Input id="contactEmail" type="email" placeholder="contact@company.com" {...register('contactEmail')} />
-                      {errors.contactEmail && <p className="text-sm text-red-600">{errors.contactEmail.message}</p>}
-                    </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="contactEmail">Contact Email *</Label>
+                        <Input id="contactEmail" type="email" placeholder="contact@company.com" {...register('contactEmail')} />
+                        {errors.contactEmail && <p className="text-sm text-red-600">{errors.contactEmail.message}</p>}
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="phoneNumber">Phone Number (Optional)</Label>
-                      <Input id="phoneNumber" type="tel" placeholder="+1 (555) 000-0000" {...register('phoneNumber')} />
-                      {errors.phoneNumber && <p className="text-sm text-red-600">{errors.phoneNumber.message}</p>}
+                      <div className="space-y-2">
+                        <Label htmlFor="phoneNumber">Phone Number (Optional)</Label>
+                        <Input id="phoneNumber" type="tel" placeholder="+1 (555) 000-0000" {...register('phoneNumber')} />
+                        {errors.phoneNumber && <p className="text-sm text-red-600">{errors.phoneNumber.message}</p>}
+                      </div>
                     </div>
-                  </div>
-                </ScrollStackItem>
+                  </Step>
 
-                <ScrollStackItem itemClassName="scroll-stack-card--theme-sky">
-                  <div className="space-y-5">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">Profile</h3>
-                      <p className="mt-1 text-sm text-gray-600">Optional details help us tailor the workspace defaults.</p>
-                    </div>
+                  <Step>
+                    <div className="space-y-5">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">Profile</h3>
+                        <p className="mt-1 text-sm text-gray-600">Optional details help us tailor the workspace defaults.</p>
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="industry">Industry (Optional)</Label>
-                      <select
-                        id="industry"
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        {...register('industry')}
-                      >
-                        <option value="">Select an industry</option>
-                        {industries.map((industry) => (
-                          <option key={industry} value={industry}>
-                            {industry}
-                          </option>
-                        ))}
-                      </select>
-                      {errors.industry && <p className="text-sm text-red-600">{errors.industry.message}</p>}
-                    </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="industry">Industry (Optional)</Label>
+                        <select
+                          id="industry"
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          {...register('industry')}
+                        >
+                          <option value="">Select an industry</option>
+                          {industries.map((industry) => (
+                            <option key={industry} value={industry}>
+                              {industry}
+                            </option>
+                          ))}
+                        </select>
+                        {errors.industry && <p className="text-sm text-red-600">{errors.industry.message}</p>}
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="expectedTeamSize">Expected Team Size (Optional)</Label>
-                      <select
-                        id="expectedTeamSize"
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        {...register('expectedTeamSize')}
-                      >
-                        <option value="">Select team size</option>
-                        {teamSizes.map((size) => (
-                          <option key={size} value={size}>
-                            {size}
-                          </option>
-                        ))}
-                      </select>
-                      {errors.expectedTeamSize && <p className="text-sm text-red-600">{errors.expectedTeamSize.message}</p>}
+                      <div className="space-y-2">
+                        <Label htmlFor="expectedTeamSize">Expected Team Size (Optional)</Label>
+                        <select
+                          id="expectedTeamSize"
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          {...register('expectedTeamSize')}
+                        >
+                          <option value="">Select team size</option>
+                          {teamSizes.map((size) => (
+                            <option key={size} value={size}>
+                              {size}
+                            </option>
+                          ))}
+                        </select>
+                        {errors.expectedTeamSize && (
+                          <p className="text-sm text-red-600">{errors.expectedTeamSize.message}</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </ScrollStackItem>
+                  </Step>
 
-                <ScrollStackItem itemClassName="scroll-stack-card--theme-emerald">
-                  <div className="space-y-5">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">Why DevFlow?</h3>
-                      <p className="mt-1 text-sm text-gray-600">Help us understand your organization and what you’re building.</p>
-                    </div>
+                  <Step>
+                    <div className="space-y-5">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">Why DevFlow?</h3>
+                        <p className="mt-1 text-sm text-gray-600">
+                          Help us understand your organization and what you’re building.
+                        </p>
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="description">Organization Description *</Label>
-                      <Textarea
-                        id="description"
-                        placeholder="Describe your organization's mission and purpose"
-                        rows={4}
-                        {...register('description')}
-                      />
-                      {errors.description && <p className="text-sm text-red-600">{errors.description.message}</p>}
-                    </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="description">Organization Description *</Label>
+                        <Textarea
+                          id="description"
+                          placeholder="Describe your organization's mission and purpose"
+                          rows={4}
+                          {...register('description')}
+                        />
+                        {errors.description && <p className="text-sm text-red-600">{errors.description.message}</p>}
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="useCase">Use Case Description *</Label>
-                      <Textarea
-                        id="useCase"
-                        placeholder="How do you plan to use DevFlow? Describe your use case and requirements."
-                        rows={5}
-                        {...register('useCase')}
-                      />
-                      {errors.useCase && <p className="text-sm text-red-600">{errors.useCase.message}</p>}
+                      <div className="space-y-2">
+                        <Label htmlFor="useCase">Use Case Description *</Label>
+                        <Textarea
+                          id="useCase"
+                          placeholder="How do you plan to use DevFlow? Describe your use case and requirements."
+                          rows={5}
+                          {...register('useCase')}
+                        />
+                        {errors.useCase && <p className="text-sm text-red-600">{errors.useCase.message}</p>}
+                      </div>
                     </div>
-                  </div>
-                </ScrollStackItem>
-              </ScrollStack>
+                  </Step>
+                </Stepper>
+              </div>
             </div>
 
-            {error ? (
-              <div className="shrink-0 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">
-                {error}
-              </div>
-            ) : null}
-
             <DialogFooter className="mt-auto shrink-0 gap-2 pt-1 sm:pt-0">
-              <Button type="button" variant="outline" onClick={handleClose} disabled={isLoading}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => handleDialogOpenChange(false)}
+                disabled={isLoading}
+              >
                 Cancel
-              </Button>
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? 'Submitting...' : 'Submit Application'}
               </Button>
             </DialogFooter>
           </form>
@@ -286,6 +335,18 @@ export function CreateOrganizationModal({
           </DialogHeader>
           <DialogFooter>
             <Button onClick={handleSuccessClose}>OK</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showError} onOpenChange={handleErrorClose}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Unable to submit</DialogTitle>
+            <DialogDescription>{errorMessage ?? 'Please check the form and try again.'}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={handleErrorClose}>OK</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
