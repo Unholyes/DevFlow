@@ -26,7 +26,15 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
 } from '@/components/ui/dropdown-menu'
 
 type SystemRole = 'Owner' | 'Admin' | 'Member'
@@ -39,6 +47,7 @@ type WorkspaceMember = {
   systemRole: SystemRole
   customRoles: string[]
   joinedAt: string
+  joinedAtRaw: string
   projects: string[]
 }
 
@@ -188,6 +197,8 @@ export function AccountsPageContent({
   const [selectedRolePermissions, setSelectedRolePermissions] = useState<RolePermission[]>([])
   const [isSubmittingRole, setIsSubmittingRole] = useState(false)
   const [rolePermissionQuery, setRolePermissionQuery] = useState('')
+  const [membersSort, setMembersSort] = useState<'role_level' | 'projects' | 'join_date'>('role_level')
+  const [projectSortSelection, setProjectSortSelection] = useState<string[]>([])
 
   const filteredTeams = useMemo(() => {
     const q = teamsQuery.trim().toLowerCase()
@@ -202,6 +213,67 @@ export function AccountsPageContent({
       return m.fullName.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)
     })
   }, [query, membersList])
+
+  const availableProjects = useMemo(() => {
+    const set = new Set<string>()
+    for (const m of membersList) {
+      for (const p of m.projects) {
+        const name = String(p ?? '').trim()
+        if (name) set.add(name)
+      }
+    }
+    return Array.from(set).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+  }, [membersList])
+
+  const sortedMembers = useMemo(() => {
+    const roleRank: Record<SystemRole, number> = { Owner: 3, Admin: 2, Member: 1 }
+
+    const byName = (a: WorkspaceMember, b: WorkspaceMember) =>
+      a.fullName.toLowerCase().localeCompare(b.fullName.toLowerCase())
+
+    const byJoinDateDesc = (a: WorkspaceMember, b: WorkspaceMember) => {
+      const at = Date.parse(a.joinedAtRaw)
+      const bt = Date.parse(b.joinedAtRaw)
+      if (!Number.isNaN(at) && !Number.isNaN(bt) && bt !== at) return bt - at
+      if (!Number.isNaN(at) && Number.isNaN(bt)) return -1
+      if (Number.isNaN(at) && !Number.isNaN(bt)) return 1
+      return byName(a, b)
+    }
+
+    const byProjectsDesc = (a: WorkspaceMember, b: WorkspaceMember) => {
+      const ac = a.projects.length
+      const bc = b.projects.length
+      if (bc !== ac) return bc - ac
+      const ap = (a.projects[0] ?? '').toLowerCase()
+      const bp = (b.projects[0] ?? '').toLowerCase()
+      if (ap !== bp) return ap.localeCompare(bp)
+      return byName(a, b)
+    }
+
+    const bySelectedProjectsFirst = (a: WorkspaceMember, b: WorkspaceMember) => {
+      const selected = new Set(projectSortSelection.map((p) => p.toLowerCase()))
+      const aMatchCount = a.projects.filter((p) => selected.has(String(p).toLowerCase())).length
+      const bMatchCount = b.projects.filter((p) => selected.has(String(p).toLowerCase())).length
+      const aHas = aMatchCount > 0
+      const bHas = bMatchCount > 0
+      if (aHas !== bHas) return aHas ? -1 : 1
+      if (bMatchCount !== aMatchCount) return bMatchCount - aMatchCount
+      return byName(a, b)
+    }
+
+    const byRoleLevelDesc = (a: WorkspaceMember, b: WorkspaceMember) => {
+      const ar = roleRank[a.systemRole] ?? 0
+      const br = roleRank[b.systemRole] ?? 0
+      if (br !== ar) return br - ar
+      return byName(a, b)
+    }
+
+    const out = [...filteredMembers]
+    if (membersSort === 'join_date') out.sort(byJoinDateDesc)
+    else if (membersSort === 'projects') out.sort(projectSortSelection.length ? bySelectedProjectsFirst : byProjectsDesc)
+    else out.sort(byRoleLevelDesc)
+    return out
+  }, [filteredMembers, membersSort, projectSortSelection])
 
   const assignCandidates = useMemo(() => {
     const q = assignQuery.trim().toLowerCase()
@@ -341,6 +413,7 @@ export function AccountsPageContent({
             email,
             systemRole,
             customRoles,
+            joinedAtRaw: String(m.joined_at ?? ''),
             joinedAt: formatRelativeDate(m.joined_at),
             projects: projectsByUserId.get(m.user_id) ?? [],
           }
@@ -1078,22 +1151,131 @@ export function AccountsPageContent({
           <CardDescription>Search by name or email</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <Input
-              placeholder="Search members…"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="pl-9 border-gray-200 bg-white"
-              disabled={isLoading}
-            />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative w-full sm:max-w-md">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+              <Input
+                placeholder="Search members…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                className="pl-9 border-gray-200 bg-white"
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-gray-600">Sort by</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="h-9 w-[220px] justify-start text-left" disabled={isLoading}>
+                    {membersSort === 'role_level'
+                      ? 'Role level'
+                      : membersSort === 'join_date'
+                        ? 'Join date'
+                        : projectSortSelection.length
+                          ? `Projects assigned (${projectSortSelection.length})`
+                          : 'Projects assigned'}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[220px] text-left">
+                  <DropdownMenuRadioGroup
+                    value={membersSort}
+                    onValueChange={(v) => {
+                      setMembersSort(v as any)
+                      if (v !== 'projects') setProjectSortSelection([])
+                    }}
+                  >
+                    <DropdownMenuRadioItem value="role_level">Role level</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="join_date">Join date</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+
+                  <DropdownMenuSeparator />
+
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger
+                      onPointerEnter={() => {
+                        setMembersSort('projects')
+                      }}
+                      onFocus={() => setMembersSort('projects')}
+                    >
+                      Projects assigned
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="p-0">
+                      <div className="flex min-w-[520px]">
+                        <div className="max-h-[360px] w-[320px] overflow-auto p-2">
+                          <DropdownMenuLabel className="px-2 py-1.5 text-xs text-slate-600">Projects</DropdownMenuLabel>
+                          {availableProjects.length === 0 ? (
+                            <div className="px-2 py-2 text-sm text-slate-500">No projects found.</div>
+                          ) : (
+                            availableProjects.map((name) => {
+                              const checked = projectSortSelection.some((p) => p.toLowerCase() === name.toLowerCase())
+                              return (
+                                <DropdownMenuCheckboxItem
+                                  key={name}
+                                  checked={checked}
+                                  onSelect={(e) => e.preventDefault()}
+                                  onCheckedChange={(next) => {
+                                    setMembersSort('projects')
+                                    setProjectSortSelection((cur) => {
+                                      if (!next) return cur.filter((p) => p.toLowerCase() !== name.toLowerCase())
+                                      return Array.from(new Set([...cur, name]))
+                                    })
+                                  }}
+                                >
+                                  {name}
+                                </DropdownMenuCheckboxItem>
+                              )
+                            })
+                          )}
+                        </div>
+
+                        <div className="w-[200px] border-l border-slate-200 p-2">
+                          <DropdownMenuLabel className="px-2 py-1.5 text-xs text-slate-600">Selected</DropdownMenuLabel>
+                          <DropdownMenuItem
+                            onSelect={(e) => {
+                              e.preventDefault()
+                              setMembersSort('projects')
+                              setProjectSortSelection([])
+                            }}
+                            className={projectSortSelection.length === 0 ? 'bg-accent' : undefined}
+                          >
+                            All
+                          </DropdownMenuItem>
+                          {projectSortSelection.length > 0 ? <DropdownMenuSeparator /> : null}
+                          {projectSortSelection.length > 0 ? (
+                            <div className="max-h-[280px] overflow-auto">
+                              {projectSortSelection
+                                .slice()
+                                .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+                                .map((name) => (
+                                  <DropdownMenuItem
+                                    key={name}
+                                    onSelect={(e) => {
+                                      e.preventDefault()
+                                      setProjectSortSelection((cur) =>
+                                        cur.filter((p) => p.toLowerCase() !== name.toLowerCase()),
+                                      )
+                                    }}
+                                  >
+                                    {name}
+                                  </DropdownMenuItem>
+                                ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
 
           <div className="space-y-2">
             {isLoading ? (
               <p className="text-center text-sm text-gray-500 py-8">Loading members…</p>
             ) : (
-              filteredMembers.map((m) => (
+              sortedMembers.map((m) => (
               <div
                 key={m.id}
                 className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
