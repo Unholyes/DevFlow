@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Search, Shield, Trash2 } from 'lucide-react'
+import { Info, Plus, Search, Shield, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { canonicalBuiltinRoleKey, userCanManageOrganizationRoles } from '@/lib/permissions/can-manage-organization-roles'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 type DefaultRole = 'Owner' | 'Admin' | 'Member'
 
@@ -33,6 +34,9 @@ type PermissionCategory =
   | 'System'
 
 type PermissionId =
+  | 'account.users.invite'
+  | 'account.users.remove'
+  // Legacy alias (kept for backward compatibility; not shown in UI)
   | 'account.members.manage'
   | 'pm.projects.create'
   | 'pm.sprints.manage'
@@ -58,7 +62,8 @@ const PERMISSIONS: Array<{
   description?: string
 }> = [
   // Account
-  { id: 'account.members.manage', category: 'Account', label: 'Manage members' },
+  { id: 'account.users.invite', category: 'Account', label: 'Invite users' },
+  { id: 'account.users.remove', category: 'Account', label: 'Remove users' },
 
   // Project Management (hybrid SDLC perms)
   { id: 'pm.projects.create', category: 'Project Management', label: 'Create new project' },
@@ -111,6 +116,15 @@ function permissionListsEqual(a: string[], b: string[]) {
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter((x) => typeof x === 'string') as string[]
+}
+
+function normalizePermissionsForUi(perms: unknown): string[] {
+  const arr = uniqueLower(asStringArray(perms))
+  // Expand legacy manage-members permission into the two new permissions for UI/display.
+  if (arr.some((p) => p.toLowerCase() === 'account.members.manage')) {
+    return uniqueLower([...arr, 'account.users.invite', 'account.users.remove'])
+  }
+  return arr
 }
 
 function groupByCategory() {
@@ -183,7 +197,7 @@ export function PermissionsPageContent({
     if (isOwnerSelected) return allPermissionIds
     if (selected.kind === 'default') return defaultRolePerms[selected.role]
     const role = customRoles.find((r) => r.id === selected.id)
-    return uniqueLower(asStringArray(role?.permissions ?? []))
+    return normalizePermissionsForUi(role?.permissions ?? [])
   }, [allPermissionIds, customRoles, defaultRolePerms, isOwnerSelected, selected])
 
   const isDirty = !isReadOnlySelection && !permissionListsEqual(draftPermissions, savedPermissionsForSelection)
@@ -240,7 +254,7 @@ export function PermissionsPageContent({
         for (const row of defaults ?? []) {
           const canon = canonicalBuiltinRoleKey(String((row as { role?: unknown }).role ?? '')) as DefaultRole | null
           if (!canon) continue
-          nextDefault[canon] = uniqueLower(asStringArray((row as any).permissions))
+          nextDefault[canon] = normalizePermissionsForUi((row as any).permissions)
         }
 
         if (!cancelled) {
@@ -392,8 +406,7 @@ export function PermissionsPageContent({
               </div>
               <p className="mt-4 text-base font-semibold text-slate-900">Access restricted</p>
               <p className="mt-2 max-w-md text-sm text-slate-600">
-                You need the <span className="font-medium">Manage members</span> permission (or the Admin workspace role)
-                to change role definitions. Ask an administrator if you need access.
+                You need the <span className="font-medium">Invite users</span> or <span className="font-medium">Remove users</span> permission (or the Owner/Admin workspace role) to change role definitions. Ask an administrator if you need access.
               </p>
             </div>
           </CardContent>
@@ -661,6 +674,8 @@ export function PermissionsPageContent({
                 <div className="divide-y divide-slate-200">
                   {perms.map((p) => {
                     const checked = draftPermissions.some((x) => x.toLowerCase() === p.id.toLowerCase())
+                    const isInviteUsers = p.id === 'account.users.invite'
+                    const isRemoveUsers = p.id === 'account.users.remove'
                     return (
                       <label key={p.id} className="flex items-center gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
                         <input
@@ -670,7 +685,33 @@ export function PermissionsPageContent({
                           onChange={(e) => togglePermission(p.id, e.target.checked)}
                           disabled={isLoading || isReadOnlySelection}
                         />
-                        <span className="truncate">{p.label}</span>
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span className="truncate">{p.label}</span>
+                          {isInviteUsers || isRemoveUsers ? (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 hover:text-slate-600"
+                                    onClick={(e) => {
+                                      e.preventDefault()
+                                      e.stopPropagation()
+                                    }}
+                                    aria-label={`What does ${p.label} do?`}
+                                  >
+                                    <Info className="h-4 w-4" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="right">
+                                  {isInviteUsers
+                                    ? 'Allows inviting users to this workspace.'
+                                    : 'Allows removing workspace members, but only if the target member has a lower role level.'}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : null}
+                        </span>
                       </label>
                     )
                   })}

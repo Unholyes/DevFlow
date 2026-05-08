@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { supabase } from '@/lib/supabase/client'
-import { userCanManageOrganizationRoles } from '@/lib/permissions/can-manage-organization-roles'
+import { customRolesIncludeManageMembers, userCanManageOrganizationRoles } from '@/lib/permissions/can-manage-organization-roles'
 import { PermissionsPageContent } from '@/components/settings/permissions-page-content'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -71,8 +71,19 @@ type OrganizationRoleRow = {
   permissions: unknown
 }
 
+function permissionListHasInviteUsers(perms: unknown): boolean {
+  if (!Array.isArray(perms)) return false
+  return perms.some((p) => typeof p === 'string' && ['account.users.invite', 'account.members.manage'].includes(p.toLowerCase()))
+}
+
+function permissionListHasRemoveUsers(perms: unknown): boolean {
+  if (!Array.isArray(perms)) return false
+  return perms.some((p) => typeof p === 'string' && ['account.users.remove', 'account.members.manage'].includes(p.toLowerCase()))
+}
+
 type RolePermission =
-  | 'account.members.manage'
+  | 'account.users.invite'
+  | 'account.users.remove'
   | 'sdlc.sprints.create'
   | 'sdlc.backlog.manage'
   | 'projects.archive'
@@ -90,9 +101,14 @@ const ROLE_PERMISSION_CATALOG: Array<{
   description: string
 }> = [
   {
-    id: 'account.members.manage',
-    label: 'Manage members',
-    description: 'Can add/remove members and update member roles for this organization.',
+    id: 'account.users.invite',
+    label: 'Invite users',
+    description: 'Can invite users to join this workspace.',
+  },
+  {
+    id: 'account.users.remove',
+    label: 'Remove users',
+    description: 'Can remove users from this workspace (only lower role level).',
   },
   {
     id: 'sdlc.sprints.create',
@@ -184,6 +200,8 @@ export function AccountsPageContent({
   const [invitesList, setInvitesList] = useState<PendingInvite[]>([])
   const [customRoles, setCustomRoles] = useState<OrganizationRoleRow[]>([])
   const [canManageRoles, setCanManageRoles] = useState(false)
+  const [canInviteUsers, setCanInviteUsers] = useState(false)
+  const [canRemoveUsers, setCanRemoveUsers] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
@@ -411,6 +429,7 @@ export function AccountsPageContent({
         if (teamsError) throw teamsError
 
         const customRolesList = (orgRolesData ?? []) as OrganizationRoleRow[]
+        // Roles editing gate (Owner/Admin OR any assigned custom role with account.members.manage)
         const canManage = await userCanManageOrganizationRoles(supabase, currentUserId, selectedOrganizationId)
 
         const memberUserIds = (members ?? []).map((m: any) => m.user_id as string)
@@ -467,9 +486,42 @@ export function AccountsPageContent({
           sentAt: formatRelativeDate(i.created_at),
         }))
 
+        const defaultRolePermsByNameLower = new Map<string, unknown>()
+        for (const row of defaultRoleRows ?? []) {
+          const roleName = String((row as any)?.role ?? '').trim().toLowerCase()
+          if (!roleName) continue
+          defaultRolePermsByNameLower.set(roleName, (row as any)?.permissions)
+        }
+
+        const currentRaw = (members ?? []).find((m: any) => String(m?.user_id ?? '') === currentUserId) ?? null
+        const currentSystemRoleLocal = String((currentRaw as any)?.system_role ?? 'Member') as SystemRole
+        const currentAssignedCustomRoles: string[] = Array.isArray((currentRaw as any)?.custom_roles)
+          ? ((currentRaw as any).custom_roles as unknown[]).filter((x) => typeof x === 'string' && x.trim().length > 0) as string[]
+          : []
+
+        // Invite/remove permissions:
+        // - Owner: always
+        // - Admin: depends on saved Admin default-role permissions (organization_default_roles.role='Admin')
+        // - Member: depends on assigned custom roles' permissions (organization_roles)
+        const canInviteUsersLocal =
+          currentSystemRoleLocal === 'Owner'
+            ? true
+            : currentSystemRoleLocal === 'Admin'
+              ? permissionListHasInviteUsers(defaultRolePermsByNameLower.get('admin'))
+              : customRolesIncludeManageMembers(currentAssignedCustomRoles, customRolesList)
+
+        const canRemoveUsersLocal =
+          currentSystemRoleLocal === 'Owner'
+            ? true
+            : currentSystemRoleLocal === 'Admin'
+              ? permissionListHasRemoveUsers(defaultRolePermsByNameLower.get('admin'))
+              : customRolesIncludeManageMembers(currentAssignedCustomRoles, customRolesList)
+
         if (!cancelled) {
           setCustomRoles(customRolesList)
           setCanManageRoles(canManage)
+          setCanInviteUsers(canInviteUsersLocal)
+          setCanRemoveUsers(canRemoveUsersLocal)
           setMembersList(normalizedMembers)
           setInvitesList(normalizedInvites)
           setTeamsList((teams ?? []) as any)
@@ -608,13 +660,12 @@ export function AccountsPageContent({
     setMembersList((cur) => cur.filter((m) => m.id !== memberId))
 
     try {
-      const { error: delError } = await supabase
-        .from('organization_members')
-        .delete()
-        .eq('id', memberId)
-        .eq('organization_id', selectedOrganizationId)
-
-      if (delError) throw delError
+      const res = await fetch(
+        `/api/organizations/${encodeURIComponent(selectedOrganizationId)}/members/${encodeURIComponent(memberId)}`,
+        { method: 'DELETE', credentials: 'same-origin' },
+      )
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((payload as any)?.error ?? 'Failed to remove member.')
     } catch (e: any) {
       setMembersList(prev)
       setError(e?.message ?? 'Failed to remove member.')
@@ -780,7 +831,7 @@ export function AccountsPageContent({
           ) : null}
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          {canManageAccounts && activeTab === 'members' ? (
+          {canInviteUsers && activeTab === 'members' ? (
             <Dialog
               open={isInviteModalOpen}
               onOpenChange={(v) => {
@@ -1569,7 +1620,14 @@ export function AccountsPageContent({
                         variant="ghost"
                         onClick={() => void handleRemoveMember(m.id)}
                         className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                        disabled={!canManageAccounts || m.userId === currentUserId}
+                        disabled={
+                          !canRemoveUsers ||
+                          m.userId === currentUserId ||
+                          (() => {
+                            const rank: Record<SystemRole, number> = { Owner: 3, Admin: 2, Member: 1 }
+                            return (rank[m.systemRole] ?? 0) >= (rank[currentSystemRole] ?? 0)
+                          })()
+                        }
                       >
                         <Trash2 className="h-3 w-3" />
                       </Button>
@@ -1593,8 +1651,10 @@ export function AccountsPageContent({
           <CardDescription>Manage pending invitations</CardDescription>
         </CardHeader>
         <CardContent>
-          {!canManageAccounts ? (
-            <p className="text-center text-sm text-gray-500 py-8">Only Owners and Admins can view and manage invites.</p>
+          {!canInviteUsers ? (
+            <p className="text-center text-sm text-gray-500 py-8">
+              You need the <span className="font-medium">Invite users</span> permission to view and manage invites.
+            </p>
           ) : (
             isLoading ? (
               <p className="text-center text-sm text-gray-500 py-8">Loading invites…</p>

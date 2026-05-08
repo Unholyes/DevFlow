@@ -10,7 +10,7 @@ function isStringArray(v: unknown): v is string[] {
 /**
  * Update a member's custom_roles.
  * - Owners/Admins may update.
- * - Members may update only if they have `account.members.manage` via a custom role.
+ * - Members may update only if they have `account.users.invite`/`account.users.remove` (or legacy `account.members.manage`) via a custom role.
  * - Validates that provided role names exist in organization_roles for this org.
  */
 export async function POST(request: Request, context: { params: Promise<{ organizationId: string; memberId: string }> }) {

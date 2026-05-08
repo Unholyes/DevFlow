@@ -18,7 +18,12 @@ function asPermissionStrings(value: unknown): string[] {
 }
 
 function permissionsIncludeAccountMembersManage(permissions: unknown): boolean {
-  return asPermissionStrings(permissions).some((p) => p.toLowerCase() === 'account.members.manage')
+  // Backward compatible:
+  // - legacy: account.members.manage
+  // - new: account.users.invite / account.users.remove
+  return asPermissionStrings(permissions).some((p) =>
+    ['account.members.manage', 'account.users.invite', 'account.users.remove'].includes(p.toLowerCase()),
+  )
 }
 
 /**
@@ -35,7 +40,8 @@ export function canonicalBuiltinRoleKey(name: string): BuiltinRoleKey | null {
 
 /**
  * For members (system_role=Member), custom role names are stored on `organization_members.custom_roles[]`.
- * If any assigned custom role includes `account.members.manage`, the user may manage members/roles.
+ * If any assigned custom role includes `account.users.invite`/`account.users.remove` (or legacy `account.members.manage`),
+ * the user may manage members/roles.
  */
 export function customRolesIncludeManageMembers(
   assignedCustomRoles: string[],
@@ -63,7 +69,8 @@ export function customRolesIncludeManageMembers(
  * 1. **Global admin** (`profiles.role` = `super_admin`) — not scoped to membership.
  * 2. Must be an **organization member** (`organization_members` row).
  * 3. If `system_role` ∈ {Owner, Admin} → allowed.
- * 4. Otherwise, allow if any assigned `custom_roles[]` role includes `account.members.manage`.
+ * 4. Otherwise, allow if any assigned `custom_roles[]` role includes `account.users.invite`/`account.users.remove`
+ *    (or legacy `account.members.manage`).
  */
 export async function userCanManageOrganizationRoles(
   supabase: SupabaseClient,

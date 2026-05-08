@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { TENANT_SLUG_HEADER } from '@/lib/tenant/resolve'
+import { customRolesIncludeManageMembers } from '@/lib/permissions/can-manage-organization-roles'
+
+function permissionListHasInviteUsers(perms: unknown): boolean {
+  if (!Array.isArray(perms)) return false
+  return perms.some((p) => typeof p === 'string' && ['account.users.invite', 'account.members.manage'].includes(p.toLowerCase()))
+}
 
 function base64UrlFromBytes(bytes: Uint8Array) {
   const b64 = Buffer.from(bytes).toString('base64')
@@ -84,10 +90,11 @@ export async function POST(request: Request) {
 
     // Invite permissions are derived from organization_members.system_role:
     // - Owner: can invite Owners/Admins/Members
-    // - Admin: can invite Members only
+    // - Admin: can invite Members only IF the Admin default-role permissions include account.users.invite (or legacy account.members.manage)
+    // - Member: may invite Members only IF any assigned custom role includes account.users.invite (or legacy account.members.manage)
     const { data: inviterMembership, error: inviterError } = await admin
       .from('organization_members')
-      .select('system_role')
+      .select('system_role,custom_roles')
       .eq('organization_id', org.id)
       .eq('user_id', user.id)
       .maybeSingle()
@@ -97,9 +104,31 @@ export async function POST(request: Request) {
     const isOwner = inviterSystemRole === 'Owner'
     const isAdmin = inviterSystemRole === 'Admin'
 
-    if (!isOwner && !isAdmin) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    let canInvite = false
+    if (isOwner) {
+      canInvite = true
+    } else if (isAdmin) {
+      const { data: defaults, error: defaultsError } = await admin
+        .from('organization_default_roles')
+        .select('role,permissions')
+        .eq('organization_id', org.id)
+        .eq('role', 'Admin')
+        .maybeSingle()
+      if (defaultsError) return NextResponse.json({ error: defaultsError.message }, { status: 500 })
+      canInvite = permissionListHasInviteUsers((defaults as any)?.permissions)
+    } else {
+      const assigned = Array.isArray((inviterMembership as any)?.custom_roles)
+        ? (((inviterMembership as any).custom_roles as unknown[]).filter((r) => typeof r === 'string') as string[])
+        : []
+      const { data: customRows, error: customError } = await admin
+        .from('organization_roles')
+        .select('id,name,permissions')
+        .eq('organization_id', org.id)
+      if (customError) return NextResponse.json({ error: customError.message }, { status: 500 })
+      canInvite = customRolesIncludeManageMembers(assigned, (customRows ?? []) as any)
     }
+
+    if (!canInvite) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     // Decide invited system_role (Admins are forced to Member invites)
     const requested = typeof requestedSystemRoleRaw === 'string' ? requestedSystemRoleRaw : ''
