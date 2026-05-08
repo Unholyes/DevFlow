@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Mail, Search, Shield, UserPlus, Users, Trash2, X, Plus } from 'lucide-react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -147,7 +147,13 @@ export function AccountsPageContent({
   organizations: AccessibleOrg[]
 }) {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<'members' | 'teams' | 'roles'>('members')
+  const searchParams = useSearchParams()
+  const [activeTab, setActiveTab] = useState<'members' | 'teams' | 'roles'>(() => {
+    const tab = (searchParams?.get('tab') ?? '').toLowerCase()
+    if (tab === 'teams') return 'teams'
+    if (tab === 'roles') return 'roles'
+    return 'members'
+  })
   const [teamsQuery, setTeamsQuery] = useState('')
   const [teamsList, setTeamsList] = useState<TeamRow[]>([])
   const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false)
@@ -405,6 +411,17 @@ export function AccountsPageContent({
     if (isLoading) return
     if (!canManageRoles && activeTab === 'roles') setActiveTab('members')
   }, [isLoading, canManageRoles, activeTab])
+
+  useEffect(() => {
+    // Keep URL in sync so deep links like ?tab=teams work reliably.
+    const tab = (searchParams?.get('tab') ?? '').toLowerCase()
+    const normalized = activeTab === 'members' ? '' : `?tab=${encodeURIComponent(activeTab)}`
+    const curNormalized = tab ? `?tab=${encodeURIComponent(tab)}` : ''
+    if (curNormalized !== normalized) {
+      router.replace(`/dashboard/accounts${normalized}`)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab])
 
   const handleInvite = async () => {
     const email = inviteEmail.trim().toLowerCase()

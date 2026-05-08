@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Search, Users, X } from 'lucide-react'
+import { ArrowLeft, Plus, Search, Users, X } from 'lucide-react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -198,6 +199,14 @@ export function TeamDetailPageContent({
     <div className="space-y-6 pt-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
+          <div className="mb-2">
+            <Button asChild variant="ghost" className="-ml-2 h-8 px-2 text-slate-600 hover:text-slate-900">
+              <Link href="/dashboard/accounts?tab=teams">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to teams
+              </Link>
+            </Button>
+          </div>
           <div className="flex items-center gap-2">
             <Users className="h-5 w-5 text-gray-500" />
             <h1 className="truncate text-xl font-semibold text-gray-900">{team.name}</h1>
