@@ -4,7 +4,7 @@ import { CalendarPageContent } from '@/components/dashboard/calendar-page-conten
 export const metadata: Metadata = {
   title: 'Calendar | DevFlow',
   description:
-    'View the month at a glance and track upcoming task, sprint, and milestone deadlines across projects.',
+    'Your task due dates, sprint dates on your projects, and project target dates in one calendar view.',
 }
 
 export default function CalendarPage() {
