@@ -129,7 +129,8 @@ export async function PATCH(
           .insert({
             organization_id: organization.id,
             user_id: application.user_id,
-            role: 'admin',
+            system_role: 'Owner',
+            custom_roles: [],
           })
 
         if (memberError) {
