@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Plus, Search, Shield } from 'lucide-react'
+import { Plus, Search, Shield, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { canonicalBuiltinRoleKey, userCanManageOrganizationRoles } from '@/lib/permissions/can-manage-organization-roles'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -162,6 +162,7 @@ export function PermissionsPageContent({
   const [newRolePermissionQuery, setNewRolePermissionQuery] = useState('')
   const [draftPermissions, setDraftPermissions] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
+  const [deletingRoleId, setDeletingRoleId] = useState<string | null>(null)
 
   const roleList = useMemo<RoleListItem[]>(() => {
     const defaults: RoleListItem[] = DEFAULT_ROLES.map((r) => ({ kind: 'default', role: r.role, label: r.label }))
@@ -324,6 +325,32 @@ export function PermissionsPageContent({
       setError(e?.message ?? 'Failed to create role.')
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  async function deleteRole(roleId: string) {
+    if (deletingRoleId) return
+    const role = customRoles.find((r) => r.id === roleId)
+    const roleName = role?.name ?? 'this role'
+    const ok = window.confirm(`Delete "${roleName}"? This cannot be undone.`)
+    if (!ok) return
+
+    setDeletingRoleId(roleId)
+    setError(null)
+    try {
+      const { error: deleteError } = await supabase.from('organization_roles').delete().eq('organization_id', organizationId).eq('id', roleId)
+      if (deleteError) throw deleteError
+
+      setCustomRoles((cur) => cur.filter((r) => r.id !== roleId))
+      setDraftPermissions((cur) => cur)
+      setSelected((cur) => {
+        if (cur.kind === 'custom' && cur.id === roleId) return { kind: 'default', role: 'Admin', label: 'Admin' }
+        return cur
+      })
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to delete role.')
+    } finally {
+      setDeletingRoleId(null)
     }
   }
 
@@ -566,17 +593,39 @@ export function PermissionsPageContent({
               customRoles.map((r) => {
                 const isActive = selected.kind === 'custom' && selected.id === r.id
                 return (
-                  <button
+                  <div
                     key={r.id}
-                    type="button"
-                    onClick={() => setSelected({ kind: 'custom', id: r.id, label: r.name })}
                     className={[
-                      'w-full rounded-md px-3 py-2 text-left text-sm',
-                      isActive ? 'bg-blue-50 text-slate-900' : 'text-slate-700 hover:bg-slate-50',
+                      'flex w-full items-center gap-2 rounded-md px-1 py-1',
+                      isActive ? 'bg-blue-50' : 'hover:bg-slate-50',
                     ].join(' ')}
                   >
-                    {r.name}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setSelected({ kind: 'custom', id: r.id, label: r.name })}
+                      className={['min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm', isActive ? 'text-slate-900' : 'text-slate-700'].join(' ')}
+                    >
+                      {r.name}
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Delete role ${r.name}`}
+                      title="Delete role"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        void deleteRole(r.id)
+                      }}
+                      disabled={isLoading || deletingRoleId === r.id}
+                      className={[
+                        'inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-slate-500',
+                        'hover:bg-white hover:text-red-600',
+                        'disabled:cursor-not-allowed disabled:opacity-50',
+                      ].join(' ')}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 )
               })
             )}
