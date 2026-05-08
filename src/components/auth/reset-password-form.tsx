@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { useForm } from "react-hook-form"
@@ -32,6 +32,7 @@ export function ResetPasswordForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(mapError(searchParams.get("error")))
   const [success, setSuccess] = useState<string | null>(null)
+  const [hasRecoverySession, setHasRecoverySession] = useState<boolean | null>(null)
 
   const {
     register,
@@ -41,12 +42,53 @@ export function ResetPasswordForm() {
     resolver: zodResolver(resetPasswordSchema),
   })
 
+  useEffect(() => {
+    let cancelled = false
+
+    async function checkSession() {
+      // If the callback route failed, show the mapped error and don't probe further.
+      if (searchParams.get("error")) {
+        if (!cancelled) setHasRecoverySession(false)
+        return
+      }
+
+      const { data, error: sessionError } = await supabase.auth.getSession()
+      if (cancelled) return
+
+      if (sessionError) {
+        setHasRecoverySession(false)
+        setError("Unable to verify reset session. Please request a new reset link.")
+        return
+      }
+
+      const hasSession = Boolean(data.session)
+      setHasRecoverySession(hasSession)
+
+      if (!hasSession) {
+        setError("No reset session found. Please open the reset link from your email (or request a new one).")
+      }
+    }
+
+    void checkSession()
+
+    return () => {
+      cancelled = true
+    }
+  }, [searchParams])
+
   const onSubmit = async (data: ResetPasswordFormData) => {
     setIsLoading(true)
     setError(null)
     setSuccess(null)
 
     try {
+      // Guard against users visiting this page without going through the email recovery flow.
+      const { data: sessionData } = await supabase.auth.getSession()
+      if (!sessionData.session) {
+        setError("No reset session found. Please request a new reset link.")
+        return
+      }
+
       const { error: updateError } = await supabase.auth.updateUser({
         password: data.password,
       })
@@ -87,6 +129,7 @@ export function ResetPasswordForm() {
               type="password"
               autoComplete="new-password"
               placeholder="Enter new password"
+              disabled={Boolean(error) && hasRecoverySession === false}
               className="relative grow border-[none] bg-transparent font-normal text-slate-900 text-base tracking-[0] leading-[normal] p-0 placeholder:text-slate-400 focus:outline-none"
             />
           </div>
@@ -104,6 +147,7 @@ export function ResetPasswordForm() {
               type="password"
               autoComplete="new-password"
               placeholder="Confirm new password"
+              disabled={Boolean(error) && hasRecoverySession === false}
               className="relative grow border-[none] bg-transparent font-normal text-slate-900 text-base tracking-[0] leading-[normal] p-0 placeholder:text-slate-400 focus:outline-none"
             />
           </div>
@@ -117,7 +161,7 @@ export function ResetPasswordForm() {
 
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={isLoading || (Boolean(error) && hasRecoverySession === false)}
           className="flex items-center justify-center py-3.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 w-full rounded-xl transition-colors duration-200"
         >
           <span className="font-semibold text-white text-base">
@@ -131,6 +175,14 @@ export function ResetPasswordForm() {
           Back to Sign In
         </Link>
       </div>
+
+      {hasRecoverySession === false && (
+        <div className="flex items-center justify-center -mt-6">
+          <Link href="/auth/forgot-password" className="font-semibold text-slate-600 text-sm hover:underline">
+            Request a new reset link
+          </Link>
+        </div>
+      )}
     </div>
   )
 }

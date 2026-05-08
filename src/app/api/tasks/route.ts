@@ -22,9 +22,49 @@ async function resolveOrgId(supabase: ReturnType<typeof createClient>) {
   return await resolvePrimaryOrgIdForUser(supabase as any, user.id)
 }
 
+const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+async function enrichTasksForNavigator(
+  supabase: ReturnType<typeof createClient>,
+  rows: Record<string, unknown>[]
+) {
+  if (rows.length === 0) return []
+
+  const projectIds = [...new Set(rows.map((t) => t.project_id).filter(Boolean))] as string[]
+  const stageIds = [...new Set(rows.map((t) => t.workflow_stage_id).filter(Boolean))] as string[]
+  const processIds = [...new Set(rows.map((t) => t.process_id).filter(Boolean))] as string[]
+
+  const [projectsRes, stagesRes, processesRes] = await Promise.all([
+    projectIds.length
+      ? supabase.from('projects').select('id,name').in('id', projectIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+    stageIds.length
+      ? supabase
+          .from('workflow_stages')
+          .select('id,name,is_done,is_backlog')
+          .in('id', stageIds)
+      : Promise.resolve({ data: [] as { id: string; name: string; is_done: boolean; is_backlog: boolean }[] }),
+    processIds.length
+      ? supabase.from('phase_processes').select('id,phase_id').in('id', processIds)
+      : Promise.resolve({ data: [] as { id: string; phase_id: string }[] }),
+  ])
+
+  const projectById = Object.fromEntries((projectsRes.data ?? []).map((p) => [p.id, p]))
+  const stageById = Object.fromEntries((stagesRes.data ?? []).map((s) => [s.id, s]))
+  const processById = Object.fromEntries((processesRes.data ?? []).map((p) => [p.id, p]))
+
+  return rows.map((t: Record<string, any>) => ({
+    ...t,
+    project: t.project_id ? projectById[t.project_id as string] ?? null : null,
+    workflow_stage: t.workflow_stage_id ? stageById[t.workflow_stage_id as string] ?? null : null,
+    phase_process: t.process_id ? processById[t.process_id as string] ?? null : null,
+  }))
+}
+
 export async function GET(request: Request) {
   const supabase = createClient()
   const { searchParams } = new URL(request.url)
+  const assignee = searchParams.get('assignee')
   const projectId = searchParams.get('projectId')
   const sprintId = searchParams.get('sprintId')
   const processId = searchParams.get('processId')
@@ -33,13 +73,50 @@ export async function GET(request: Request) {
     const orgId = await resolveOrgId(supabase)
     if (!orgId) return NextResponse.json({ data: [] })
 
+    const teamIdFilter = searchParams.get('teamId')
+    const teamIdOk = teamIdFilter && uuidRe.test(teamIdFilter)
+
+    /** Tasks assigned to the signed-in user (any sprint/backlog). Used by /dashboard/tasks. */
+    if (assignee === 'me') {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return NextResponse.json({ data: [] })
+
+      let q = supabase
+        .from('tasks')
+        .select('*')
+        .eq('organization_id', orgId)
+        .eq('assignee_id', user.id)
+
+      if (projectId && uuidRe.test(projectId)) {
+        q = q.eq('project_id', projectId)
+      }
+      if (processId && uuidRe.test(processId)) {
+        q = q.eq('process_id', processId)
+      }
+      if (teamIdOk) {
+        q = q.eq('team_id', teamIdFilter!)
+      }
+
+      const { data: tasks, error } = await q.order('updated_at', { ascending: false }).limit(400)
+
+      if (error) {
+        console.error('Supabase error (assignee=me):', error)
+        return NextResponse.json({ data: [] })
+      }
+
+      const enriched = await enrichTasksForNavigator(supabase, tasks ?? [])
+      return NextResponse.json({ data: enriched })
+    }
+
     let query = supabase
       .from('tasks')
       .select('*')
       .eq('organization_id', orgId)
 
     // Skip project_id filter if it's not a valid UUID (for development with mock data)
-    if (projectId && projectId.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+    if (projectId && uuidRe.test(projectId)) {
       query = query.eq('project_id', projectId)
     }
 
@@ -50,21 +127,20 @@ export async function GET(request: Request) {
       query = query.is('sprint_id', null)
     }
 
-    if (processId) {
+    if (processId && uuidRe.test(processId)) {
       query = query.eq('process_id', processId)
     }
 
-    const teamIdFilter = searchParams.get('teamId')
-    if (teamIdFilter && teamIdFilter.match(/^[0-9a-f-]{36}$/i)) {
-      query = query.eq('team_id', teamIdFilter)
+    if (teamIdOk) {
+      query = query.eq('team_id', teamIdFilter!)
     }
 
     const { data, error } = await query.order('position', { ascending: true })
 
     if (error) {
-      console.error('Supabase error:', error);
+      console.error('Supabase error:', error)
       // Return empty array on RLS error instead of crashing
-      return NextResponse.json({ data: [] });
+      return NextResponse.json({ data: [] })
     }
 
     return NextResponse.json({ data: data || [] })
