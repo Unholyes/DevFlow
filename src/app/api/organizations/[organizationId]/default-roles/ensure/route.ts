@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { canonicalBuiltinRoleKey, userCanManageOrganizationRoles } from '@/lib/permissions/can-manage-organization-roles'
 
-const DEFAULT_SEED_ROLES = ['Admin', 'Project Manager', 'Member'] as const
+const DEFAULT_SEED_ROLES = ['Owner', 'Admin', 'Member'] as const
 
 /**
  * Inserts missing built-in rows in organization_default_roles only.

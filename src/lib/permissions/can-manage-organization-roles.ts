@@ -6,7 +6,7 @@ export type OrganizationRoleRow = {
   permissions: unknown
 }
 
-export type BuiltinRoleKey = 'Admin' | 'Project Manager' | 'Member'
+export type BuiltinRoleKey = 'Owner' | 'Admin' | 'Member'
 
 function normalizeRoleName(input: string) {
   return input.trim().replace(/\s+/g, ' ')
@@ -23,12 +23,12 @@ function permissionsIncludeAccountMembersManage(permissions: unknown): boolean {
 
 /**
  * Map a value from `organization_members.roles[]` or `organization_default_roles.role`
- * to the canonical key (Admin, Project Manager, Member). Case-insensitive.
+ * to the canonical key (Owner, Admin, Member). Case-insensitive.
  */
 export function canonicalBuiltinRoleKey(name: string): BuiltinRoleKey | null {
   const n = normalizeRoleName(name).toLowerCase()
+  if (n === 'owner') return 'Owner'
   if (n === 'admin') return 'Admin'
-  if (n === 'project manager') return 'Project Manager'
   if (n === 'member') return 'Member'
   return null
 }

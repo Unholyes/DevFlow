@@ -17,7 +17,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
-type DefaultRole = 'Admin' | 'Project Manager' | 'Member'
+type DefaultRole = 'Owner' | 'Admin' | 'Member'
 
 type RoleKind = 'default' | 'custom'
 
@@ -84,8 +84,8 @@ const PERMISSIONS: Array<{
 ]
 
 const DEFAULT_ROLES: Array<{ role: DefaultRole; label: string }> = [
+  { role: 'Owner', label: 'Owner' },
   { role: 'Admin', label: 'Admin' },
-  { role: 'Project Manager', label: 'Project Manager' },
   { role: 'Member', label: 'Member' },
 ]
 
@@ -141,18 +141,19 @@ export function PermissionsPageContent({
   const [isLoading, setIsLoading] = useState(true)
   const [accessDenied, setAccessDenied] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [currentSystemRole, setCurrentSystemRole] = useState<'Owner' | 'Admin' | 'Member'>('Member')
 
   const [customRoles, setCustomRoles] = useState<Array<{ id: string; name: string; permissions: unknown }>>([])
   const [defaultRolePerms, setDefaultRolePerms] = useState<Record<DefaultRole, string[]>>({
+    Owner: [],
     Admin: [],
-    'Project Manager': [],
     Member: [],
   })
 
   const [selected, setSelected] = useState<RoleListItem>({
     kind: 'default',
-    role: 'Admin',
-    label: 'Admin',
+    role: 'Owner',
+    label: 'Owner',
   })
 
   const [isNewRoleOpen, setIsNewRoleOpen] = useState(false)
@@ -172,17 +173,20 @@ export function PermissionsPageContent({
 
   const allPermissionIds = useMemo(() => PERMISSIONS.map((p) => p.id), [])
 
+  const isOwnerSelected = useMemo(() => selected.kind === 'default' && selected.role === 'Owner', [selected])
   const isAdminSelected = useMemo(() => selected.kind === 'default' && selected.role === 'Admin', [selected])
+  const canEditAdmin = currentSystemRole === 'Owner'
+  const isReadOnlySelection = isOwnerSelected || (isAdminSelected && !canEditAdmin)
 
   /** Last-saved permissions for the currently selected role (source of truth from Supabase load). */
   const savedPermissionsForSelection = useMemo(() => {
-    if (isAdminSelected) return allPermissionIds
+    if (isOwnerSelected) return allPermissionIds
     if (selected.kind === 'default') return defaultRolePerms[selected.role]
     const role = customRoles.find((r) => r.id === selected.id)
     return uniqueLower(asStringArray(role?.permissions ?? []))
-  }, [allPermissionIds, customRoles, defaultRolePerms, isAdminSelected, selected])
+  }, [allPermissionIds, customRoles, defaultRolePerms, isOwnerSelected, selected])
 
-  const isDirty = !isAdminSelected && !permissionListsEqual(draftPermissions, savedPermissionsForSelection)
+  const isDirty = !isReadOnlySelection && !permissionListsEqual(draftPermissions, savedPermissionsForSelection)
 
   useEffect(() => {
     setDraftPermissions(savedPermissionsForSelection)
@@ -207,7 +211,17 @@ export function PermissionsPageContent({
           return
         }
 
-        const [{ data: defaults, error: defaultsError }, { data: customs, error: customsError }] = await Promise.all([
+        const [
+          { data: memberRow, error: memberError },
+          { data: defaults, error: defaultsError },
+          { data: customs, error: customsError },
+        ] = await Promise.all([
+          supabase
+            .from('organization_members')
+            .select('system_role')
+            .eq('organization_id', organizationId)
+            .eq('user_id', currentUserId)
+            .maybeSingle(),
           supabase
             .from('organization_default_roles')
             .select('role,permissions')
@@ -215,10 +229,14 @@ export function PermissionsPageContent({
           supabase.from('organization_roles').select('id,name,permissions').eq('organization_id', organizationId).order('created_at', { ascending: true }),
         ])
 
+        if (memberError) throw memberError
         if (defaultsError) throw defaultsError
         if (customsError) throw customsError
 
-        const nextDefault: Record<DefaultRole, string[]> = { Admin: [], 'Project Manager': [], Member: [] }
+        const sys = String((memberRow as any)?.system_role ?? 'Member')
+        const normalizedSystemRole: 'Owner' | 'Admin' | 'Member' = sys === 'Owner' ? 'Owner' : sys === 'Admin' ? 'Admin' : 'Member'
+
+        const nextDefault: Record<DefaultRole, string[]> = { Owner: [], Admin: [], Member: [] }
         for (const row of defaults ?? []) {
           const canon = canonicalBuiltinRoleKey(String((row as { role?: unknown }).role ?? '')) as DefaultRole | null
           if (!canon) continue
@@ -226,6 +244,7 @@ export function PermissionsPageContent({
         }
 
         if (!cancelled) {
+          setCurrentSystemRole(normalizedSystemRole)
           setDefaultRolePerms(nextDefault)
           setCustomRoles((customs ?? []) as any)
         }
@@ -243,7 +262,7 @@ export function PermissionsPageContent({
   }, [organizationId, currentUserId])
 
   async function savePermissions() {
-    if (isAdminSelected || !isDirty || isSaving) return
+    if (isReadOnlySelection || !isDirty || isSaving) return
     setIsSaving(true)
     setError(null)
     try {
@@ -277,7 +296,7 @@ export function PermissionsPageContent({
   }
 
   function togglePermission(id: PermissionId, checked: boolean) {
-    if (isAdminSelected) return
+    if (isReadOnlySelection) return
     setDraftPermissions((cur) => {
       if (checked) return uniqueLower([...cur, id])
       return cur.filter((p) => p.toLowerCase() !== id.toLowerCase())
@@ -649,7 +668,7 @@ export function PermissionsPageContent({
                           className="h-4 w-4 rounded border-slate-300 text-blue-600"
                           checked={checked}
                           onChange={(e) => togglePermission(p.id, e.target.checked)}
-                          disabled={isLoading || isAdminSelected}
+                          disabled={isLoading || isReadOnlySelection}
                         />
                         <span className="truncate">{p.label}</span>
                       </label>
@@ -661,14 +680,16 @@ export function PermissionsPageContent({
           </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            {isAdminSelected ? (
-              <p className="text-sm text-slate-500">The Admin role always includes every permission.</p>
+            {isOwnerSelected ? (
+              <p className="text-sm text-slate-500">The Owner role always includes every permission.</p>
+            ) : isAdminSelected && !canEditAdmin ? (
+              <p className="text-sm text-slate-500">Only Owners can edit Admin permissions.</p>
             ) : isDirty ? (
               <p className="text-sm text-amber-800">You have unsaved changes for this role.</p>
             ) : (
               <p className="text-sm text-slate-500">Click Save to persist changes to the database.</p>
             )}
-            {!isAdminSelected ? (
+            {!isReadOnlySelection ? (
               <Button
                 type="button"
                 className="bg-[#7a2233] text-white hover:bg-[#651c2a]"

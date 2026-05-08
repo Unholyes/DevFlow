@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { userCanManageOrganizationRoles } from '@/lib/permissions/can-manage-organization-roles'
 
-const DEFAULT_ROLE_NAMES = new Set(['Admin', 'Project Manager', 'Member'])
+const DEFAULT_ROLE_NAMES = new Set(['Owner', 'Admin', 'Member'])
 
 function isStringArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.every((x) => typeof x === 'string')
@@ -55,8 +55,26 @@ export async function POST(request: Request, context: { params: Promise<{ organi
     if (typeof body.role !== 'string' || !DEFAULT_ROLE_NAMES.has(body.role)) {
       return NextResponse.json({ error: 'Invalid default role' }, { status: 400 })
     }
+    if (body.role === 'Owner') {
+      return NextResponse.json({ error: 'Owner role always has all permissions' }, { status: 400 })
+    }
+
     if (body.role === 'Admin') {
-      return NextResponse.json({ error: 'Admin role always has all permissions' }, { status: 400 })
+      const { data: memberRow, error: memberError } = await admin
+        .from('organization_members')
+        .select('system_role')
+        .eq('organization_id', organizationId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (memberError) {
+        return NextResponse.json({ error: memberError.message }, { status: 500 })
+      }
+
+      const sys = String((memberRow as any)?.system_role ?? 'Member')
+      if (sys !== 'Owner') {
+        return NextResponse.json({ error: 'Only Owners can edit Admin permissions' }, { status: 403 })
+      }
     }
 
     // Upsert so we always persist even if the row was missing; plain .update() can affect 0 rows silently.

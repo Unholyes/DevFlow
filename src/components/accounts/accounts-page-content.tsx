@@ -73,6 +73,8 @@ type RolePermission =
   | 'system.api_tokens.generate'
   | 'system.integrations.manage'
 
+const DEFAULT_ACCOUNT_ROLES = ['Owner', 'Admin', 'Member'] as const
+
 const ROLE_PERMISSION_CATALOG: Array<{
   id: RolePermission
   label: string
@@ -603,7 +605,7 @@ export function AccountsPageContent({
       return
     }
 
-    const allBuiltIn = ['Admin', 'Project Manager', 'Member'].map((r) => r.toLowerCase())
+    const allBuiltIn = ['Owner', 'Admin', 'Member'].map((r) => r.toLowerCase())
     if (allBuiltIn.includes(name.toLowerCase())) {
       setError('That role already exists.')
       return
@@ -1176,8 +1178,7 @@ export function AccountsPageContent({
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start" className="min-w-[220px]">
-                              {(customRoles ?? [])
-                                .map((r) => r.name)
+                              {[...DEFAULT_ACCOUNT_ROLES, ...(customRoles ?? []).map((r) => r.name)]
                                 .filter((name) => !draftCustomRoles.some((x) => x.toLowerCase() === name.toLowerCase()))
                                 .map((name) => (
                                   <DropdownMenuCheckboxItem
