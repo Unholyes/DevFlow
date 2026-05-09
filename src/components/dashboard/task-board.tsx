@@ -1,7 +1,9 @@
 'use client'
 
+import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Task } from '@/types'
 import { User, AlertCircle, Clock, CheckCircle } from 'lucide-react'
 
@@ -13,6 +15,8 @@ interface TaskBoardProps {
     priority: Task['priority']
     assignee: string
   }>
+  boardTitle?: string
+  boardDescription?: string
 }
 
 const statusConfig = {
@@ -30,7 +34,7 @@ const priorityColors = {
   critical: 'bg-red-100 text-red-800',
 }
 
-export function TaskBoard({ tasks }: TaskBoardProps) {
+export function TaskBoard({ tasks, boardTitle = 'Task Board', boardDescription }: TaskBoardProps) {
   // Group tasks by status dynamically
   const tasksByStatus = tasks.reduce((acc, task) => {
     if (!acc[task.status]) acc[task.status] = []
@@ -38,16 +42,34 @@ export function TaskBoard({ tasks }: TaskBoardProps) {
     return acc
   }, {} as Record<string, typeof tasks>)
 
+  const isEmpty = tasks.length === 0
+
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg border border-gray-200">
       <div className="px-4 py-5 sm:p-6">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-medium text-gray-900">Task Board</h3>
-          <button className="text-sm text-blue-600 hover:text-blue-500 font-medium">
-            View full board
-          </button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-6">
+          <div>
+            <h3 className="text-lg font-medium text-gray-900">{boardTitle}</h3>
+            {boardDescription ? (
+              <p className="mt-1 text-sm text-gray-500 max-w-2xl leading-relaxed">{boardDescription}</p>
+            ) : null}
+          </div>
+          <Button asChild variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 shrink-0 -mr-2">
+            <Link href="/dashboard/tasks">View all tasks</Link>
+          </Button>
         </div>
 
+        {isEmpty ? (
+          <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-6 py-12 text-center">
+            <p className="text-sm font-medium text-gray-900">No tasks assigned to you</p>
+            <p className="mt-2 text-sm text-gray-600 max-w-md mx-auto leading-relaxed">
+              When work is assigned to you, it will appear here by status. Open the tasks hub to browse filters and details.
+            </p>
+            <Button asChild className="mt-6" variant="default">
+              <Link href="/dashboard/tasks">Go to tasks</Link>
+            </Button>
+          </div>
+        ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {Object.entries(statusConfig).map(([status, config]) => {
             const tasksInStatus = tasksByStatus[status] || []
@@ -92,6 +114,7 @@ export function TaskBoard({ tasks }: TaskBoardProps) {
             )
           })}
         </div>
+        )}
       </div>
     </div>
   )

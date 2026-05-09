@@ -3,6 +3,7 @@ import { TenantAdminDashboardHome } from '@/components/dashboard/tenant-admin-da
 import { TeamMemberDashboard } from '@/components/dashboard/team-member-dashboard'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
+import { loadMemberDashboardData } from '@/lib/dashboard/load-team-member-dashboard'
 import { redirect } from 'next/navigation'
 
 export default async function Dashboard() {
@@ -131,6 +132,8 @@ export default async function Dashboard() {
     if ((ownerMembershipCount ?? 0) === 0) totalMembers += 1
   }
 
+  const { projects, myTasks, activities } = await loadMemberDashboardData(supabase, orgId, user.id)
+
   return (
     <TeamMemberDashboard
       userId={user.id}
@@ -142,6 +145,9 @@ export default async function Dashboard() {
         overdueTasks: overdueTasksRes.count ?? 0,
         teamMembers: totalMembers,
       }}
+      projects={projects}
+      myTasks={myTasks}
+      activities={activities}
     />
   )
 }

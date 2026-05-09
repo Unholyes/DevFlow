@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/select'
 import type { TaskPriority, TaskStatus } from '@/types'
 import { cn } from '@/lib/utils'
+import { mapStageToStatus } from '@/lib/tasks/map-stage-to-status'
 import { KanbanTaskDetailModal, type TaskRowLite } from '@/components/project/KanbanTaskDetailModal'
 
 type ApiTaskRow = {
@@ -40,6 +41,7 @@ type ApiTaskRow = {
   process_id?: string | null
   workflow_stage_id?: string | null
   assignee_id?: string | null
+  blocked?: boolean | null
   completed_at?: string | null
   created_at: string
   updated_at: string
@@ -100,27 +102,12 @@ const priorityStyle: Record<TaskPriority, string> = {
   critical: 'text-red-800 bg-red-50 border-red-200',
 }
 
-function mapStageToStatus(
-  stage: ApiTaskRow['workflow_stage'],
-  completedAt: string | null | undefined
-): TaskStatus {
-  if (completedAt) return 'done'
-  if (stage?.is_done) return 'done'
-  if (stage?.is_backlog) return 'todo'
-  const n = (stage?.name ?? '').toLowerCase()
-  if (n.includes('review')) return 'in_review'
-  if (n.includes('progress') || n.includes('doing')) return 'in_progress'
-  if (n.includes('block')) return 'blocked'
-  if (n.includes('done') || n.includes('complete')) return 'done'
-  return 'todo'
-}
-
 function taskKey(id: string) {
   return id.replace(/-/g, '').slice(0, 8).toUpperCase()
 }
 
 function mapApiToWorkItem(row: ApiTaskRow): WorkItem {
-  const status = mapStageToStatus(row.workflow_stage ?? null, row.completed_at ?? null)
+  const status = mapStageToStatus(row.workflow_stage ?? null, row.completed_at ?? null, Boolean(row.blocked))
   const stageLabel = row.workflow_stage?.name?.trim() || statusLabel[status]
   return {
     id: row.id,
