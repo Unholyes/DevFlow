@@ -1,5 +1,6 @@
 import React, { Children, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
+import { cn } from '@/lib/utils'
 
 import './Stepper.css'
 
@@ -53,6 +54,7 @@ export default function Stepper({
   completeButtonText = 'Complete',
   disableStepIndicators = false,
   renderStepIndicator,
+  className,
   ...rest
 }: StepperProps) {
   const [currentStep, setCurrentStep] = useState(initialStep)
@@ -89,7 +91,7 @@ export default function Stepper({
   }
 
   return (
-    <div className="rb-stepper__outer-container" {...rest}>
+    <div className={cn('rb-stepper__outer-container', className)} {...rest}>
       <div
         className={`rb-stepper__step-circle-container ${stepCircleContainerClassName}`}
         style={{ border: '1px solid #222' }}

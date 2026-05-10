@@ -35,6 +35,7 @@ export function SetupWizard(props: { tenantSlug: string }) {
       submitLabel="Finish setup"
       tenantSlug={props.tenantSlug}
       showSignOut
+      cancelHref={null}
     />
   )
 }
@@ -46,6 +47,8 @@ type SetupProjectWizardProps = {
   submitLabel?: string
   tenantSlug?: string | null
   showSignOut?: boolean
+  /** Where Cancel navigates. Pass `null` to hide Cancel (e.g. forced onboarding). */
+  cancelHref?: string | null
 }
 
 export function SetupProjectWizard({
@@ -55,6 +58,7 @@ export function SetupProjectWizard({
   submitLabel = 'Finish setup',
   tenantSlug,
   showSignOut = false,
+  cancelHref = '/dashboard/projects',
 }: SetupProjectWizardProps) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
@@ -119,9 +123,16 @@ export function SetupProjectWizard({
     }
   }
 
+  const handleCancel = () => {
+    if (cancelHref) {
+      router.push(cancelHref)
+      router.refresh()
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="mx-auto w-full max-w-4xl space-y-6">
+    <div className="flex min-h-[calc(100dvh-6.5rem)] flex-col justify-center bg-gray-50 px-4 py-4 text-slate-900 sm:px-6">
+      <div className="mx-auto w-full max-w-4xl space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">{title}</h1>
@@ -132,24 +143,34 @@ export function SetupProjectWizard({
               </div>
             ) : null}
           </div>
-          {showSignOut ? (
-            <Button type="button" variant="outline" onClick={handleSignOut} disabled={isSigningOut}>
-              {isSigningOut ? 'Signing out...' : 'Sign out'}
-            </Button>
+          {cancelHref || showSignOut ? (
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+              {cancelHref ? (
+                <Button type="button" variant="ghost" onClick={handleCancel} disabled={saving}>
+                  Cancel
+                </Button>
+              ) : null}
+              {showSignOut ? (
+                <Button type="button" variant="outline" onClick={handleSignOut} disabled={isSigningOut}>
+                  {isSigningOut ? 'Signing out...' : 'Sign out'}
+                </Button>
+              ) : null}
+            </div>
           ) : null}
         </div>
 
         <Stepper
           initialStep={1}
           onFinalStepCompleted={submit}
-          uniformContentHeight
+          className="rb-stepper__outer-container--embed"
+          contentClassName="rb-stepper__content--modal"
           backButtonText="Back"
           nextButtonText="Next"
           stepCircleContainerClassName="rb-stepper__wide"
           nextButtonProps={{ disabled: saving }}
         >
           <Step>
-            <Card className="border-gray-200 shadow-sm">
+            <Card className="border-gray-200 bg-white text-slate-900 shadow-sm [&_input]:bg-white [&_input]:text-slate-900">
               <CardHeader>
                 <CardTitle>Project basics</CardTitle>
               </CardHeader>
@@ -175,7 +196,7 @@ export function SetupProjectWizard({
           </Step>
 
           <Step>
-            <Card className="border-gray-200 shadow-sm">
+            <Card className="border-gray-200 bg-white text-slate-900 shadow-sm [&_input]:bg-white [&_input]:text-slate-900 [&_select]:text-slate-900">
               <CardHeader>
                 <CardTitle>Phases (sequential milestones)</CardTitle>
               </CardHeader>
@@ -350,7 +371,7 @@ export function SetupProjectWizard({
           </Step>
 
           <Step>
-            <Card className="border-gray-200 shadow-sm">
+            <Card className="border-gray-200 bg-white text-slate-900 shadow-sm">
               <CardHeader>
                 <CardTitle>Review & create</CardTitle>
               </CardHeader>

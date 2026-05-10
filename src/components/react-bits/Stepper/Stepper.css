@@ -17,6 +17,36 @@
   aspect-ratio: auto;
 }
 
+/* Full-page wizards: no forced aspect-ratio or min-height stretch; tighter chrome */
+.rb-stepper__outer-container.rb-stepper__outer-container--embed {
+  min-height: 0;
+  flex: 0 0 auto;
+  width: 100%;
+  padding: 0;
+  align-items: stretch;
+  justify-content: center;
+  aspect-ratio: auto;
+}
+
+.rb-stepper__outer-container--embed .rb-stepper__step-indicator-row {
+  padding: 1.25rem 1.5rem 0.5rem;
+}
+
+.rb-stepper__outer-container--embed .rb-stepper__footer-container {
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+  padding-bottom: 1rem;
+}
+
+.rb-stepper__outer-container--embed .rb-stepper__footer-nav {
+  margin-top: 1rem;
+}
+
+.rb-stepper__outer-container--embed .rb-stepper__step-default {
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+
 .rb-stepper__outer-container.rb-stepper__outer-container--modal .rb-stepper__step-circle-container {
   max-width: 24rem;
   border-radius: 1.5rem;
@@ -43,6 +73,10 @@
   .rb-stepper__outer-container.rb-stepper__outer-container--modal {
     aspect-ratio: auto;
   }
+
+  .rb-stepper__outer-container.rb-stepper__outer-container--embed {
+    aspect-ratio: auto;
+  }
 }
 
 @media (min-width: 768px) {
@@ -51,6 +85,10 @@
   }
 
   .rb-stepper__outer-container.rb-stepper__outer-container--modal {
+    aspect-ratio: auto;
+  }
+
+  .rb-stepper__outer-container.rb-stepper__outer-container--embed {
     aspect-ratio: auto;
   }
 }
@@ -95,6 +133,20 @@
   height: 100%;
   overflow: auto;
   padding-bottom: 0.75rem;
+}
+
+/*
+ * uniformContentHeight measures the tallest step uncapped; without a limit the white card
+ * grows past the viewport and users must scroll the page (losing the step header/footer).
+ * Pair uniform + modal contentClassName to cap the content region; inner step scrolls.
+ */
+.rb-stepper__step-content-default.rb-stepper__content--uniform.rb-stepper__content--modal {
+  max-height: min(72dvh, 44rem);
+}
+
+/* Let the scrollable area use the full capped height (avoid stacking two max-heights). */
+.rb-stepper__step-content-default.rb-stepper__content--uniform.rb-stepper__content--modal .rb-stepper__step-default {
+  max-height: none;
 }
 
 .rb-stepper__footer-container {
@@ -223,7 +275,7 @@
 }
 
 .rb-stepper__content--modal .rb-stepper__step-default {
-  max-height: min(48vh, 28rem);
+  max-height: min(65dvh, 40rem);
   overflow: auto;
   padding-bottom: 0.75rem;
 }
@@ -245,7 +297,7 @@
   }
 
   .rb-stepper__content--modal .rb-stepper__step-default {
-    max-height: min(52vh, 30rem);
+    max-height: min(58dvh, 36rem);
   }
 }
 
