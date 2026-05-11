@@ -83,6 +83,7 @@ function parseApiDate(ymd: string): Date {
 
 export function CalendarPageContent() {
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()))
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null)
   const [deadlines, setDeadlines] = useState<Deadline[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -132,6 +133,13 @@ export function CalendarPageContent() {
       .sort((a, b) => compareAsc(a.date, b.date))
   }, [deadlines])
 
+  const sidebarDeadlines = useMemo(() => {
+    if (selectedDay) {
+      return deadlinesForDay(selectedDay, deadlines).sort((a, b) => compareAsc(a.date, b.date))
+    }
+    return upcomingDeadlines
+  }, [selectedDay, deadlines, upcomingDeadlines])
+
   const monthLabel = format(visibleMonth, 'MMMM yyyy')
 
   return (
@@ -160,7 +168,7 @@ export function CalendarPageContent() {
               </div>
               <div>
                 <CardTitle className="text-lg text-gray-900">{monthLabel}</CardTitle>
-                <CardDescription>Click arrows to change month</CardDescription>
+                <CardDescription>Click a day to see its items in Upcoming</CardDescription>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -179,7 +187,11 @@ export function CalendarPageContent() {
                 variant="outline"
                 size="sm"
                 className="border-gray-200 text-gray-700"
-                onClick={() => setVisibleMonth(startOfMonth(new Date()))}
+                onClick={() => {
+                  const t = startOfDay(new Date())
+                  setVisibleMonth(startOfMonth(t))
+                  setSelectedDay(t)
+                }}
               >
                 Today
               </Button>
@@ -209,15 +221,27 @@ export function CalendarPageContent() {
                 const inMonth = isSameMonth(day, visibleMonth)
                 const dayDeadlines = deadlinesForDay(day, deadlines)
                 const hasDeadline = dayDeadlines.length > 0
+                const dayStart = startOfDay(day)
+                const isSelected = selectedDay !== null && isSameDay(dayStart, selectedDay)
                 return (
-                  <div
+                  <button
                     key={format(day, 'yyyy-MM-dd')}
+                    type="button"
+                    onClick={() => {
+                      setSelectedDay(dayStart)
+                      if (!isSameMonth(day, visibleMonth)) {
+                        setVisibleMonth(startOfMonth(day))
+                      }
+                    }}
+                    aria-pressed={isSelected}
+                    aria-label={`${format(day, 'EEEE, MMMM d, yyyy')}${hasDeadline ? `, ${dayDeadlines.length} item${dayDeadlines.length === 1 ? '' : 's'}` : ', no items'}`}
                     className={cn(
-                      'min-h-[88px] bg-white p-1.5 text-left transition-colors',
+                      'min-h-[88px] bg-white p-1.5 text-left transition-colors hover:bg-gray-50/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--theme-primary)]',
                       !inMonth && 'bg-gray-50/80 text-gray-400',
                       isToday(day) &&
                         inMonth &&
-                        'ring-1 ring-inset bg-[color-mix(in_srgb,var(--theme-primary)_12%,white)]'
+                        'ring-1 ring-inset bg-[color-mix(in_srgb,var(--theme-primary)_12%,white)]',
+                      isSelected && 'ring-2 ring-inset ring-[var(--theme-primary)] z-[1]'
                     )}
                   >
                     <span
@@ -255,7 +279,7 @@ export function CalendarPageContent() {
                         )}
                       </div>
                     )}
-                  </div>
+                  </button>
                 )
               })}
             </div>
@@ -275,16 +299,39 @@ export function CalendarPageContent() {
 
         <Card className="border-gray-200 shadow-sm h-fit xl:sticky xl:top-24">
           <CardHeader className="px-5 pb-3 pt-5 sm:px-6 sm:pt-6">
-            <CardTitle className="text-lg text-gray-900">Upcoming</CardTitle>
-            <CardDescription>Nearest dates first (from today)</CardDescription>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <CardTitle className="text-lg text-gray-900">
+                  {selectedDay ? format(selectedDay, 'EEEE, MMM d') : 'Upcoming'}
+                </CardTitle>
+                <CardDescription>
+                  {selectedDay
+                    ? 'Items on this date'
+                    : 'Nearest dates first (from today)'}
+                </CardDescription>
+              </div>
+              {selectedDay ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 border-gray-200 text-gray-700"
+                  onClick={() => setSelectedDay(null)}
+                >
+                  All upcoming
+                </Button>
+              ) : null}
+            </div>
           </CardHeader>
           <CardContent className="space-y-4 max-h-[min(70vh,560px)] overflow-y-auto px-5 pb-5 pt-0 sm:px-6 sm:pb-6 scrollbar-gutter-stable">
-            {!loading && upcomingDeadlines.length === 0 ? (
+            {!loading && sidebarDeadlines.length === 0 ? (
               <p className="text-sm text-gray-500 py-4 text-center leading-relaxed px-1">
-                No upcoming dates. Add due dates on your tasks, set project targets, or plan sprints to see them here.
+                {selectedDay
+                  ? 'Nothing scheduled on this date.'
+                  : 'No upcoming dates. Add due dates on your tasks, set project targets, or plan sprints to see them here.'}
               </p>
             ) : (
-              upcomingDeadlines.map((dl) => {
+              sidebarDeadlines.map((dl) => {
                 const Icon = typeIcons[dl.type]
                 return (
                   <Link
