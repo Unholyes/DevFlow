@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { ManageProjectTeamDialog } from '@/components/project/manage-project-team-dialog'
 import { CalendarDays, Settings, Users } from 'lucide-react'
 import { Project } from '@/types'
 import Link from 'next/link'
@@ -17,13 +18,6 @@ interface ProjectHeaderProps {
     dueDate: Date | null
     teamMembers: number
   }
-}
-
-const sdlcColors = {
-  scrum: 'bg-blue-100 text-blue-800',
-  kanban: 'bg-green-100 text-green-800',
-  waterfall: 'bg-purple-100 text-purple-800',
-  devops: 'bg-orange-100 text-orange-800',
 }
 
 const statusColors = {
@@ -60,10 +54,7 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
             </div>
           </div>
           <div className="flex gap-3 ml-4">
-            <Button variant="outline" size="sm">
-              <Users className="h-4 w-4 mr-2" />
-              Manage Team
-            </Button>
+            <ManageProjectTeamDialog projectName={project.name} />
             <Button asChild variant="outline" size="sm">
               <Link href={`/dashboard/projects/${project.id}/settings`}>
                 <Settings className="h-4 w-4 mr-2" />
