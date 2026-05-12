@@ -6,6 +6,16 @@ import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { Button } from '@/components/ui/button'
 
+function normalizeName(input: string) {
+  return input.trim().replace(/\s+/g, ' ')
+}
+
+function permissionListHas(perms: unknown, id: string) {
+  if (!Array.isArray(perms)) return false
+  const target = id.toLowerCase()
+  return perms.some((p) => typeof p === 'string' && p.toLowerCase() === target)
+}
+
 export default async function ProjectsPage() {
   const tenantSlug = getTenantSlug()
   const supabase = createClient()
@@ -28,6 +38,40 @@ export default async function ProjectsPage() {
 
   if (!orgId) redirect('/onboarding')
 
+  const { data: membership } = await supabase
+    .from('organization_members')
+    .select('system_role,custom_roles')
+    .eq('organization_id', orgId)
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  const systemRole = String((membership as any)?.system_role ?? 'Member')
+  const assignedCustomRoles: string[] = Array.isArray((membership as any)?.custom_roles)
+    ? (((membership as any).custom_roles as unknown[]).filter((x) => typeof x === 'string' && x.trim().length > 0) as string[])
+    : []
+
+  const [{ data: defaultRoleRow }, { data: customRoleRows }] = await Promise.all([
+    supabase
+      .from('organization_default_roles')
+      .select('permissions')
+      .eq('organization_id', orgId)
+      .eq('role', systemRole)
+      .maybeSingle(),
+    supabase.from('organization_roles').select('name,permissions').eq('organization_id', orgId),
+  ])
+
+  const customByNameLower = new Map<string, unknown>()
+  for (const r of (customRoleRows ?? []) as any[]) {
+    const nameLower = normalizeName(String(r?.name ?? '')).toLowerCase()
+    if (!nameLower) continue
+    customByNameLower.set(nameLower, r?.permissions)
+  }
+
+  const canCreateProject =
+    systemRole === 'Owner' ||
+    permissionListHas((defaultRoleRow as any)?.permissions, 'pm.projects.create') ||
+    assignedCustomRoles.some((name) => permissionListHas(customByNameLower.get(normalizeName(name).toLowerCase()), 'pm.projects.create'))
+
   const { data: projects } = await supabase
     .from('projects')
     .select('id,name,description,status,progress_percent,created_at')
@@ -41,9 +85,11 @@ export default async function ProjectsPage() {
           <h1 className="text-3xl font-bold text-gray-900">Projects</h1>
           <p className="mt-2 text-gray-600">Manage and track all your projects</p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/projects/new">Create Project</Link>
-        </Button>
+        {canCreateProject ? (
+          <Button asChild>
+            <Link href="/dashboard/projects/new">Create Project</Link>
+          </Button>
+        ) : null}
       </div>
 
       {/* Projects Grid */}
