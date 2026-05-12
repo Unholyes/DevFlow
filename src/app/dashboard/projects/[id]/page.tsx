@@ -262,6 +262,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       </Link>
 
       <ProjectHeader
+        organizationId={orgId}
         project={{
           id: project.id,
           name: project.name,

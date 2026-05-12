@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { userCanManageOrganizationRoles } from '@/lib/permissions/can-manage-organization-roles'
+import { filterToGlobalAccountPermissions } from '@/lib/permissions/global-account-permissions'
 
 const DEFAULT_ROLE_NAMES = new Set(['Owner', 'Admin', 'Member'])
 
@@ -34,6 +35,8 @@ export async function POST(request: Request, context: { params: Promise<{ organi
   if (!isStringArray(body.permissions)) {
     return NextResponse.json({ error: 'permissions must be a string array' }, { status: 400 })
   }
+
+  const permissions = filterToGlobalAccountPermissions(body.permissions)
 
   const supabase = createClient()
   const {
@@ -84,7 +87,7 @@ export async function POST(request: Request, context: { params: Promise<{ organi
         {
           organization_id: organizationId,
           role: body.role,
-          permissions: body.permissions,
+          permissions,
         },
         { onConflict: 'organization_id,role' },
       )
@@ -111,7 +114,7 @@ export async function POST(request: Request, context: { params: Promise<{ organi
 
   const { data: customData, error: customError } = await admin
     .from('organization_roles')
-    .update({ permissions: body.permissions })
+    .update({ permissions })
     .eq('id', body.roleId)
     .eq('organization_id', organizationId)
     .select('id')

@@ -6,6 +6,7 @@ import { Project } from '@/types'
 import Link from 'next/link'
 
 interface ProjectHeaderProps {
+  organizationId?: string
   project: {
     id: string
     name: string
@@ -26,7 +27,7 @@ const statusColors = {
   completed: 'bg-blue-100 text-blue-800',
 }
 
-export function ProjectHeader({ project }: ProjectHeaderProps) {
+export function ProjectHeader({ organizationId, project }: ProjectHeaderProps) {
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg">
       <div className="px-4 py-5 sm:p-6">
@@ -54,7 +55,11 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
             </div>
           </div>
           <div className="flex gap-3 ml-4">
-            <ManageProjectTeamDialog projectName={project.name} />
+            <ManageProjectTeamDialog
+              organizationId={organizationId}
+              projectId={project.id}
+              projectName={project.name}
+            />
             <Button asChild variant="outline" size="sm">
               <Link href={`/dashboard/projects/${project.id}/settings`}>
                 <Settings className="h-4 w-4 mr-2" />

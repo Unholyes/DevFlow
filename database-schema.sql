@@ -563,7 +563,8 @@ CREATE TABLE IF NOT EXISTS public.project_members (
   organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL DEFAULT 'developer' CHECK (role IN ('tenant_admin', 'developer')),
+  project_access_level text NOT NULL DEFAULT 'Viewer' CHECK (project_access_level IN ('Admin', 'Editor', 'Viewer')),
+  functional_role text,
   joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (project_id, user_id)
 );

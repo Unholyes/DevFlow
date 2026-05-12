@@ -4,6 +4,18 @@ import { useEffect, useMemo, useState } from 'react'
 import { Info, Plus, Search, Shield, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { canonicalBuiltinRoleKey, userCanManageOrganizationRoles } from '@/lib/permissions/can-manage-organization-roles'
+import {
+  GLOBAL_ACCOUNT_PERMISSION_IDS,
+  filterToGlobalAccountPermissions,
+  isGlobalAccountPermissionId,
+} from '@/lib/permissions/global-account-permissions'
+import { PROJECT_ACCESS_CAPABILITY_MATRIX, PROJECT_ACCESS_LEVELS, type ProjectAccessLevel } from '@/lib/permissions/project-access-level'
+import {
+  ORDERED_PROJECT_TEMPLATE_GROUPS,
+  filterToProjectTemplatePermissions,
+  isProjectTemplatePermissionId,
+  type ProjectTemplatePermissionId,
+} from '@/lib/permissions/project-template-permissions'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
@@ -20,70 +32,30 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 type DefaultRole = 'Owner' | 'Admin' | 'Member'
 
-type RoleKind = 'default' | 'custom'
-
-type RoleListItem =
+/** Sidebar selection: account roles, custom roles, or editable project access templates. */
+type SidebarSelection =
   | { kind: 'default'; role: DefaultRole; label: string }
   | { kind: 'custom'; id: string; label: string }
+  | { kind: 'project_template'; level: ProjectAccessLevel; label: string }
 
-type PermissionCategory =
-  | 'Account'
-  | 'Project Management'
-  | 'SDLC Management'
-  | 'Development'
-  | 'System'
+const CUSTOM_ROLE_NAME_BLOCKLIST = new Set(['qa lead', 'viewr'])
 
-type PermissionId =
-  | 'account.users.invite'
-  | 'account.users.remove'
-  // Legacy alias (kept for backward compatibility; not shown in UI)
-  | 'account.members.manage'
-  | 'pm.projects.create'
-  | 'pm.sprints.manage'
-  | 'pm.phase_gates.approve'
-  | 'pm.timelines.modify'
-  | 'pm.db_schemas.manage'
-  | 'pm.issues.assign_transition'
-  | 'sdlc.sprints.create'
-  | 'sdlc.backlog.manage'
-  | 'projects.archive'
-  | 'dev.repo.access'
-  | 'dev.cicd.trigger'
-  | 'dev.env.manage'
-  | 'system.api_tokens.generate'
-  | 'system.integrations.manage'
+type GlobalPermissionCategory = 'Account' | 'Project Management' | 'System'
 
-const CATEGORY_ORDER: PermissionCategory[] = ['Account', 'Project Management', 'SDLC Management', 'Development', 'System']
+type GlobalPermissionId = (typeof GLOBAL_ACCOUNT_PERMISSION_IDS)[number]
 
-const PERMISSIONS: Array<{
-  id: PermissionId
-  category: PermissionCategory
+const GLOBAL_CATEGORY_ORDER: GlobalPermissionCategory[] = ['Account', 'Project Management', 'System']
+
+/** Workspace-wide permissions only (Owner / Admin / Member templates and custom account roles). */
+const GLOBAL_ACCOUNT_PERMISSIONS: Array<{
+  id: GlobalPermissionId
+  category: GlobalPermissionCategory
   label: string
-  description?: string
 }> = [
-  // Account
   { id: 'account.users.invite', category: 'Account', label: 'Invite users' },
   { id: 'account.users.remove', category: 'Account', label: 'Remove users' },
-
-  // Project Management (hybrid SDLC perms)
   { id: 'pm.projects.create', category: 'Project Management', label: 'Create new project' },
-  { id: 'pm.sprints.manage', category: 'Project Management', label: 'Manage sprint cycles' },
-  { id: 'pm.phase_gates.approve', category: 'Project Management', label: 'Approve phase gate transitions' },
-  { id: 'pm.timelines.modify', category: 'Project Management', label: 'Modify project timelines/Gantt charts' },
-  { id: 'pm.db_schemas.manage', category: 'Project Management', label: 'Manage database schemas' },
-  { id: 'pm.issues.assign_transition', category: 'Project Management', label: 'Assign and transition issue tickets' },
-
-  // SDLC Management (the granular SDLC workflow perms you requested)
-  { id: 'sdlc.sprints.create', category: 'SDLC Management', label: 'Create sprints' },
-  { id: 'sdlc.backlog.manage', category: 'SDLC Management', label: 'Backlog management' },
-  { id: 'projects.archive', category: 'SDLC Management', label: 'Archive projects' },
-
-  // Development
-  { id: 'dev.repo.access', category: 'Development', label: 'Repository access' },
-  { id: 'dev.cicd.trigger', category: 'Development', label: 'Trigger CI/CD pipelines' },
-  { id: 'dev.env.manage', category: 'Development', label: 'Manage environment variables' },
-
-  // System
+  { id: 'projects.archive', category: 'Project Management', label: 'Archive project' },
   { id: 'system.api_tokens.generate', category: 'System', label: 'Generate API tokens' },
   { id: 'system.integrations.manage', category: 'System', label: 'Integration setup' },
 ]
@@ -127,9 +99,9 @@ function normalizePermissionsForUi(perms: unknown): string[] {
   return arr
 }
 
-function groupByCategory() {
-  const groups = new Map<PermissionCategory, typeof PERMISSIONS>()
-  for (const p of PERMISSIONS) {
+function groupGlobalByCategory() {
+  const groups = new Map<GlobalPermissionCategory, typeof GLOBAL_ACCOUNT_PERMISSIONS>()
+  for (const p of GLOBAL_ACCOUNT_PERMISSIONS) {
     const arr = groups.get(p.category) ?? []
     arr.push(p)
     groups.set(p.category, arr)
@@ -137,11 +109,16 @@ function groupByCategory() {
   return groups
 }
 
-const PERMISSION_GROUPS = groupByCategory()
-const ORDERED_PERMISSION_GROUPS: Array<[PermissionCategory, typeof PERMISSIONS]> = CATEGORY_ORDER.map((c) => {
-  const perms = PERMISSION_GROUPS.get(c) ?? []
-  return [c, perms] as [PermissionCategory, typeof PERMISSIONS]
-}).filter((entry) => entry[1].length > 0)
+const GLOBAL_PERMISSION_GROUPS = groupGlobalByCategory()
+const ORDERED_GLOBAL_PERMISSION_GROUPS: Array<[GlobalPermissionCategory, typeof GLOBAL_ACCOUNT_PERMISSIONS]> =
+  GLOBAL_CATEGORY_ORDER.map((c) => {
+    const perms = GLOBAL_PERMISSION_GROUPS.get(c) ?? []
+    return [c, perms] as [GlobalPermissionCategory, typeof GLOBAL_ACCOUNT_PERMISSIONS]
+  }).filter((entry) => entry[1].length > 0)
+
+function defaultProjectTemplatePermissionsFromMatrix(level: ProjectAccessLevel): string[] {
+  return filterToProjectTemplatePermissions(PROJECT_ACCESS_CAPABILITY_MATRIX[level])
+}
 
 export function PermissionsPageContent({
   organizationId,
@@ -164,41 +141,70 @@ export function PermissionsPageContent({
     Member: [],
   })
 
-  const [selected, setSelected] = useState<RoleListItem>({
+  const [selected, setSelected] = useState<SidebarSelection>({
     kind: 'default',
     role: 'Owner',
     label: 'Owner',
   })
 
+  const [projectTemplatePerms, setProjectTemplatePerms] = useState<Record<ProjectAccessLevel, string[]>>({
+    Admin: [],
+    Editor: [],
+    Viewer: [],
+  })
+
   const [isNewRoleOpen, setIsNewRoleOpen] = useState(false)
   const [newRoleName, setNewRoleName] = useState('')
   const [isCreating, setIsCreating] = useState(false)
-  const [newRolePerms, setNewRolePerms] = useState<PermissionId[]>([])
+  const [newRolePerms, setNewRolePerms] = useState<GlobalPermissionId[]>([])
   const [newRolePermissionQuery, setNewRolePermissionQuery] = useState('')
   const [draftPermissions, setDraftPermissions] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [deletingRoleId, setDeletingRoleId] = useState<string | null>(null)
 
-  const roleList = useMemo<RoleListItem[]>(() => {
-    const defaults: RoleListItem[] = DEFAULT_ROLES.map((r) => ({ kind: 'default', role: r.role, label: r.label }))
-    const customs: RoleListItem[] = customRoles.map((r) => ({ kind: 'custom', id: r.id, label: r.name }))
+  const roleList = useMemo<SidebarSelection[]>(() => {
+    const defaults: SidebarSelection[] = DEFAULT_ROLES.map((r) => ({ kind: 'default', role: r.role, label: r.label }))
+    const customs: SidebarSelection[] = customRoles
+      .filter((r) => !CUSTOM_ROLE_NAME_BLOCKLIST.has(r.name.trim().toLowerCase()))
+      .map((r) => ({ kind: 'custom', id: r.id, label: r.name }))
     return [...defaults, ...customs]
   }, [customRoles])
 
-  const allPermissionIds = useMemo(() => PERMISSIONS.map((p) => p.id), [])
+  const visibleCustomRoles = useMemo(
+    () => customRoles.filter((r) => !CUSTOM_ROLE_NAME_BLOCKLIST.has(r.name.trim().toLowerCase())),
+    [customRoles],
+  )
+
+  const allPermissionIds = useMemo(() => [...GLOBAL_ACCOUNT_PERMISSION_IDS], [])
 
   const isOwnerSelected = useMemo(() => selected.kind === 'default' && selected.role === 'Owner', [selected])
-  const isAdminSelected = useMemo(() => selected.kind === 'default' && selected.role === 'Admin', [selected])
+  const isAdminAccountSelected = useMemo(() => selected.kind === 'default' && selected.role === 'Admin', [selected])
+  const isProjectTemplateSelected = useMemo(() => selected.kind === 'project_template', [selected])
   const canEditAdmin = currentSystemRole === 'Owner'
-  const isReadOnlySelection = isOwnerSelected || (isAdminSelected && !canEditAdmin)
+  const isReadOnlySelection = useMemo(() => {
+    if (isProjectTemplateSelected) return false
+    if (isOwnerSelected) return true
+    if (isAdminAccountSelected && !canEditAdmin) return true
+    return false
+  }, [canEditAdmin, isAdminAccountSelected, isOwnerSelected, isProjectTemplateSelected])
 
-  /** Last-saved permissions for the currently selected role (source of truth from Supabase load). */
+  /** Last-saved permissions for the current sidebar selection. */
   const savedPermissionsForSelection = useMemo(() => {
+    if (selected.kind === 'project_template') {
+      return projectTemplatePerms[selected.level]
+    }
     if (isOwnerSelected) return allPermissionIds
     if (selected.kind === 'default') return defaultRolePerms[selected.role]
     const role = customRoles.find((r) => r.id === selected.id)
-    return normalizePermissionsForUi(role?.permissions ?? [])
-  }, [allPermissionIds, customRoles, defaultRolePerms, isOwnerSelected, selected])
+    return filterToGlobalAccountPermissions(normalizePermissionsForUi(role?.permissions ?? []))
+  }, [
+    allPermissionIds,
+    customRoles,
+    defaultRolePerms,
+    isOwnerSelected,
+    projectTemplatePerms,
+    selected,
+  ])
 
   const isDirty = !isReadOnlySelection && !permissionListsEqual(draftPermissions, savedPermissionsForSelection)
 
@@ -207,9 +213,9 @@ export function PermissionsPageContent({
   }, [savedPermissionsForSelection])
 
   const selectedTitle = useMemo(() => {
-    const label = selected.label
-    return `${label} permissions`
-  }, [selected.label])
+    if (selected.kind === 'project_template') return `${selected.label} — project access template`
+    return `${selected.label} permissions`
+  }, [selected])
 
   useEffect(() => {
     let cancelled = false
@@ -229,6 +235,7 @@ export function PermissionsPageContent({
           { data: memberRow, error: memberError },
           { data: defaults, error: defaultsError },
           { data: customs, error: customsError },
+          { data: projectTemplates, error: projectTemplatesError },
         ] = await Promise.all([
           supabase
             .from('organization_members')
@@ -241,6 +248,10 @@ export function PermissionsPageContent({
             .select('role,permissions')
             .eq('organization_id', organizationId),
           supabase.from('organization_roles').select('id,name,permissions').eq('organization_id', organizationId).order('created_at', { ascending: true }),
+          supabase
+            .from('organization_project_access_templates')
+            .select('access_level,permissions')
+            .eq('organization_id', organizationId),
         ])
 
         if (memberError) throw memberError
@@ -254,13 +265,45 @@ export function PermissionsPageContent({
         for (const row of defaults ?? []) {
           const canon = canonicalBuiltinRoleKey(String((row as { role?: unknown }).role ?? '')) as DefaultRole | null
           if (!canon) continue
-          nextDefault[canon] = normalizePermissionsForUi((row as any).permissions)
+          nextDefault[canon] = filterToGlobalAccountPermissions(normalizePermissionsForUi((row as any).permissions))
+        }
+
+        const customsNormalized = (customs ?? [])
+          .filter(
+            (r: { name?: string }) => !CUSTOM_ROLE_NAME_BLOCKLIST.has(String(r?.name ?? '').trim().toLowerCase()),
+          )
+          .map((r: { id: string; name: string; permissions?: unknown }) => ({
+            ...r,
+            permissions: filterToGlobalAccountPermissions(normalizePermissionsForUi(r.permissions)),
+          }))
+
+        const nextProjectTemplates: Record<ProjectAccessLevel, string[]> = {
+          Admin: [],
+          Editor: [],
+          Viewer: [],
+        }
+        if (!projectTemplatesError) {
+          for (const level of PROJECT_ACCESS_LEVELS) {
+            const row = (projectTemplates ?? []).find(
+              (r: { access_level?: string }) => String(r?.access_level ?? '') === level,
+            ) as { access_level?: string; permissions?: unknown } | undefined
+            if (row) {
+              nextProjectTemplates[level] = filterToProjectTemplatePermissions(row.permissions)
+            } else {
+              nextProjectTemplates[level] = defaultProjectTemplatePermissionsFromMatrix(level)
+            }
+          }
+        } else {
+          for (const level of PROJECT_ACCESS_LEVELS) {
+            nextProjectTemplates[level] = defaultProjectTemplatePermissionsFromMatrix(level)
+          }
         }
 
         if (!cancelled) {
           setCurrentSystemRole(normalizedSystemRole)
           setDefaultRolePerms(nextDefault)
-          setCustomRoles((customs ?? []) as any)
+          setCustomRoles(customsNormalized as { id: string; name: string; permissions: unknown }[])
+          setProjectTemplatePerms(nextProjectTemplates)
         }
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? 'Failed to load permissions.')
@@ -280,10 +323,41 @@ export function PermissionsPageContent({
     setIsSaving(true)
     setError(null)
     try {
+      if (selected.kind === 'project_template') {
+        const permissions = filterToProjectTemplatePermissions(uniqueLower(draftPermissions))
+        const res = await fetch(
+          `/api/organizations/${encodeURIComponent(organizationId)}/project-access-templates`,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ accessLevel: selected.level, permissions }),
+            credentials: 'same-origin',
+          },
+        )
+        const payload = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(
+            typeof (payload as { error?: string }).error === 'string'
+              ? (payload as { error: string }).error
+              : 'Failed to save project access template.',
+          )
+        }
+        setProjectTemplatePerms((cur) => ({ ...cur, [selected.level]: permissions }))
+        return
+      }
+
       const body =
         selected.kind === 'default'
-          ? { target: 'default' as const, role: selected.role, permissions: draftPermissions }
-          : { target: 'custom' as const, roleId: selected.id, permissions: draftPermissions }
+          ? {
+              target: 'default' as const,
+              role: selected.role,
+              permissions: filterToGlobalAccountPermissions(draftPermissions),
+            }
+          : {
+              target: 'custom' as const,
+              roleId: selected.id,
+              permissions: filterToGlobalAccountPermissions(draftPermissions),
+            }
 
       const res = await fetch(`/api/organizations/${encodeURIComponent(organizationId)}/role-permissions`, {
         method: 'POST',
@@ -297,20 +371,33 @@ export function PermissionsPageContent({
       }
 
       if (selected.kind === 'default') {
-        setDefaultRolePerms((cur) => ({ ...cur, [selected.role]: uniqueLower(draftPermissions) }))
+        setDefaultRolePerms((cur) => ({
+          ...cur,
+          [selected.role]: filterToGlobalAccountPermissions(uniqueLower(draftPermissions)),
+        }))
       } else {
-        const next = uniqueLower(draftPermissions)
+        const next = filterToGlobalAccountPermissions(uniqueLower(draftPermissions))
         setCustomRoles((cur) => cur.map((r) => (r.id === selected.id ? { ...r, permissions: next } : r)))
       }
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to save permissions.')
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Failed to save permissions.')
     } finally {
       setIsSaving(false)
     }
   }
 
-  function togglePermission(id: PermissionId, checked: boolean) {
-    if (isReadOnlySelection) return
+  function toggleAccountPermission(id: GlobalPermissionId, checked: boolean) {
+    if (isReadOnlySelection || isProjectTemplateSelected) return
+    if (!isGlobalAccountPermissionId(id)) return
+    setDraftPermissions((cur) => {
+      if (checked) return uniqueLower([...cur, id])
+      return cur.filter((p) => p.toLowerCase() !== id.toLowerCase())
+    })
+  }
+
+  function toggleProjectTemplatePermission(id: ProjectTemplatePermissionId, checked: boolean) {
+    if (!isProjectTemplateSelected) return
+    if (!isProjectTemplatePermissionId(id)) return
     setDraftPermissions((cur) => {
       if (checked) return uniqueLower([...cur, id])
       return cur.filter((p) => p.toLowerCase() !== id.toLowerCase())
@@ -328,9 +415,12 @@ export function PermissionsPageContent({
       return
     }
 
-    const allNames = roleList.map((r) => r.label.toLowerCase())
-    if (allNames.includes(name.toLowerCase())) {
-      setError('That role already exists.')
+    const reservedNames = new Set([
+      ...roleList.map((r) => r.label.toLowerCase()),
+      ...PROJECT_ACCESS_LEVELS.map((l) => l.toLowerCase()),
+    ])
+    if (reservedNames.has(name.toLowerCase())) {
+      setError('That role already exists or is reserved.')
       return
     }
 
@@ -342,7 +432,7 @@ export function PermissionsPageContent({
         .insert({
           organization_id: organizationId,
           name,
-          permissions: uniqueLower(newRolePerms),
+          permissions: filterToGlobalAccountPermissions(uniqueLower(newRolePerms) as string[]),
         })
         .select('id,name,permissions')
         .single()
@@ -424,8 +514,8 @@ export function PermissionsPageContent({
           </h1>
           <p className={embedded ? 'mt-1 text-sm text-slate-500' : 'mt-1 text-sm text-slate-500'}>
             {embedded
-              ? 'Manage default roles and custom roles for this workspace.'
-              : 'Define the default account-level permissions for your users.'}
+              ? 'Manage default account roles and custom account roles. Account-level permissions are global; project capabilities are chosen per project assignment.'
+              : 'Configure workspace-wide (account-level) permissions for default roles and custom roles. Project-specific actions are controlled separately when you assign someone to a project.'}
           </p>
         </div>
 
@@ -502,7 +592,7 @@ export function PermissionsPageContent({
                     </div>
 
                     <div className="mt-3 max-h-[420px] overflow-auto rounded-md border border-slate-200 bg-white">
-                      {ORDERED_PERMISSION_GROUPS.map(([category, perms]) => {
+                      {ORDERED_GLOBAL_PERMISSION_GROUPS.map(([category, perms]) => {
                         const q = newRolePermissionQuery.trim().toLowerCase()
                         const visiblePerms = q ? perms.filter((p) => p.label.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)) : perms
                         if (visiblePerms.length === 0) return null
@@ -523,7 +613,7 @@ export function PermissionsPageContent({
                                 onClick={() => {
                                   setNewRolePerms((cur) => {
                                     if (allVisibleSelected) return cur.filter((x) => !visibleIds.includes(x))
-                                    return uniqueLower([...cur, ...visibleIds]) as PermissionId[]
+                                    return uniqueLower([...cur, ...visibleIds]) as GlobalPermissionId[]
                                   })
                                 }}
                               >
@@ -541,7 +631,11 @@ export function PermissionsPageContent({
                                       className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600"
                                       checked={checked}
                                       onChange={(e) => {
-                                        setNewRolePerms((cur) => (e.target.checked ? (uniqueLower([...cur, p.id]) as PermissionId[]) : cur.filter((x) => x !== p.id)))
+                                        setNewRolePerms((cur) =>
+                                          e.target.checked
+                                            ? (uniqueLower([...cur, p.id]) as GlobalPermissionId[])
+                                            : cur.filter((x) => x !== p.id),
+                                        )
                                       }}
                                       disabled={isCreating}
                                     />
@@ -619,10 +713,10 @@ export function PermissionsPageContent({
             These roles are based on the default roles. <span className="text-blue-600">Read more</span>
           </div>
           <div className="mt-3 space-y-1">
-            {customRoles.length === 0 ? (
+            {visibleCustomRoles.length === 0 ? (
               <div className="rounded-md px-3 py-2 text-sm text-slate-500">No custom roles yet.</div>
             ) : (
-              customRoles.map((r) => {
+              visibleCustomRoles.map((r) => {
                 const isActive = selected.kind === 'custom' && selected.id === r.id
                 return (
                   <div
@@ -662,69 +756,143 @@ export function PermissionsPageContent({
               })
             )}
           </div>
+
+          <div className="mt-6 text-xs font-semibold text-slate-600">Project access templates</div>
+          <p className="mt-2 text-xs text-slate-500">
+            Default permission sets for <span className="font-medium">Admin</span>, <span className="font-medium">Editor</span>, and{' '}
+            <span className="font-medium">Viewer</span> when someone is assigned to a project.
+          </p>
+          <div className="mt-3 space-y-1">
+            {PROJECT_ACCESS_LEVELS.map((level) => {
+              const isActive = selected.kind === 'project_template' && selected.level === level
+              return (
+                <button
+                  key={level}
+                  type="button"
+                  onClick={() => setSelected({ kind: 'project_template', level, label: level })}
+                  className={[
+                    'w-full rounded-md px-3 py-2 text-left text-sm',
+                    isActive ? 'bg-blue-50 text-slate-900' : 'text-slate-700 hover:bg-slate-50',
+                  ].join(' ')}
+                >
+                  {level}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* Main */}
         <div className="p-4 md:p-6">
           <div className="text-base font-semibold text-slate-900">{selectedTitle}</div>
-          <div className="mt-4 max-h-[520px] overflow-auto rounded-md border border-slate-200">
-            {ORDERED_PERMISSION_GROUPS.map(([category, perms]) => (
-              <div key={category} className="border-b border-slate-200 last:border-b-0">
-                <div className="bg-white px-4 py-3 text-sm font-semibold text-slate-700">{category}</div>
-                <div className="divide-y divide-slate-200">
-                  {perms.map((p) => {
-                    const checked = draftPermissions.some((x) => x.toLowerCase() === p.id.toLowerCase())
-                    const isInviteUsers = p.id === 'account.users.invite'
-                    const isRemoveUsers = p.id === 'account.users.remove'
-                    return (
-                      <label key={p.id} className="flex items-center gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border-slate-300 text-blue-600"
-                          checked={checked}
-                          onChange={(e) => togglePermission(p.id, e.target.checked)}
-                          disabled={isLoading || isReadOnlySelection}
-                        />
-                        <span className="flex min-w-0 items-center gap-2">
-                          <span className="truncate">{p.label}</span>
-                          {isInviteUsers || isRemoveUsers ? (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <button
-                                    type="button"
-                                    className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 hover:text-slate-600"
-                                    onClick={(e) => {
-                                      e.preventDefault()
-                                      e.stopPropagation()
-                                    }}
-                                    aria-label={`What does ${p.label} do?`}
-                                  >
-                                    <Info className="h-4 w-4" />
-                                  </button>
-                                </TooltipTrigger>
-                                <TooltipContent side="right">
-                                  {isInviteUsers
-                                    ? 'Allows inviting users to this workspace.'
-                                    : 'Allows removing workspace members, but only if the target member has a lower role level.'}
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          ) : null}
-                        </span>
-                      </label>
-                    )
-                  })}
-                </div>
+          {isProjectTemplateSelected ? (
+            <>
+              <p className="mt-2 text-sm text-slate-600">
+                Choose which <span className="font-medium">Project Management</span>,{' '}
+                <span className="font-medium">SDLC Management</span>, and <span className="font-medium">Development</span>{' '}
+                permissions are included by default for this access level when someone is assigned to a project.
+                Account and system permissions are configured separately under default or custom account roles.
+              </p>
+              <div className="mt-4 max-h-[520px] overflow-auto rounded-md border border-slate-200">
+                {ORDERED_PROJECT_TEMPLATE_GROUPS.map(([category, perms]) => (
+                  <div key={category} className="border-b border-slate-200 last:border-b-0">
+                    <div className="bg-white px-4 py-3 text-sm font-semibold text-slate-700">{category}</div>
+                    <div className="divide-y divide-slate-200">
+                      {perms.map((p) => {
+                        const checked = draftPermissions.some((x) => x.toLowerCase() === p.id.toLowerCase())
+                        return (
+                          <label key={p.id} className="flex items-center gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                              checked={checked}
+                              onChange={(e) => toggleProjectTemplatePermission(p.id, e.target.checked)}
+                              disabled={isLoading}
+                            />
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="truncate">{p.label}</span>
+                            </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <>
+              <p className="mt-2 text-sm text-slate-600">
+                Toggles below are <span className="font-medium">account-level (global)</span> only. They do not grant
+                project-specific capabilities such as sprint management or repository access — configure those under{' '}
+                <span className="font-medium">Project access templates</span>.
+              </p>
+              <div className="mt-4 max-h-[520px] overflow-auto rounded-md border border-slate-200">
+                {ORDERED_GLOBAL_PERMISSION_GROUPS.map(([category, perms]) => (
+                  <div key={category} className="border-b border-slate-200 last:border-b-0">
+                    <div className="bg-white px-4 py-3 text-sm font-semibold text-slate-700">{category}</div>
+                    <div className="divide-y divide-slate-200">
+                      {perms.map((p) => {
+                        const checked = draftPermissions.some((x) => x.toLowerCase() === p.id.toLowerCase())
+                        const isInviteUsers = p.id === 'account.users.invite'
+                        const isRemoveUsers = p.id === 'account.users.remove'
+                        return (
+                          <label key={p.id} className="flex items-center gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                              checked={checked}
+                              onChange={(e) => toggleAccountPermission(p.id, e.target.checked)}
+                              disabled={isLoading || isReadOnlySelection}
+                            />
+                            <span className="flex min-w-0 items-center gap-2">
+                              <span className="truncate">{p.label}</span>
+                              {isInviteUsers || isRemoveUsers ? (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <button
+                                        type="button"
+                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 hover:text-slate-600"
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                        }}
+                                        aria-label={`What does ${p.label} do?`}
+                                      >
+                                        <Info className="h-4 w-4" />
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="right">
+                                      {isInviteUsers
+                                        ? 'Allows inviting users to this workspace.'
+                                        : 'Allows removing workspace members, but only if the target member has a lower role level.'}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              ) : null}
+                            </span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
           <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            {isOwnerSelected ? (
-              <p className="text-sm text-slate-500">The Owner role always includes every permission.</p>
-            ) : isAdminSelected && !canEditAdmin ? (
-              <p className="text-sm text-slate-500">Only Owners can edit Admin permissions.</p>
+            {isProjectTemplateSelected ? (
+              isDirty ? (
+                <p className="text-sm text-amber-800">You have unsaved changes for this template.</p>
+              ) : (
+                <p className="text-sm text-slate-500">Click Save to persist this template to the database.</p>
+              )
+            ) : isOwnerSelected ? (
+              <p className="text-sm text-slate-500">The Owner role always includes every account-level permission.</p>
+            ) : isAdminAccountSelected && !canEditAdmin ? (
+              <p className="text-sm text-slate-500">Only Owners can edit Admin account-role permissions.</p>
             ) : isDirty ? (
               <p className="text-sm text-amber-800">You have unsaved changes for this role.</p>
             ) : (
