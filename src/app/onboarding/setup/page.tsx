@@ -2,18 +2,29 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { SetupWizard } from '@/components/onboarding/setup-wizard'
+import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 
 export default async function OnboardingSetupPage() {
-  const tenantSlug = getTenantSlug()
-  if (!tenantSlug) redirect('/onboarding')
-
   const supabase = createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const { data: org } = await supabase.from('organizations').select('id').eq('slug', tenantSlug).maybeSingle()
+  const tenantSlugFromHost = getTenantSlug()
+  let effectiveSlug = tenantSlugFromHost
+
+  if (!effectiveSlug) {
+    const orgId = await resolvePrimaryOrgIdForUser(supabase as any, user.id)
+    if (orgId) {
+      const { data: orgRow } = await supabase.from('organizations').select('slug').eq('id', orgId).maybeSingle()
+      effectiveSlug = orgRow?.slug ?? null
+    }
+  }
+
+  if (!effectiveSlug) redirect('/onboarding')
+
+  const { data: org } = await supabase.from('organizations').select('id').eq('slug', effectiveSlug).maybeSingle()
   if (!org?.id) notFound()
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
@@ -54,6 +65,6 @@ export default async function OnboardingSetupPage() {
     redirect(`/dashboard/projects/${existingProject.id}`)
   }
 
-  return <SetupWizard tenantSlug={tenantSlug} />
+  return <SetupWizard tenantSlug={effectiveSlug} />
 }
 

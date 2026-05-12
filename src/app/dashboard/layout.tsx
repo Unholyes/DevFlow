@@ -4,7 +4,6 @@ import { createClient } from '@/lib/supabase/server'
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
 import { ThemeProvider, type OrganizationTheme } from '@/components/theme/theme-provider'
 import type { UserRole } from '@/types'
-import { getTenantSlug } from '@/lib/tenant/server'
 import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
 
 export default async function DashboardRouteLayout({ children }: { children: ReactNode }) {
@@ -32,25 +31,18 @@ export default async function DashboardRouteLayout({ children }: { children: Rea
   const ws = await resolveWorkspaceContext({ supabase: supabase as any, userId: user.id })
   const role = ws.role as UserRole
 
-  // Tenant-domain onboarding wizard gate:
-  // if we're on a tenant subdomain and the org has no projects yet, force the setup wizard.
-  const tenantSlug = getTenantSlug()
-  if (tenantSlug) {
-    const { data: org } = await supabase.from('organizations').select('id').eq('slug', tenantSlug).maybeSingle()
-    if (org?.id) {
-      const { data: project } = await supabase
-        .from('projects')
-        .select('id')
-        .eq('organization_id', org.id)
-        .limit(1)
-        .maybeSingle()
+  // First-time tenant setup: if this workspace has no projects yet, tenant admins complete
+  // the wizard before the main dashboard (works on base host e.g. localhost as well as tenant subdomains).
+  if (role === 'tenant_admin' && ws.organizationId) {
+    const { data: project } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('organization_id', ws.organizationId)
+      .limit(1)
+      .maybeSingle()
 
-      // Only tenant admins should be forced into the setup wizard.
-      // Otherwise, non-admin members can get stuck in a redirect loop:
-      // /dashboard -> /onboarding/setup -> /dashboard ...
-      if (!project?.id && role === 'tenant_admin') {
-        redirect('/onboarding/setup')
-      }
+    if (!project?.id) {
+      redirect('/onboarding/setup')
     }
   }
 

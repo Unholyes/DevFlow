@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { supabase } from '@/lib/supabase/client'
+import { TENANT_SLUG_HEADER } from '@/lib/tenant/resolve'
 import Stepper, { Step } from '@/components/react-bits/Stepper/Stepper'
 
 type Phase = {
@@ -86,7 +87,10 @@ export function SetupProjectWizard({
     try {
       const res = await fetch(submitEndpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(tenantSlug ? { [TENANT_SLUG_HEADER]: tenantSlug } : {}),
+        },
         body: JSON.stringify({
           projectName,
           projectDescription,
