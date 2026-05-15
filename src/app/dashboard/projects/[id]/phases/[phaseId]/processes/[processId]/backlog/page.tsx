@@ -161,15 +161,68 @@ export default async function ProcessBacklogPage({
   const backlogStageId = await ensureBacklogStageId(supabase as any, orgId, phase.id)
   if (!backlogStageId) notFound()
 
-  const { data: tasks } = await supabase
+  const { data: workflowStages } = await supabase
+    .from('workflow_stages')
+    .select('id,name,stage_order,is_backlog,is_done')
+    .eq('phase_id', phase.id)
+    .eq('organization_id', orgId)
+    .order('stage_order', { ascending: true })
+
+  const pullStage =
+    (workflowStages ?? []).find((s) => !s.is_backlog && !s.is_done) ??
+    (workflowStages ?? []).find((s) => !s.is_backlog) ??
+    null
+
+  const taskColumnsExtended =
+    'id,title,description,priority,story_points,assignee_id,position,team_id,workflow_stage_id,size_band,service_class'
+  const taskColumnsBase =
+    'id,title,description,priority,story_points,assignee_id,position,team_id,workflow_stage_id'
+
+  let tasks: Record<string, unknown>[] | null = null
+  const resExtended = await supabase
     .from('tasks')
-    .select('id,title,description,priority,story_points,assignee_id,position,team_id')
+    .select(taskColumnsExtended)
     .eq('project_id', project.id)
     .eq('organization_id', orgId)
     .eq('process_id', process.id)
     .eq('workflow_stage_id', backlogStageId)
     .is('sprint_id', null)
     .order('position', { ascending: true })
+
+  const missingFlowCols =
+    !!resExtended.error &&
+    (String(resExtended.error.message ?? '').includes('size_band') ||
+      String(resExtended.error.message ?? '').includes('service_class') ||
+      (resExtended.error as { code?: string }).code === '42703')
+
+  if (missingFlowCols) {
+    const resBase = await supabase
+      .from('tasks')
+      .select(taskColumnsBase)
+      .eq('project_id', project.id)
+      .eq('organization_id', orgId)
+      .eq('process_id', process.id)
+      .eq('workflow_stage_id', backlogStageId)
+      .is('sprint_id', null)
+      .order('position', { ascending: true })
+    tasks = (resBase.data ?? []) as Record<string, unknown>[]
+  } else {
+    tasks = (resExtended.data ?? []) as Record<string, unknown>[]
+  }
+
+  const assigneeIds = [
+    ...new Set((tasks ?? []).map((t) => t.assignee_id).filter((id): id is string => typeof id === 'string')),
+  ]
+  const assigneeNames: Record<string, string> = {}
+  if (assigneeIds.length > 0) {
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id,full_name')
+      .in('id', assigneeIds)
+    for (const p of profiles ?? []) {
+      if (p.id) assigneeNames[p.id] = p.full_name?.trim() || 'Unnamed'
+    }
+  }
 
   return (
     <ProductBacklogPageClient
@@ -181,6 +234,9 @@ export default async function ProcessBacklogPage({
       methodology={(process.methodology as 'scrum' | 'kanban') ?? 'scrum'}
       teams={teamsForOrg}
       tasks={(tasks ?? []) as any}
+      pullStageId={pullStage?.id ?? null}
+      pullStageName={pullStage?.name ?? null}
+      assigneeNames={assigneeNames}
     />
   )
 }
