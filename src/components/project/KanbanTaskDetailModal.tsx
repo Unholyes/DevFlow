@@ -24,6 +24,9 @@ import { Badge } from '@/components/ui/badge'
 import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase/client'
+import { TASK_TYPE_META, TASK_TYPES, normalizeTaskType, type TaskType } from '@/lib/tasks/task-type'
+import { TaskTypeIcon } from '@/components/tasks/task-type-icon'
+import { BlockedTaskChip } from '@/components/tasks/blocked-task-chip'
 
 const UNASSIGNED = '__unassigned__'
 
@@ -41,6 +44,9 @@ export type TaskRowLite = {
   service_class?: 'standard' | 'fixed_date' | 'expedite' | null
   assignee_id?: string | null
   team_id?: string | null
+  blocked?: boolean
+  blocked_reason?: string | null
+  task_type?: TaskType
 }
 
 type TaskDetailResponse = {
@@ -64,6 +70,7 @@ type TaskDetailResponse = {
     current_stage_entered_at?: string | null
     size_band?: 'xs' | 's' | 'm' | 'l' | 'xl' | null
     service_class?: 'standard' | 'fixed_date' | 'expedite' | null
+    task_type?: string | null
   }
   stage: { id: string; name: string; is_done: boolean; is_backlog: boolean } | null
   assignee: { id: string; full_name: string | null; avatar_url: string | null } | null
@@ -135,6 +142,7 @@ export function KanbanTaskDetailModal({
   const [dueDate, setDueDate] = useState<string>('')
   const [blocked, setBlocked] = useState(false)
   const [blockedReason, setBlockedReason] = useState('')
+  const [taskType, setTaskType] = useState<TaskType>('task')
   const [saveLoading, setSaveLoading] = useState(false)
 
   const [commentText, setCommentText] = useState('')
@@ -166,6 +174,7 @@ export function KanbanTaskDetailModal({
       setDueDate(t.due_date ? String(t.due_date).slice(0, 10) : '')
       setBlocked(!!t.blocked)
       setBlockedReason(t.blocked_reason ?? '')
+      setTaskType(normalizeTaskType(t.task_type))
       setAssignmentTeamId((t as { team_id?: string | null }).team_id ?? null)
       setAssignmentAssigneeId(t.assignee_id ?? null)
     } catch (e) {
@@ -250,6 +259,7 @@ export function KanbanTaskDetailModal({
         blocked_reason: blocked ? blockedReason.trim() || null : null,
         team_id: assignmentTeamId,
         assignee_id: assignmentAssigneeId,
+        task_type: taskType,
       }
       if (flowAdvancedFields) {
         payload.size_band = sizeBand === 'none' ? null : sizeBand
@@ -294,6 +304,9 @@ export function KanbanTaskDetailModal({
         service_class: updated.service_class ?? null,
         team_id: (updated as { team_id?: string | null }).team_id ?? assignmentTeamId,
         assignee_id: (updated as { assignee_id?: string | null }).assignee_id ?? assignmentAssigneeId,
+        blocked: !!(updated as { blocked?: boolean }).blocked,
+        blocked_reason: (updated as { blocked_reason?: string | null }).blocked_reason ?? null,
+        task_type: normalizeTaskType((updated as { task_type?: string }).task_type),
       })
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Save failed')
@@ -364,6 +377,26 @@ export function KanbanTaskDetailModal({
               {task.completed_at ? (
                 <span className="text-xs text-green-600 font-medium">Completed</span>
               ) : null}
+              {blocked ? <BlockedTaskChip reason={blockedReason} compact /> : null}
+            </div>
+
+            <div className="grid gap-2">
+              <Label>Work type</Label>
+              <Select value={taskType} onValueChange={(v) => setTaskType(v as TaskType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TASK_TYPES.map((tt) => (
+                    <SelectItem key={tt} value={tt}>
+                      <span className="inline-flex items-center gap-2">
+                        <TaskTypeIcon type={tt} size="sm" showTooltip={false} />
+                        {TASK_TYPE_META[tt].label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid gap-2">

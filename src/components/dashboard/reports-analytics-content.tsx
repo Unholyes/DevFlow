@@ -59,13 +59,7 @@ type StatusBreakdown = {
   color: string
 }
 
-type BlockedTask = {
-  title: string
-  reason: string
-  assignee: string
-  initials: string
-  blockedAgo: string
-}
+import type { BlockedTaskReportRow } from '@/lib/reports/load-blocked-tasks'
 
 type RecentActivity = {
   tone: string
@@ -83,13 +77,15 @@ const burndownData: BurndownData[] = []
 
 const statusBreakdown: StatusBreakdown[] = []
 
-const blockedTasks: BlockedTask[] = []
-
 const recentActivity: RecentActivity[] = []
 
 const TOTAL_TASKS = statusBreakdown.reduce((s, x) => s + x.value, 0)
 
-export function ReportsAnalyticsContent() {
+export function ReportsAnalyticsContent({
+  blockedTasks = [],
+}: {
+  blockedTasks?: BlockedTaskReportRow[]
+}) {
   return (
     <div className="max-w-7xl mx-auto space-y-6 pb-10">
       <header className="space-y-1">
@@ -309,13 +305,14 @@ export function ReportsAnalyticsContent() {
             {blockedTasks.length > 0 ? (
               blockedTasks.map((t) => (
                 <div
-                  key={t.title}
+                  key={t.id}
                   className="rounded-lg border border-gray-100 bg-gray-50/80 p-4 space-y-2"
                 >
                   <div className="flex gap-2">
                     <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
                     <div className="min-w-0">
                       <p className="font-medium text-gray-900 leading-snug">{t.title}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{t.projectName}</p>
                       <p className="text-sm text-gray-600 mt-1">{t.reason}</p>
                     </div>
                   </div>

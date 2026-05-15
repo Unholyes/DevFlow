@@ -36,6 +36,9 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { KanbanTaskDetailModal, type TaskRowLite } from '@/components/project/KanbanTaskDetailModal'
+import { TaskTypeIcon } from '@/components/tasks/task-type-icon'
+import { BlockedTaskChip } from '@/components/tasks/blocked-task-chip'
+import { TASK_TYPE_META, TASK_TYPES, type TaskType } from '@/lib/tasks/task-type'
 
 type BacklogTask = {
   id: string
@@ -49,6 +52,9 @@ type BacklogTask = {
   workflow_stage_id?: string
   size_band?: 'xs' | 's' | 'm' | 'l' | 'xl' | null
   service_class?: 'standard' | 'fixed_date' | 'expedite' | null
+  blocked?: boolean
+  blocked_reason?: string | null
+  task_type?: TaskType | string | null
 }
 
 const CARD_CLICK_MAX_MOVE_PX = 12
@@ -152,7 +158,8 @@ function SortableBacklogRow({
         'flex items-start justify-between rounded-lg border border-gray-200 bg-white p-4 transition-shadow',
         'hover:border-gray-300 hover:shadow-sm',
         isDragging && 'shadow-md ring-2 ring-blue-100',
-        selected && 'border-blue-200 bg-blue-50/30'
+        selected && 'border-blue-200 bg-blue-50/30',
+        task.blocked && 'border-red-200 ring-1 ring-red-100'
       )}
     >
       <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -199,7 +206,11 @@ function SortableBacklogRow({
             }
           }}
         >
-          <p className="font-medium text-gray-900 truncate">{task.title}</p>
+          <div className="flex items-center gap-2 min-w-0">
+            <TaskTypeIcon type={task.task_type} size="sm" />
+            <p className="font-medium text-gray-900 truncate">{task.title}</p>
+          </div>
+          {task.blocked ? <BlockedTaskChip reason={task.blocked_reason} className="mt-1.5" /> : null}
           {task.description?.trim() ? (
             <p className="text-sm text-gray-500 line-clamp-2 mt-0.5">{task.description}</p>
           ) : isKanban ? (
@@ -299,6 +310,7 @@ export function ProductBacklogPageClient(props: {
   const [createTeamId, setCreateTeamId] = useState<string>('')
   const [createSizeBand, setCreateSizeBand] = useState('')
   const [createServiceClass, setCreateServiceClass] = useState('standard')
+  const [createTaskType, setCreateTaskType] = useState<TaskType>('task')
   const [createLoading, setCreateLoading] = useState(false)
   const [bulkPriority, setBulkPriority] = useState<'low' | 'medium' | 'high' | 'critical'>('medium')
   const [bulkLoading, setBulkLoading] = useState(false)
@@ -416,6 +428,9 @@ export function ProductBacklogPageClient(props: {
                 size_band: row.size_band ?? t.size_band,
                 service_class: row.service_class ?? t.service_class,
                 workflow_stage_id: row.workflow_stage_id,
+                blocked: row.blocked ?? t.blocked,
+                blocked_reason: row.blocked_reason ?? t.blocked_reason,
+                task_type: row.task_type ?? t.task_type,
               }
             : t
         )
@@ -541,6 +556,7 @@ export function ProductBacklogPageClient(props: {
       if (isKanban) {
         payload.size_band = createSizeBand.trim() || null
         payload.service_class = createServiceClass || 'standard'
+        payload.task_type = createTaskType
       }
 
       const res = await fetch('/api/tasks', {
@@ -566,6 +582,7 @@ export function ProductBacklogPageClient(props: {
             workflow_stage_id: props.backlogStageId,
             size_band: (created.size_band ?? (createSizeBand || null)) as BacklogTask['size_band'],
             service_class: (created.service_class ?? createServiceClass) as BacklogTask['service_class'],
+            task_type: (created.task_type ?? createTaskType) as BacklogTask['task_type'],
           },
           ...prev.filter((t) => t.id !== created.id),
         ])
@@ -578,6 +595,7 @@ export function ProductBacklogPageClient(props: {
       setCreateTeamId('')
       setCreateSizeBand('')
       setCreateServiceClass('standard')
+      setCreateTaskType('task')
       setIsCreating(false)
       router.refresh()
     } catch (e) {
@@ -704,6 +722,20 @@ export function ProductBacklogPageClient(props: {
                       value={createTitle}
                       onChange={(e) => setCreateTitle(e.target.value)}
                     />
+                  </div>
+                  <div className="md:col-span-4">
+                    <Label className="text-sm font-medium text-gray-700 mb-1 block">Work type</Label>
+                    <select
+                      className="w-full h-10 rounded-md border border-gray-200 bg-white px-3 text-sm"
+                      value={createTaskType}
+                      onChange={(e) => setCreateTaskType(e.target.value as TaskType)}
+                    >
+                      {TASK_TYPES.map((tt) => (
+                        <option key={tt} value={tt}>
+                          {TASK_TYPE_META[tt].label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="md:col-span-4">
                     <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>

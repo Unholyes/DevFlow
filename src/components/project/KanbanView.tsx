@@ -35,6 +35,9 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { cn } from '@/lib/utils'
+import { TaskTypeIcon } from '@/components/tasks/task-type-icon'
+import { BlockedTaskChip } from '@/components/tasks/blocked-task-chip'
+import { TASK_TYPE_META, TASK_TYPES } from '@/lib/tasks/task-type'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -83,6 +86,9 @@ type TaskRow = {
   service_class?: 'standard' | 'fixed_date' | 'expedite' | null
   team_id?: string | null
   assignee_id?: string | null
+  blocked?: boolean
+  blocked_reason?: string | null
+  task_type?: string | null
 }
 
 export type KanbanFlowMetrics = {
@@ -326,19 +332,27 @@ function SortableCard({
         'bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all touch-none select-none p-3 text-left outline-none cursor-grab active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1',
         disabled && 'cursor-not-allowed opacity-60',
         showFlowAdvanced && svc === 'expedite' && 'border-l-[3px] border-l-red-500',
-        showFlowAdvanced && svc === 'fixed_date' && 'border-l-[3px] border-l-amber-400'
+        showFlowAdvanced && svc === 'fixed_date' && 'border-l-[3px] border-l-amber-400',
+        task.blocked && 'border-red-200 ring-1 ring-red-100'
       )}
     >
-      <div className="flex justify-end items-start mb-2">
+      <div className="flex justify-between items-start gap-2 mb-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <TaskTypeIcon type={task.task_type} size="sm" />
+          {task.blocked ? <BlockedTaskChip compact reason={task.blocked_reason} /> : null}
+        </div>
         <Badge
           variant="outline"
           title={`Priority: ${task.priority === 'critical' ? 'high' : task.priority}`}
-          className={`text-[10px] font-bold ${priorityStyle(task.priority)}`}
+          className={`text-[10px] font-bold shrink-0 ${priorityStyle(task.priority)}`}
         >
           Priority · {task.priority === 'critical' ? 'high' : task.priority}
         </Badge>
       </div>
       <h4 className="text-sm font-bold text-gray-800 mb-2 leading-snug">{task.title}</h4>
+      {task.blocked && task.blocked_reason?.trim() ? (
+        <BlockedTaskChip reason={task.blocked_reason} className="mb-2" />
+      ) : null}
       {teamName ? (
         <p className="text-[10px] font-medium text-blue-700 mb-1 truncate" title={teamName}>
           {teamName}
@@ -628,6 +642,7 @@ export default function KanbanView(props: {
   const [backlogCreateLoading, setBacklogCreateLoading] = useState(false)
   const [backlogCreateSize, setBacklogCreateSize] = useState<string>('')
   const [backlogCreateService, setBacklogCreateService] = useState<string>('standard')
+  const [backlogCreateTaskType, setBacklogCreateTaskType] = useState<string>('task')
   const [showAdvancedFlowFields, setShowAdvancedFlowFields] = useState(false)
 
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
@@ -810,6 +825,9 @@ export default function KanbanView(props: {
                 service_class: row.service_class ?? t.service_class,
                 team_id: row.team_id !== undefined ? row.team_id : t.team_id,
                 assignee_id: row.assignee_id !== undefined ? row.assignee_id : t.assignee_id,
+                blocked: row.blocked ?? t.blocked,
+                blocked_reason: row.blocked_reason ?? t.blocked_reason,
+                task_type: row.task_type ?? t.task_type,
               }
             : t
         )
@@ -1073,6 +1091,7 @@ export default function KanbanView(props: {
         body.size_band = backlogCreateSize.trim() || null
         body.service_class = backlogCreateService || 'standard'
       }
+      body.task_type = backlogCreateTaskType || 'task'
 
       const res = await fetch('/api/tasks', {
         method: 'POST',
@@ -1088,6 +1107,7 @@ export default function KanbanView(props: {
       setBacklogCreatePriority('medium')
       setBacklogCreateSize('')
       setBacklogCreateService('standard')
+      setBacklogCreateTaskType('task')
       router.refresh()
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to create task')
@@ -1574,6 +1594,21 @@ export default function KanbanView(props: {
                     placeholder="Acceptance criteria, links, constraints, or notes for whoever pulls this next."
                     className="min-h-[100px] resize-y"
                   />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="bl-type">Work type</Label>
+                  <select
+                    id="bl-type"
+                    className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm"
+                    value={backlogCreateTaskType}
+                    onChange={(e) => setBacklogCreateTaskType(e.target.value)}
+                  >
+                    {TASK_TYPES.map((tt) => (
+                      <option key={tt} value={tt}>
+                        {TASK_TYPE_META[tt].label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="bl-priority">Priority</Label>

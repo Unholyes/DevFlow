@@ -34,6 +34,8 @@ import {
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { cn } from '@/lib/utils'
+import { TaskTypeIcon } from '@/components/tasks/task-type-icon'
+import { BlockedTaskChip } from '@/components/tasks/blocked-task-chip'
 
 type Stage = {
   id: string
@@ -53,6 +55,9 @@ type TaskRow = {
   position: number | null
   team_id?: string | null
   assignee_id?: string | null
+  blocked?: boolean
+  blocked_reason?: string | null
+  task_type?: string | null
 }
 
 const UNASSIGNED_STAGE_ID = '__unassigned__'
@@ -168,19 +173,22 @@ function SortableScrumCard({
           ? 'cursor-not-allowed opacity-95'
           : 'hover:shadow-md cursor-grab active:cursor-grabbing',
         moving ? 'opacity-60' : 'border-gray-100',
-        !locked && 'focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1'
+        !locked && 'focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1',
+        task.blocked && 'border-red-200 ring-1 ring-red-100'
       )}
     >
-      <div className="flex justify-between items-center mb-3">
-        <span className="text-[11px] font-medium text-gray-400 font-mono tracking-tight">
-          {task.id.slice(0, 8)}
-        </span>
-        <div className="flex items-center gap-1">
-          <span className="text-[11px] font-medium text-gray-400">{task.story_points || 0} pts</span>
+      <div className="flex justify-between items-start gap-2 mb-3">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <TaskTypeIcon type={task.task_type} size="sm" />
+          {task.blocked ? <BlockedTaskChip compact reason={task.blocked_reason} /> : null}
         </div>
+        <span className="text-[11px] font-medium text-gray-400 shrink-0">{task.story_points || 0} pts</span>
       </div>
 
       <h4 className="text-[13px] font-semibold text-gray-900 leading-tight mb-1">{task.title}</h4>
+      {task.blocked && task.blocked_reason?.trim() ? (
+        <BlockedTaskChip reason={task.blocked_reason} className="mb-2" />
+      ) : null}
       {teamName ? (
         <p className="text-[11px] text-gray-500 mb-3 truncate" title={teamName}>
           {teamName}
@@ -302,8 +310,12 @@ export default function ScrumView(props: {
             ? {
                 ...t,
                 title: row.title,
+                priority: row.priority,
                 team_id: row.team_id !== undefined ? row.team_id : t.team_id,
                 assignee_id: row.assignee_id !== undefined ? row.assignee_id : t.assignee_id,
+                blocked: row.blocked ?? t.blocked,
+                blocked_reason: row.blocked_reason ?? t.blocked_reason,
+                task_type: row.task_type ?? t.task_type,
               }
             : t
         )

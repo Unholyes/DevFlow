@@ -4,6 +4,7 @@ import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-
 import { NextResponse } from 'next/server'
 import { resolveAssigneeIdForTask, resolveTeamIdForTask } from '@/lib/tasks/validate-task-assignments'
 import { enrichTasksForNavigator } from '@/lib/tasks/enrich-for-navigator'
+import { parseTaskTypeFromBody } from '@/lib/tasks/task-type'
 
 function isUniqueViolation(error: unknown) {
   return typeof error === 'object' && error !== null && (error as any).code === '23505'
@@ -137,7 +138,14 @@ export async function POST(request: Request) {
       size_band: sizeBandRaw,
       service_class: serviceClassRaw,
       team_id: teamIdRaw,
+      task_type: taskTypeRaw,
     } = body;
+
+    const parsedTaskType = parseTaskTypeFromBody(taskTypeRaw)
+    if (taskTypeRaw != null && taskTypeRaw !== '' && parsedTaskType === null) {
+      return NextResponse.json({ error: 'Invalid task_type', data: null }, { status: 400 })
+    }
+    const task_type = parsedTaskType ?? 'task'
 
     const story_points =
       storyPointsRaw === null
@@ -219,6 +227,7 @@ export async function POST(request: Request) {
       size_band,
       service_class,
       current_stage_entered_at: nowIso,
+      task_type,
     }
     if (teamResolved.teamId !== undefined) {
       insertRow.team_id = teamResolved.teamId

@@ -190,45 +190,34 @@ export default async function ProcessBoardPage({
   //
   // If migrations/kanban_flow_metrics.sql has not been applied, selecting flow columns fails and
   // PostgREST returns no rows — we retry with a base column list so cards still load.
-  const kanbanTaskColumnsExtended =
-    'id,title,description,priority,story_points,workflow_stage_id,completed_at,position,current_stage_entered_at,size_band,service_class,team_id,assignee_id'
-  const kanbanTaskColumnsBase =
-    'id,title,description,priority,story_points,workflow_stage_id,completed_at,position,team_id,assignee_id'
-
   let tasks: any[] | null = null
   let tasksError: { message?: string; code?: string } | null = null
 
   if (stageIds.length > 0) {
-    const resExtended = await supabase
-      .from('tasks')
-      .select(kanbanTaskColumnsExtended)
-      .eq('project_id', project.id)
-      .eq('organization_id', orgId)
-      .eq('process_id', process.id)
-      .in('workflow_stage_id', stageIds)
-      .order('position', { ascending: true })
+    const {
+      KANBAN_TASK_COLUMNS_FULL,
+      KANBAN_TASK_COLUMNS_NO_TYPE,
+      KANBAN_TASK_COLUMNS_BASE,
+      isMissingTaskColumnError,
+    } = await import('@/lib/tasks/kanban-task-columns')
 
-    const msg = (resExtended.error as { message?: string } | null)?.message ?? ''
-    const missingFlowCols =
-      !!resExtended.error &&
-      (msg.includes('current_stage_entered_at') ||
-        msg.includes('size_band') ||
-        msg.includes('service_class') ||
-        (resExtended.error as { code?: string }).code === '42703')
-
-    let resFinal: { data: any[] | null; error: { message?: string; code?: string } | null } = resExtended
-    if (missingFlowCols) {
-      console.warn(
-        '[ProcessBoardPage] Kanban flow columns missing on tasks; retry without them. Apply migrations/kanban_flow_metrics.sql for aging & size.'
-      )
-      resFinal = await supabase
+    const baseQuery = (cols: string) =>
+      supabase
         .from('tasks')
-        .select(kanbanTaskColumnsBase)
+        .select(cols)
         .eq('project_id', project.id)
         .eq('organization_id', orgId)
         .eq('process_id', process.id)
         .in('workflow_stage_id', stageIds)
         .order('position', { ascending: true })
+
+    let resFinal = await baseQuery(KANBAN_TASK_COLUMNS_FULL)
+    if (resFinal.error && isMissingTaskColumnError(String(resFinal.error.message ?? ''), (resFinal.error as { code?: string }).code)) {
+      resFinal = await baseQuery(KANBAN_TASK_COLUMNS_NO_TYPE)
+    }
+    if (resFinal.error && isMissingTaskColumnError(String(resFinal.error.message ?? ''), (resFinal.error as { code?: string }).code)) {
+      console.warn('[ProcessBoardPage] Retrying tasks query with base columns only.')
+      resFinal = await baseQuery(KANBAN_TASK_COLUMNS_BASE)
     }
 
     tasks = resFinal.data ?? []

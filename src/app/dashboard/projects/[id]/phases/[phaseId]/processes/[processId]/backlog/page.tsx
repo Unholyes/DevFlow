@@ -173,42 +173,33 @@ export default async function ProcessBacklogPage({
     (workflowStages ?? []).find((s) => !s.is_backlog) ??
     null
 
-  const taskColumnsExtended =
-    'id,title,description,priority,story_points,assignee_id,position,team_id,workflow_stage_id,size_band,service_class'
-  const taskColumnsBase =
-    'id,title,description,priority,story_points,assignee_id,position,team_id,workflow_stage_id'
+  const {
+    BACKLOG_TASK_COLUMNS_FULL,
+    BACKLOG_TASK_COLUMNS_NO_TYPE,
+    BACKLOG_TASK_COLUMNS_BASE,
+    isMissingTaskColumnError,
+  } = await import('@/lib/tasks/kanban-task-columns')
 
-  let tasks: Record<string, unknown>[] | null = null
-  const resExtended = await supabase
-    .from('tasks')
-    .select(taskColumnsExtended)
-    .eq('project_id', project.id)
-    .eq('organization_id', orgId)
-    .eq('process_id', process.id)
-    .eq('workflow_stage_id', backlogStageId)
-    .is('sprint_id', null)
-    .order('position', { ascending: true })
-
-  const missingFlowCols =
-    !!resExtended.error &&
-    (String(resExtended.error.message ?? '').includes('size_band') ||
-      String(resExtended.error.message ?? '').includes('service_class') ||
-      (resExtended.error as { code?: string }).code === '42703')
-
-  if (missingFlowCols) {
-    const resBase = await supabase
+  const backlogQuery = (cols: string) =>
+    supabase
       .from('tasks')
-      .select(taskColumnsBase)
+      .select(cols)
       .eq('project_id', project.id)
       .eq('organization_id', orgId)
       .eq('process_id', process.id)
       .eq('workflow_stage_id', backlogStageId)
       .is('sprint_id', null)
       .order('position', { ascending: true })
-    tasks = (resBase.data ?? []) as Record<string, unknown>[]
-  } else {
-    tasks = (resExtended.data ?? []) as Record<string, unknown>[]
+
+  let resTasks = await backlogQuery(BACKLOG_TASK_COLUMNS_FULL)
+  if (resTasks.error && isMissingTaskColumnError(String(resTasks.error.message ?? ''), (resTasks.error as { code?: string }).code)) {
+    resTasks = await backlogQuery(BACKLOG_TASK_COLUMNS_NO_TYPE)
   }
+  if (resTasks.error && isMissingTaskColumnError(String(resTasks.error.message ?? ''), (resTasks.error as { code?: string }).code)) {
+    resTasks = await backlogQuery(BACKLOG_TASK_COLUMNS_BASE)
+  }
+
+  const tasks = (resTasks.data ?? []) as unknown as Record<string, unknown>[]
 
   const assigneeIds = [
     ...new Set((tasks ?? []).map((t) => t.assignee_id).filter((id): id is string => typeof id === 'string')),
