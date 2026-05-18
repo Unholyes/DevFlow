@@ -4,12 +4,16 @@ import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { ensureKanbanPhaseWorkflowStructure } from '@/lib/kanban/ensure-default-workflow-stages'
 import { computeKanbanProcessSummary } from '@/lib/kanban/compute-process-summary'
+import { computeKanbanFlowAnalytics } from '@/lib/kanban/compute-flow-analytics'
 import { KanbanProcessChrome } from '@/components/processes/kanban-process-chrome'
 import { KanbanSummaryPageClient } from '@/components/kanban/kanban-summary-page-client'
 import { processWorkspacePath } from '@/lib/processes/process-workspace-routes'
 
 const SUMMARY_TASK_COLUMNS =
-  'id,title,workflow_stage_id,completed_at,priority,task_type,blocked,blocked_reason,assignee_id,team_id,created_at,updated_at,due_date'
+  'id,title,workflow_stage_id,completed_at,priority,task_type,blocked,blocked_reason,assignee_id,team_id,created_at,updated_at,due_date,current_stage_entered_at'
+
+const SUMMARY_TASK_COLUMNS_NO_TYPE =
+  'id,title,workflow_stage_id,completed_at,priority,blocked,blocked_reason,assignee_id,team_id,created_at,updated_at,due_date,current_stage_entered_at'
 
 const SUMMARY_TASK_COLUMNS_FALLBACK =
   'id,title,workflow_stage_id,completed_at,priority,assignee_id,team_id,created_at,updated_at,due_date,blocked,blocked_reason'
@@ -62,7 +66,7 @@ export default async function KanbanProcessSummaryPage({
 
   const { data: process } = await supabase
     .from('phase_processes')
-    .select('id,name,methodology')
+    .select('id,name,methodology,wip_exclude_blocked')
     .eq('id', params.processId)
     .eq('phase_id', phase.id)
     .eq('organization_id', orgId)
@@ -83,7 +87,7 @@ export default async function KanbanProcessSummaryPage({
 
   const { data: stages } = await supabase
     .from('workflow_stages')
-    .select('id,name,stage_order,is_done,is_backlog')
+    .select('id,name,stage_order,is_done,is_backlog,wip_limit')
     .eq('phase_id', phase.id)
     .eq('organization_id', orgId)
     .order('stage_order', { ascending: true })
@@ -104,12 +108,43 @@ export default async function KanbanProcessSummaryPage({
     let res = await baseQuery(SUMMARY_TASK_COLUMNS)
     if (res.error) {
       const msg = String(res.error.message ?? '').toLowerCase()
-      if (msg.includes('task_type') || res.error.code === '42703') {
+      const code = (res.error as { code?: string }).code
+      if (msg.includes('task_type') || msg.includes('current_stage_entered_at') || code === '42703') {
+        res = await baseQuery(SUMMARY_TASK_COLUMNS_NO_TYPE)
+      }
+    }
+    if (res.error) {
+      const msg = String(res.error.message ?? '').toLowerCase()
+      if (msg.includes('blocked') || msg.includes('current_stage_entered_at') || res.error.code === '42703') {
         res = await baseQuery(SUMMARY_TASK_COLUMNS_FALLBACK)
       }
     }
     if (!res.error) tasks = (res.data ?? []) as unknown as Record<string, unknown>[]
   }
+
+  const wipExcludeBlocked = (process as { wip_exclude_blocked?: boolean }).wip_exclude_blocked === true
+
+  const flowTasks = tasks.map((t) => ({
+    id: String(t.id),
+    title: String(t.title ?? 'Untitled'),
+    workflow_stage_id: String(t.workflow_stage_id ?? ''),
+    completed_at: (t.completed_at as string | null) ?? null,
+    blocked: Boolean(t.blocked),
+    created_at: String(t.created_at ?? new Date().toISOString()),
+    current_stage_entered_at: (t.current_stage_entered_at as string | null) ?? null,
+    updated_at: (t.updated_at as string | null) ?? null,
+  }))
+
+  const flowStages = (stages ?? []).map((s) => ({
+    id: s.id,
+    name: s.name,
+    is_done: Boolean(s.is_done),
+    is_backlog: Boolean(s.is_backlog),
+    stage_order: Number(s.stage_order ?? 0),
+    wip_limit: s.wip_limit != null ? Number(s.wip_limit) : null,
+  }))
+
+  const flowAnalytics = computeKanbanFlowAnalytics(flowTasks, flowStages, wipExcludeBlocked)
 
   const assigneeIds = [
     ...new Set(tasks.map((t) => t.assignee_id).filter((id): id is string => typeof id === 'string')),
@@ -170,6 +205,7 @@ export default async function KanbanProcessSummaryPage({
         processId={process.id}
         processName={process.name}
         summary={summary}
+        flowAnalytics={flowAnalytics}
       />
     </KanbanProcessChrome>
   )

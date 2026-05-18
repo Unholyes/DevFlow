@@ -2,6 +2,15 @@
 
 import Link from 'next/link'
 import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import {
   CheckCircle2,
   RefreshCw,
   PlusSquare,
@@ -11,12 +20,19 @@ import {
   BarChart3,
   Users,
   Layers,
+  Clock,
+  Gauge,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TASK_TYPE_META, type TaskType } from '@/lib/tasks/task-type'
 import type { KanbanProcessSummaryData } from '@/lib/kanban/compute-process-summary'
+import {
+  AGING_CRITICAL_DAYS,
+  AGING_WARN_DAYS,
+  type KanbanFlowAnalytics,
+} from '@/lib/kanban/compute-flow-analytics'
 import { processBoardPath } from '@/lib/processes/process-workspace-routes'
 import { cn } from '@/lib/utils'
 
@@ -90,18 +106,64 @@ function StatusDonut({ buckets, total }: { buckets: { label: string; count: numb
   )
 }
 
+function WipColumnRow({
+  row,
+  excludeBlocked,
+}: {
+  row: KanbanFlowAnalytics['wipByColumn'][number]
+  excludeBlocked: boolean
+}) {
+  const cap = row.wipLimit ?? Math.max(row.wipCount, 1)
+  const pct = row.wipLimit != null ? Math.min(100, (row.wipCount / cap) * 100) : 0
+  return (
+    <li>
+      <div className="flex items-center justify-between text-sm mb-1 gap-2">
+        <span className="font-medium text-gray-800 truncate">{row.stageName}</span>
+        <span className="tabular-nums shrink-0 text-gray-700">
+          {row.wipApplies ? (
+            <>
+              <span className={row.overLimit ? 'text-red-600 font-semibold' : ''}>
+                {row.wipCount}
+              </span>
+              {row.wipLimit != null ? ` / ${row.wipLimit}` : ' open'}
+              {excludeBlocked ? ' *' : ''}
+            </>
+          ) : (
+            <span className="text-gray-500">{row.openCount} open</span>
+          )}
+        </span>
+      </div>
+      {row.wipApplies && row.wipLimit != null ? (
+        <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+          <div
+            className={cn(
+              'h-full rounded-full transition-all',
+              row.overLimit ? 'bg-red-500' : 'bg-blue-600'
+            )}
+            style={{ width: `${Math.max(row.overLimit ? 100 : 4, pct)}%` }}
+          />
+        </div>
+      ) : null}
+    </li>
+  )
+}
+
 export function KanbanSummaryPageClient(props: {
   projectId: string
   phaseId: string
   processId: string
   processName: string
   summary: KanbanProcessSummaryData
+  flowAnalytics: KanbanFlowAnalytics
 }) {
   const boardHref = processBoardPath(props.projectId, props.phaseId, props.processId)
   const blockedBoardHref = `${boardHref}?blockedOnly=1`
   const maxPriority = Math.max(...props.summary.priorityBreakdown.map((b) => b.count), 1)
   const maxType = Math.max(...props.summary.typesOfWork.map((b) => b.count), 1)
   const maxWorkload = Math.max(...props.summary.teamWorkload.map((b) => b.count), 1)
+  const fa = props.flowAnalytics
+  const agingWarnCount = fa.agingTasks.filter((t) => t.severity === 'warn').length
+  const agingCriticalCount = fa.agingTasks.filter((t) => t.severity === 'critical').length
 
   const activityCards = [
     { label: 'Completed', value: props.summary.activity7d.completed, icon: CheckCircle2, tone: 'text-green-600' },
@@ -195,6 +257,146 @@ export function KanbanSummaryPageClient(props: {
           </CardContent>
         </Card>
       </div>
+
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">Flow analytics</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          WIP policy, delivery times, and items aging in column — based on current board state.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card className="border-gray-100 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Gauge className="h-4 w-4 text-gray-500" />
+              WIP vs limits
+            </CardTitle>
+            <CardDescription>
+              Active columns with WIP policy
+              {fa.wipExcludeBlocked ? ' — * blocked excluded from count' : ''}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {fa.wipByColumn.filter((c) => c.wipApplies).length === 0 ? (
+              <p className="text-sm text-gray-500 py-6 text-center">
+                No WIP limits on flow columns yet. Set limits on the board.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {fa.wipByColumn
+                  .filter((c) => c.wipApplies)
+                  .map((row) => (
+                    <WipColumnRow
+                      key={row.stageId}
+                      row={row}
+                      excludeBlocked={fa.wipExcludeBlocked}
+                    />
+                  ))}
+              </ul>
+            )}
+            <Button variant="link" size="sm" className="mt-3 px-0" asChild>
+              <Link href={boardHref}>Manage WIP on board →</Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="border-gray-100 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-gray-500" />
+              Lead time distribution
+            </CardTitle>
+            <CardDescription>
+              Days from created → completed (last 30 days, {fa.leadTimeSampleCount} items)
+              {fa.medianLeadTimeDays != null ? ` · median ${fa.medianLeadTimeDays}d` : ''}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="h-[240px]">
+            {fa.leadTimeSampleCount > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={fa.leadTimeHistogram} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#9ca3af" />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} stroke="#9ca3af" width={28} />
+                  <Tooltip />
+                  <Bar dataKey="count" name="Completed" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-sm text-gray-500 py-12 text-center">
+                Complete work on this process to see lead time spread.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="border-gray-100 shadow-sm">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Clock className="h-4 w-4 text-gray-500" />
+            Aging in column
+            {fa.agingTasks.length > 0 ? (
+              <Badge variant="secondary" className="ml-1 font-normal">
+                {fa.agingTasks.length}
+              </Badge>
+            ) : null}
+          </CardTitle>
+          <CardDescription>
+            Open items by time in current column — warn ≥{AGING_WARN_DAYS}d, critical ≥
+            {AGING_CRITICAL_DAYS}d
+            {agingWarnCount + agingCriticalCount > 0
+              ? ` (${agingCriticalCount} critical, ${agingWarnCount} warning)`
+              : ''}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {fa.agingTasks.length === 0 ? (
+            <p className="text-sm text-gray-500 py-6 text-center">No open flow items aging on the board.</p>
+          ) : (
+            <ul className="space-y-2 max-h-[320px] overflow-y-auto">
+              {fa.agingTasks.slice(0, 15).map((t) => (
+                <li
+                  key={t.id}
+                  className={cn(
+                    'flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm',
+                    t.severity === 'critical' && 'border-red-200 bg-red-50/60',
+                    t.severity === 'warn' && 'border-amber-200 bg-amber-50/60',
+                    t.severity === 'normal' && 'border-gray-100 bg-gray-50/80'
+                  )}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-gray-900 truncate">{t.title}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {t.stageName}
+                      {t.blocked ? ' · blocked' : ''}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0 tabular-nums">
+                    <p
+                      className={cn(
+                        'font-semibold',
+                        t.severity === 'critical' && 'text-red-700',
+                        t.severity === 'warn' && 'text-amber-700',
+                        t.severity === 'normal' && 'text-gray-700'
+                      )}
+                    >
+                      {t.daysInStageLabel} in column
+                    </p>
+                    <p className="text-[10px] text-gray-400">{t.daysTotal}d total age</p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {fa.agingTasks.length > 0 ? (
+            <Button variant="link" size="sm" className="mt-3 px-0" asChild>
+              <Link href={boardHref}>Review on board →</Link>
+            </Button>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="border-gray-100 shadow-sm">
