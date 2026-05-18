@@ -89,9 +89,8 @@ export default async function PhaseBoardPage({
     return redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}`)
   }
 
+  const { processWorkspacePath } = await import('@/lib/processes/process-workspace-routes')
   return redirect(
-    resolvedProcess.methodology === 'scrum'
-      ? `/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${resolvedProcess.id}/sprints`
-      : `/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${resolvedProcess.id}/board`
+    processWorkspacePath(params.id, params.phaseId, resolvedProcess.id, resolvedProcess.methodology)
   )
 }

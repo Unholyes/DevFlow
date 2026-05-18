@@ -50,7 +50,8 @@ export default async function ProcessSprintsPage({
   if (!process) notFound()
 
   if (process.methodology !== 'scrum') {
-    return redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${process.id}/board`)
+    const { processWorkspacePath } = await import('@/lib/processes/process-workspace-routes')
+    return redirect(processWorkspacePath(params.id, phase.id, process.id, process.methodology))
   }
 
   const { data: sprints } = await supabase

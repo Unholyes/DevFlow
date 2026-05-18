@@ -4,14 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { CompletePhaseButton } from '@/components/phases/complete-phase-button'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
-
-function processWorkspaceDestination(projectId: string, phaseId: string, processId: string, methodology: string) {
-  const base =
-    methodology === 'scrum'
-      ? `/dashboard/projects/${projectId}/phases/${phaseId}/processes/${processId}/sprints`
-      : `/dashboard/projects/${projectId}/phases/${phaseId}/processes/${processId}/board`
-  return base
-}
+import { processWorkspacePath } from '@/lib/processes/process-workspace-routes'
 
 export default async function PhasePage({ params }: { params: { id: string; phaseId: string } }) {
   const tenantSlug = getTenantSlug()
@@ -220,7 +213,7 @@ export default async function PhasePage({ params }: { params: { id: string; phas
         <div className="mt-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {processesWithStats.length > 0 ? (
             processesWithStats.map((process) => {
-              const href = processWorkspaceDestination(project.id, phase.id, process.id, process.methodology)
+              const href = processWorkspacePath(project.id, phase.id, process.id, process.methodology)
               const progress = process.stats.percent
               const sprint = process.stats.openSprint
 
@@ -234,7 +227,7 @@ export default async function PhasePage({ params }: { params: { id: string; phas
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-gray-900 truncate">{process.name}</p>
                       <p className="mt-1 text-xs text-gray-500">
-                        {process.methodology === 'scrum' ? 'Scrum workspace' : 'Kanban board'}
+                        {process.methodology === 'scrum' ? 'Scrum workspace' : 'Kanban workspace'}
                         {process.methodology === 'scrum' && backlogStageId ? ' • Backlog enabled' : ''}
                       </p>
                     </div>

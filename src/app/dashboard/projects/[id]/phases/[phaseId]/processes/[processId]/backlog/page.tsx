@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { ProductBacklogPageClient } from '@/components/backlog/product-backlog-page-client'
+import { KanbanProcessChrome } from '@/components/processes/kanban-process-chrome'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { ensureKanbanPhaseWorkflowStructure } from '@/lib/kanban/ensure-default-workflow-stages'
 
@@ -147,7 +148,7 @@ export default async function ProcessBacklogPage({
 
   const { data: process } = await supabase
     .from('phase_processes')
-    .select('id,methodology')
+    .select('id,name,methodology')
     .eq('id', params.processId)
     .eq('phase_id', phase.id)
     .eq('organization_id', orgId)
@@ -157,6 +158,12 @@ export default async function ProcessBacklogPage({
   if (process.methodology === 'kanban') {
     await ensureKanbanPhaseWorkflowStructure(supabase as any, orgId, phase.id)
   }
+
+  const { data: allProcesses } = await supabase
+    .from('phase_processes')
+    .select('id,name,methodology,order_index')
+    .eq('phase_id', phase.id)
+    .order('order_index', { ascending: true })
 
   const backlogStageId = await ensureBacklogStageId(supabase as any, orgId, phase.id)
   if (!backlogStageId) notFound()
@@ -215,7 +222,7 @@ export default async function ProcessBacklogPage({
     }
   }
 
-  return (
+  const backlogClient = (
     <ProductBacklogPageClient
       projectId={project.id}
       phaseId={phase.id}
@@ -230,5 +237,22 @@ export default async function ProcessBacklogPage({
       assigneeNames={assigneeNames}
     />
   )
+
+  if (process.methodology === 'kanban') {
+    return (
+      <KanbanProcessChrome
+        projectId={project.id}
+        phaseId={phase.id}
+        processId={process.id}
+        processName={process.name}
+        currentTab="backlog"
+        allProcesses={(allProcesses ?? []) as { id: string; name: string; methodology: string }[]}
+      >
+        {backlogClient}
+      </KanbanProcessChrome>
+    )
+  }
+
+  return backlogClient
 }
 

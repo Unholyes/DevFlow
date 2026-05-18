@@ -60,7 +60,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { GripVertical, HelpCircle, LayoutList, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { BarChart3, GripVertical, HelpCircle, LayoutList, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
+import { processSummaryPath } from '@/lib/processes/process-workspace-routes'
 import { KanbanTaskDetailModal, type TaskRowLite } from '@/components/project/KanbanTaskDetailModal'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
@@ -90,11 +91,6 @@ type TaskRow = {
   blocked?: boolean
   blocked_reason?: string | null
   task_type?: string | null
-}
-
-export type KanbanFlowMetrics = {
-  throughput7d: number
-  avgLeadTimeDays30d: number | null
 }
 
 const KANBAN_FLOW_ADVANCED_STORAGE_KEY = 'devflow:kanban-flow-advanced-fields'
@@ -633,13 +629,11 @@ export default function KanbanView(props: {
   processId: string
   stages: Stage[]
   tasks: TaskRow[]
-  flowMetrics?: KanbanFlowMetrics
   /** Workspace teams for labels + filter (optional). */
   teams?: { id: string; name: string }[]
   /** When true, blocked impediments are excluded from WIP counts (server + client). */
   initialWipExcludeBlocked?: boolean
 }) {
-  const flowMetrics = props.flowMetrics ?? { throughput7d: 0, avgLeadTimeDays30d: null as number | null }
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -775,9 +769,8 @@ export default function KanbanView(props: {
     return list
   }, [tasks, teamFilterActive, teamFilterId, blockedOnly])
 
-  const statsTasks = teamFilterActive ? tasksForBoard : tasks
-
   const stageById = useMemo(() => Object.fromEntries(props.stages.map((s) => [s.id, s])), [props.stages])
+  const summaryHref = processSummaryPath(props.projectId, props.phaseId, props.processId)
 
   const boardStagesFromServer = useMemo(
     () =>
@@ -829,30 +822,6 @@ export default function KanbanView(props: {
     }
     return m
   }, [tasksForBoard, boardStages, backlogStageId])
-
-  const totalBoardTasks = useMemo(
-    () => statsTasks.filter((t) => boardStageIds.has(t.workflow_stage_id)).length,
-    [statsTasks, boardStageIds]
-  )
-
-  /** Tasks on the board in non-terminal columns (incl. e.g. “To Do”) that are not completed. */
-  const openNotDoneCount = useMemo(
-    () =>
-      statsTasks.filter((t) => {
-        const st = stageById[t.workflow_stage_id]
-        return st && boardStageIds.has(st.id) && !st.is_backlog && !st.is_done && !t.completed_at
-      }).length,
-    [statsTasks, stageById, boardStageIds]
-  )
-
-  const completedCount = useMemo(
-    () =>
-      statsTasks.filter((t) => {
-        const st = stageById[t.workflow_stage_id]
-        return st && boardStageIds.has(st.id) && (st.is_done || !!t.completed_at)
-      }).length,
-    [statsTasks, stageById, boardStageIds]
-  )
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -1326,7 +1295,6 @@ export default function KanbanView(props: {
 
   return (
     <TooltipProvider delayDuration={250}>
-      <div className="space-y-6">
       <KanbanTaskDetailModal
         taskId={detailTaskId}
         open={detailTaskId !== null}
@@ -1336,64 +1304,6 @@ export default function KanbanView(props: {
         onTaskSaved={handleDetailSaved}
         flowAdvancedFields={showAdvancedFlowFields}
       />
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {(
-          [
-            {
-              label: 'On board',
-              value: String(totalBoardTasks),
-              color: 'text-gray-900',
-              tip: 'Work items on this Kanban process in any column (including backlog when shown on this page).',
-            },
-            {
-              label: 'Open (not done)',
-              value: String(openNotDoneCount),
-              color: 'text-blue-600',
-              tip: 'Items still in progress — not in a done column and not marked completed.',
-            },
-            {
-              label: 'Done',
-              value: String(completedCount),
-              color: 'text-green-600',
-              tip: 'Items completed on this process (done column or completed timestamp).',
-            },
-          ] as const
-        ).map((stat, i) => (
-          <div key={i} className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-            <div className="flex items-center gap-1 mb-1">
-              <p className="text-xs font-medium text-gray-500">{stat.label}</p>
-              <HelpTip label={`About ${stat.label}`}>{stat.tip}</HelpTip>
-            </div>
-            <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-          <div className="flex items-center gap-1 mb-1">
-            <p className="text-xs font-medium text-gray-500">Throughput (7 days)</p>
-            <HelpTip label="About throughput">
-              Count of items completed on this process in the last 7 days — a simple flow signal, not weighted by
-              estimate.
-            </HelpTip>
-          </div>
-          <p className="text-2xl font-bold text-gray-900">{flowMetrics.throughput7d}</p>
-        </div>
-        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
-          <div className="flex items-center gap-1 mb-1">
-            <p className="text-xs font-medium text-gray-500">Avg lead time (30 days)</p>
-            <HelpTip label="About average lead time">
-              Average calendar days from created → completed for tasks that finished in the last 30 days on this
-              process (observed, not estimated).
-            </HelpTip>
-          </div>
-          <p className="text-2xl font-bold text-indigo-600 tabular-nums">
-            {flowMetrics.avgLeadTimeDays30d != null ? `${flowMetrics.avgLeadTimeDays30d.toFixed(1)} days` : '—'}
-          </p>
-        </div>
-      </div>
 
       <Card className="border-gray-100 shadow-sm">
         <CardHeader className="flex flex-col gap-2 pb-2">
@@ -1407,7 +1317,10 @@ export default function KanbanView(props: {
                     Card footers show time in the current column. Enable <strong>Advanced</strong> below for optional
                     T‑shirt size and class of service on cards and in task details.
                   </p>
-                  <p>This process does not use story points — use throughput and average lead time for flow health.</p>
+                  <p>
+                    Flow metrics, status breakdown, and workload charts live on the{' '}
+                    <strong>Summary</strong> tab for this process.
+                  </p>
                 </div>
               </HelpTip>
               <Badge variant="secondary" className="text-xs font-normal text-gray-600">
@@ -1415,6 +1328,13 @@ export default function KanbanView(props: {
               </Badge>
             </div>
             <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <Link
+                href={summaryHref}
+                className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+                Summary &amp; metrics
+              </Link>
               {persisting ? (
                 <span className="inline-flex items-center gap-1 text-xs text-gray-500">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1947,7 +1867,6 @@ export default function KanbanView(props: {
           )}
         </CardContent>
       </Card>
-    </div>
     </TooltipProvider>
   )
 }
