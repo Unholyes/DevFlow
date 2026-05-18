@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { CompletePhaseButton } from '@/components/phases/complete-phase-button'
+import { userCanApprovePhaseGates } from '@/lib/permissions/phase-gate-permissions'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { processWorkspacePath } from '@/lib/processes/process-workspace-routes'
 
@@ -134,6 +135,12 @@ export default async function PhasePage({ params }: { params: { id: string; phas
   )
   const canCompletePhase = !hasAnyOpenSprint && allPhaseTasksDone && phase.status !== 'completed'
 
+  const canApprovePhaseGates = await userCanApprovePhaseGates(supabase, {
+    organizationId: orgId,
+    userId: user.id,
+    projectId: project.id,
+  })
+
   const processesWithStats = (processes ?? []).map((p) => {
     const processTasks = (tasks ?? []).filter((t) => t.process_id === p.id)
     const total = processTasks.length
@@ -187,15 +194,17 @@ export default async function PhasePage({ params }: { params: { id: string; phas
           </div>
           <CompletePhaseButton
             phaseId={phase.id}
-            disabled={!canCompletePhase}
+            disabled={!canApprovePhaseGates || !canCompletePhase}
             reason={
-              phase.status === 'completed'
-                ? 'Phase already completed'
-                : hasAnyOpenSprint
-                  ? 'Complete/close the active sprint first'
-                  : !allPhaseTasksDone
-                    ? 'Move all tasks into a done column first'
-                  : undefined
+              !canApprovePhaseGates
+                ? 'You need Approve phase gate transitions (project access template) to complete this phase'
+                : phase.status === 'completed'
+                  ? 'Phase already completed'
+                  : hasAnyOpenSprint
+                    ? 'Complete/close the active sprint first'
+                    : !allPhaseTasksDone
+                      ? 'Move all tasks into a done column first'
+                      : undefined
             }
           />
         </div>

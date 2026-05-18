@@ -85,6 +85,7 @@ export const ORDERED_PROJECT_TEMPLATE_GROUPS: Array<
 export const ALL_PROJECT_TEMPLATE_PERMISSION_IDS = PROJECT_TEMPLATE_PERMISSIONS.map((p) => p.id)
 
 export const PM_SPRINTS_MANAGE = 'pm.sprints.manage' as const satisfies ProjectTemplatePermissionId
+export const PM_PHASE_GATES_APPROVE = 'pm.phase_gates.approve' as const satisfies ProjectTemplatePermissionId
 export const SDLC_SPRINTS_CREATE = 'sdlc.sprints.create' as const satisfies ProjectTemplatePermissionId
 
 export const PROJECT_ACCESS_LEVELS = ['Admin', 'Editor', 'Viewer'] as const

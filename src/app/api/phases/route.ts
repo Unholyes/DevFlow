@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlugFromRequest, resolveWorkspaceOrgId } from '@/lib/api/resolve-workspace-org'
+import { userCanApprovePhaseGates } from '@/lib/permissions/phase-gate-permissions'
 import { NextResponse } from 'next/server'
 
 export async function PATCH(request: Request) {
@@ -9,6 +10,13 @@ export async function PATCH(request: Request) {
     NextResponse.json({ error: { code, message } }, { status })
 
   try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      return jsonError(401, 'UNAUTHORIZED', 'Unauthorized')
+    }
+
     const orgId = await resolveWorkspaceOrgId(supabase, request)
     if (!orgId) {
       const tenantSlug = getTenantSlugFromRequest(request)
@@ -42,6 +50,22 @@ export async function PATCH(request: Request) {
     if (currentError) throw currentError
     if (!currentPhase?.id) {
       return jsonError(404, 'PHASE_NOT_FOUND', 'Phase not found')
+    }
+
+    const projectId = String((currentPhase as { project_id?: unknown }).project_id ?? '')
+    if (status === 'completed') {
+      const allowed = await userCanApprovePhaseGates(supabase, {
+        organizationId: orgId,
+        userId: user.id,
+        projectId,
+      })
+      if (!allowed) {
+        return jsonError(
+          403,
+          'PHASE_GATE_FORBIDDEN',
+          'You do not have permission to complete phases and advance gates',
+        )
+      }
     }
 
     const { data, error } = await supabase
