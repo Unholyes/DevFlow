@@ -7,6 +7,7 @@ import Link from 'next/link'
 
 interface ProjectHeaderProps {
   organizationId?: string
+  canManageProjectTeam?: boolean
   project: {
     id: string
     name: string
@@ -27,7 +28,7 @@ const statusColors = {
   completed: 'bg-blue-100 text-blue-800',
 }
 
-export function ProjectHeader({ organizationId, project }: ProjectHeaderProps) {
+export function ProjectHeader({ organizationId, canManageProjectTeam, project }: ProjectHeaderProps) {
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg">
       <div className="px-4 py-5 sm:p-6">
@@ -55,7 +56,7 @@ export function ProjectHeader({ organizationId, project }: ProjectHeaderProps) {
             </div>
           </div>
           <div className="flex gap-3 ml-4">
-            {organizationId ? (
+            {organizationId && canManageProjectTeam ? (
               <ManageProjectTeamDialog
                 organizationId={organizationId}
                 projectId={project.id}

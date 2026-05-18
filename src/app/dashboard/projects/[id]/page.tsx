@@ -8,6 +8,7 @@ import { CheckCircle2, Clock, Circle, ArrowRight, ArrowLeft, Lock } from 'lucide
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
+import { userCanManageProjectMembers } from '@/lib/permissions/project-members-permissions'
 import type { ProjectStatus } from '@/types'
 
 const sdlcBadgeColors = {
@@ -276,6 +277,12 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     return prev?.dbStatus !== 'completed'
   }
 
+  const canManageProjectTeam = await userCanManageProjectMembers(supabase, {
+    organizationId: orgId,
+    userId: user.id,
+    projectId: project.id,
+  })
+
   return (
     <div className="space-y-6">
       {/* Back Button */}
@@ -289,6 +296,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
 
       <ProjectHeader
         organizationId={orgId}
+        canManageProjectTeam={canManageProjectTeam}
         project={{
           id: project.id,
           name: project.name,

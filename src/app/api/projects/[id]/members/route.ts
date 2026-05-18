@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { userCanManageProjectMembers } from '@/lib/permissions/project-members-permissions'
 import {
   PROJECT_ACCESS_LEVELS,
   PROJECT_FUNCTIONAL_ROLES,
@@ -175,6 +176,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
   const ctx = await loadProjectContext(supabase, projectId, user.id)
   if ('error' in ctx) return ctx.error
+
+  const canManage = await userCanManageProjectMembers(supabase, {
+    organizationId: ctx.organizationId,
+    userId: user.id,
+    projectId: ctx.projectId,
+  })
+  if (!canManage) {
+    return jsonError(403, 'You do not have permission to manage this project team')
+  }
 
   let body: unknown
   try {

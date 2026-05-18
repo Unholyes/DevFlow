@@ -9,6 +9,7 @@ export type ProjectTemplatePermissionCategory = 'Project Management' | 'SDLC Man
 export type ProjectTemplatePermissionId =
   | 'pm.sprints.manage'
   | 'pm.phase_gates.approve'
+  | 'pm.project_members.manage'
   | 'pm.timelines.modify'
   | 'pm.db_schemas.manage'
   | 'pm.issues.assign_transition'
@@ -31,6 +32,7 @@ export const PROJECT_TEMPLATE_PERMISSIONS: Array<{
 }> = [
   { id: 'pm.sprints.manage', category: 'Project Management', label: 'Manage sprint cycles' },
   { id: 'pm.phase_gates.approve', category: 'Project Management', label: 'Approve phase gate transitions' },
+  { id: 'pm.project_members.manage', category: 'Project Management', label: 'Manage project team' },
   { id: 'pm.timelines.modify', category: 'Project Management', label: 'Modify project timelines / Gantt charts' },
   { id: 'pm.db_schemas.manage', category: 'Project Management', label: 'Manage database schemas' },
   { id: 'pm.issues.assign_transition', category: 'Project Management', label: 'Assign and transition issue tickets' },
@@ -86,6 +88,7 @@ export const ALL_PROJECT_TEMPLATE_PERMISSION_IDS = PROJECT_TEMPLATE_PERMISSIONS.
 
 export const PM_SPRINTS_MANAGE = 'pm.sprints.manage' as const satisfies ProjectTemplatePermissionId
 export const PM_PHASE_GATES_APPROVE = 'pm.phase_gates.approve' as const satisfies ProjectTemplatePermissionId
+export const PM_PROJECT_MEMBERS_MANAGE = 'pm.project_members.manage' as const satisfies ProjectTemplatePermissionId
 export const SDLC_SPRINTS_CREATE = 'sdlc.sprints.create' as const satisfies ProjectTemplatePermissionId
 
 export const PROJECT_ACCESS_LEVELS = ['Admin', 'Editor', 'Viewer'] as const
@@ -181,6 +184,7 @@ export const DEFAULT_PROJECT_TEMPLATE_PERMISSIONS: Record<ProjectAccessLevel, re
   Admin: [
     'pm.sprints.manage',
     'pm.phase_gates.approve',
+    'pm.project_members.manage',
     'pm.timelines.modify',
     'pm.db_schemas.manage',
     'pm.issues.assign_transition',
