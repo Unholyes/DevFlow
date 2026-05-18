@@ -8,6 +8,10 @@ import { computeKanbanFlowAnalytics } from '@/lib/kanban/compute-flow-analytics'
 import { loadRecentActivity } from '@/lib/activity/load-recent-activity'
 import { KanbanProcessChrome } from '@/components/processes/kanban-process-chrome'
 import { KanbanSummaryPageClient } from '@/components/kanban/kanban-summary-page-client'
+import { ScrumProcessChrome } from '@/components/processes/scrum-process-chrome'
+import { ScrumSummaryPageClient } from '@/components/scrum/scrum-summary-page-client'
+import { computeScrumProcessSummary } from '@/lib/scrum/compute-process-summary'
+import { computeSprintBurndown } from '@/lib/scrum/compute-sprint-burndown'
 import { processWorkspacePath } from '@/lib/processes/process-workspace-routes'
 
 const SUMMARY_TASK_COLUMNS =
@@ -74,17 +78,167 @@ export default async function KanbanProcessSummaryPage({
     .maybeSingle()
   if (!process) notFound()
 
-  if (process.methodology !== 'kanban') {
+  if (process.methodology !== 'kanban' && process.methodology !== 'scrum') {
     return redirect(processWorkspacePath(params.id, phase.id, process.id, process.methodology))
   }
-
-  await ensureKanbanPhaseWorkflowStructure(supabase as any, orgId, phase.id)
 
   const { data: allProcesses } = await supabase
     .from('phase_processes')
     .select('id,name,methodology,order_index')
     .eq('phase_id', phase.id)
     .order('order_index', { ascending: true })
+
+  const allProcessesList = (allProcesses ?? []) as { id: string; name: string; methodology: string }[]
+
+  if (process.methodology === 'scrum') {
+    const { data: sprints } = await supabase
+      .from('sprints')
+      .select('id,name,start_date,end_date,status,story_points_total')
+      .eq('project_id', project.id)
+      .eq('phase_id', phase.id)
+      .eq('organization_id', orgId)
+      .eq('process_id', process.id)
+      .order('start_date', { ascending: false })
+
+    const sprintIds = (sprints ?? []).map((s) => s.id)
+
+    let processTasks: Record<string, unknown>[] = []
+    const taskCols =
+      'id,title,sprint_id,completed_at,story_points,priority,blocked,blocked_reason,created_at,updated_at,due_date'
+    const taskRes = await supabase
+      .from('tasks')
+      .select(taskCols)
+      .eq('project_id', project.id)
+      .eq('organization_id', orgId)
+      .eq('process_id', process.id)
+    if (!taskRes.error) {
+      processTasks = (taskRes.data ?? []) as Record<string, unknown>[]
+    } else {
+      const msg = String(taskRes.error.message ?? '').toLowerCase()
+      if (msg.includes('blocked') || taskRes.error.code === '42703') {
+        const fallbackRes = await supabase
+          .from('tasks')
+          .select(
+            'id,title,sprint_id,completed_at,story_points,priority,created_at,updated_at,due_date'
+          )
+          .eq('project_id', project.id)
+          .eq('organization_id', orgId)
+          .eq('process_id', process.id)
+        if (!fallbackRes.error) processTasks = (fallbackRes.data ?? []) as Record<string, unknown>[]
+      }
+    }
+
+    const tasksBySprint: Record<
+      string,
+      { total: number; completed: number; points_completed: number }
+    > = {}
+    for (const t of processTasks) {
+      const sid = t.sprint_id as string | null
+      if (!sid) continue
+      tasksBySprint[sid] ||= { total: 0, completed: 0, points_completed: 0 }
+      tasksBySprint[sid].total += 1
+      if (t.completed_at) {
+        tasksBySprint[sid].completed += 1
+        tasksBySprint[sid].points_completed += Number(t.story_points ?? 0)
+      }
+    }
+
+    const sprintRows = (sprints ?? []).map((s) => {
+      const stats = tasksBySprint[s.id] || { total: 0, completed: 0, points_completed: 0 }
+      return {
+        id: s.id,
+        name: s.name,
+        status: s.status as 'planned' | 'active' | 'closed',
+        start_date: s.start_date,
+        end_date: s.end_date,
+        story_points_total: Number(s.story_points_total ?? 0),
+        tasks_total: stats.total,
+        tasks_completed: stats.completed,
+        points_completed: stats.points_completed,
+      }
+    })
+
+    const backlogTasks = processTasks.filter((t) => !t.sprint_id)
+    const backlogStoryPoints = backlogTasks.reduce((s, t) => s + Number(t.story_points ?? 0), 0)
+
+    const summary = computeScrumProcessSummary(
+      processTasks.map((t) => ({
+        id: String(t.id),
+        sprint_id: (t.sprint_id as string | null) ?? null,
+        completed_at: (t.completed_at as string | null) ?? null,
+        story_points: t.story_points != null ? Number(t.story_points) : null,
+        priority: String(t.priority ?? 'medium'),
+        blocked: Boolean(t.blocked),
+        assignee_id: null,
+        created_at: String(t.created_at ?? new Date().toISOString()),
+        updated_at: (t.updated_at as string | null) ?? null,
+        due_date: (t.due_date as string | null) ?? null,
+      })),
+      sprintRows,
+      {
+        backlogTaskCount: backlogTasks.length,
+        backlogStoryPoints,
+        blockedWithTitles: processTasks
+          .filter((t) => t.blocked)
+          .map((t) => ({
+            id: String(t.id),
+            title: String(t.title ?? 'Blocked item'),
+            blocked_reason: (t.blocked_reason as string | null) ?? null,
+          })),
+      }
+    )
+
+    const activeSprintId = summary.activeSprint?.id ?? null
+    const activeSprintMeta = activeSprintId
+      ? (sprints ?? []).find((s) => s.id === activeSprintId)
+      : null
+    const burndown =
+      activeSprintMeta && activeSprintId
+        ? computeSprintBurndown(
+            {
+              start_date: activeSprintMeta.start_date,
+              end_date: activeSprintMeta.end_date,
+              story_points_total: Number(activeSprintMeta.story_points_total ?? 0),
+            },
+            processTasks
+              .filter((t) => t.sprint_id === activeSprintId)
+              .map((t) => ({
+                story_points: t.story_points != null ? Number(t.story_points) : null,
+                completed_at: (t.completed_at as string | null) ?? null,
+              }))
+          )
+        : { points: [], scopePoints: 0 }
+
+    const recentActivity = await loadRecentActivity(supabase as any, {
+      organizationId: orgId,
+      projectId: project.id,
+      processId: process.id,
+      limit: 12,
+    })
+
+    return (
+      <ScrumProcessChrome
+        projectId={project.id}
+        phaseId={phase.id}
+        processId={process.id}
+        processName={process.name}
+        currentTab="summary"
+        allProcesses={allProcessesList}
+      >
+        <ScrumSummaryPageClient
+          projectId={project.id}
+          phaseId={phase.id}
+          processId={process.id}
+          processName={process.name}
+          summary={summary}
+          burndown={burndown}
+          recentActivity={recentActivity}
+        />
+      </ScrumProcessChrome>
+    )
+  }
+
+  await ensureKanbanPhaseWorkflowStructure(supabase as any, orgId, phase.id)
 
   const { data: stages } = await supabase
     .from('workflow_stages')
@@ -205,7 +359,7 @@ export default async function KanbanProcessSummaryPage({
       processId={process.id}
       processName={process.name}
       currentTab="summary"
-      allProcesses={(allProcesses ?? []) as { id: string; name: string; methodology: string }[]}
+      allProcesses={allProcessesList}
     >
       <KanbanSummaryPageClient
         projectId={project.id}

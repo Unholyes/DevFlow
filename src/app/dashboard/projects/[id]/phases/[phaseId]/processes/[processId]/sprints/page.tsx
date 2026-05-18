@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { SprintsPageClient, type SprintWithStats } from '@/components/sprints/sprints-page-client'
+import { ScrumProcessChrome } from '@/components/processes/scrum-process-chrome'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 
 export default async function ProcessSprintsPage({
@@ -54,6 +55,12 @@ export default async function ProcessSprintsPage({
     return redirect(processWorkspacePath(params.id, phase.id, process.id, process.methodology))
   }
 
+  const { data: allProcesses } = await supabase
+    .from('phase_processes')
+    .select('id,name,methodology,order_index')
+    .eq('phase_id', phase.id)
+    .order('order_index', { ascending: true })
+
   const { data: sprints } = await supabase
     .from('sprints')
     .select('id,name,start_date,end_date,status,story_points_total')
@@ -105,15 +112,25 @@ export default async function ProcessSprintsPage({
   })
 
   return (
-    <SprintsPageClient
+    <ScrumProcessChrome
       projectId={project.id}
       phaseId={phase.id}
       processId={process.id}
       processName={process.name}
-      processMethod={process.methodology}
-      sprints={sprintsWithStats}
-      backlogTasks={(backlogTasks ?? []) as any}
-    />
+      currentTab="sprints"
+      allProcesses={(allProcesses ?? []) as { id: string; name: string; methodology: string }[]}
+    >
+      <SprintsPageClient
+        projectId={project.id}
+        phaseId={phase.id}
+        processId={process.id}
+        processName={process.name}
+        processMethod={process.methodology}
+        sprints={sprintsWithStats}
+        backlogTasks={(backlogTasks ?? []) as any}
+        chromeEmbedded
+      />
+    </ScrumProcessChrome>
   )
 }
 

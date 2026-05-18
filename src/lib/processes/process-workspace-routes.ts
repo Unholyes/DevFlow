@@ -8,7 +8,7 @@ export function processWorkspacePath(
   methodology: ProcessMethodology | string
 ) {
   const base = `/dashboard/projects/${projectId}/phases/${phaseId}/processes/${processId}`
-  if (methodology === 'scrum') return `${base}/sprints`
+  if (methodology === 'scrum') return `${base}/summary`
   if (methodology === 'kanban') return `${base}/summary`
   return `${base}/board`
 }
@@ -23,6 +23,23 @@ export function processBoardPath(projectId: string, phaseId: string, processId: 
 
 export function processBacklogPath(projectId: string, phaseId: string, processId: string) {
   return `/dashboard/projects/${projectId}/phases/${phaseId}/processes/${processId}/backlog`
+}
+
+export function processSprintsPath(projectId: string, phaseId: string, processId: string) {
+  return `/dashboard/projects/${projectId}/phases/${phaseId}/processes/${processId}/sprints`
+}
+
+export function processSprintPlanPath(projectId: string, phaseId: string, processId: string) {
+  return `/dashboard/projects/${projectId}/phases/${phaseId}/processes/${processId}/sprints/plan`
+}
+
+export function processSprintDetailPath(
+  projectId: string,
+  phaseId: string,
+  processId: string,
+  sprintId: string
+) {
+  return `/dashboard/projects/${projectId}/phases/${phaseId}/processes/${processId}/sprints/${sprintId}`
 }
 
 /** Link target when switching between processes in the phase (respects methodology). */

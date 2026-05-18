@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { ProductBacklogPageClient } from '@/components/backlog/product-backlog-page-client'
 import { KanbanProcessChrome } from '@/components/processes/kanban-process-chrome'
+import { ScrumProcessChrome } from '@/components/processes/scrum-process-chrome'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { ensureKanbanPhaseWorkflowStructure } from '@/lib/kanban/ensure-default-workflow-stages'
 
@@ -250,6 +251,21 @@ export default async function ProcessBacklogPage({
       >
         {backlogClient}
       </KanbanProcessChrome>
+    )
+  }
+
+  if (process.methodology === 'scrum') {
+    return (
+      <ScrumProcessChrome
+        projectId={project.id}
+        phaseId={phase.id}
+        processId={process.id}
+        processName={process.name}
+        currentTab="backlog"
+        allProcesses={(allProcesses ?? []) as { id: string; name: string; methodology: string }[]}
+      >
+        {backlogClient}
+      </ScrumProcessChrome>
     )
   }
 

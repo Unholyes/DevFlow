@@ -1,9 +1,9 @@
-import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ArrowLeft } from 'lucide-react'
 import KanbanView from '@/components/project/KanbanView'
 import ScrumView from '@/components/project/ScrumView'
 import { KanbanProcessChrome } from '@/components/processes/kanban-process-chrome'
+import { ScrumProcessChrome } from '@/components/processes/scrum-process-chrome'
+import { processBoardPath } from '@/lib/processes/process-workspace-routes'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
@@ -136,38 +136,14 @@ export default async function ProcessBoardPage({
         : { data: [] as any[] }
 
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between gap-3">
-          <Link
-            href={`/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${params.processId}/sprints`}
-            className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Back to Sprints
-          </Link>
-          <div className="text-xs text-gray-500">
-            Process: <span className="font-semibold text-gray-900">{process.name}</span>
-          </div>
-        </div>
-
-        {(allProcesses ?? []).length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2">
-            {(allProcesses ?? []).map((p) => (
-              <Link
-                key={p.id}
-                href={`/dashboard/projects/${params.id}/phases/${params.phaseId}/processes/${p.id}/board`}
-                className={`inline-flex items-center rounded-md border px-2.5 py-1 text-xs ${
-                  p.id === process.id
-                    ? 'border-blue-200 bg-blue-50 text-blue-700'
-                    : 'border-gray-200 bg-gray-50 text-gray-700 hover:bg-white'
-                }`}
-              >
-                {p.name} ({p.methodology})
-              </Link>
-            ))}
-          </div>
-        ) : null}
-
+      <ScrumProcessChrome
+        projectId={project.id}
+        phaseId={phase.id}
+        processId={process.id}
+        processName={process.name}
+        currentTab="board"
+        allProcesses={(allProcesses ?? []) as { id: string; name: string; methodology: string }[]}
+      >
         <ScrumView
           projectId={project.id}
           phaseId={phase.id}
@@ -181,7 +157,7 @@ export default async function ProcessBoardPage({
           tasks={(sprintTasks ?? []) as any}
           teams={teamsForOrg}
         />
-      </div>
+      </ScrumProcessChrome>
     )
   }
 

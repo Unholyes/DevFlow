@@ -305,8 +305,7 @@ export function ReportsAnalyticsContent({
               Process workspaces
             </CardTitle>
             <CardDescription>
-              Detailed flow metrics, status breakdown, and workload live on each process Summary (Kanban) or
-              Sprints hub (Scrum).
+              Detailed metrics live on each process Summary workspace (Kanban flow, Scrum sprints & burndown).
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -439,10 +438,10 @@ export function ReportsAnalyticsContent({
         <Card className="border-gray-200 shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg">Sprint burndown</CardTitle>
-            <CardDescription>Available on each Scrum process sprint board</CardDescription>
+            <CardDescription>Live burndown on each Scrum process Summary</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col items-center justify-center py-10 text-center text-sm text-gray-500 gap-3">
-            <p>Burndown is sprint-scoped. Select a Scrum process above and open its workspace.</p>
+            <p>Burndown is sprint-scoped. Select a Scrum process above and open its Summary workspace.</p>
             {filter.processId &&
             scope.processMetaById[filter.processId]?.methodology === 'scrum' ? (
               <Button variant="outline" size="sm" asChild>
@@ -454,7 +453,7 @@ export function ReportsAnalyticsContent({
                     'scrum'
                   )}
                 >
-                  Go to sprints
+                  Go to summary
                 </Link>
               </Button>
             ) : null}

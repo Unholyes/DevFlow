@@ -1,7 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { Plus, CheckCircle2, ArrowLeft, PlayCircle, ListTodo } from 'lucide-react'
+import { Plus, CheckCircle2, PlayCircle, ListTodo } from 'lucide-react'
+import {
+  processBacklogPath,
+  processBoardPath,
+  processSprintDetailPath,
+  processSprintPlanPath,
+  processSummaryPath,
+} from '@/lib/processes/process-workspace-routes'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 
@@ -52,6 +59,8 @@ export function SprintsPageClient(props: {
   backlogTasks?: BacklogTaskRow[]
   selectedProcessName?: string | null
   selectedMethod?: string | null
+  /** When true, chrome provides nav — hide duplicate header/stats. */
+  chromeEmbedded?: boolean
 }) {
   // Treat "planned" as active for MVP until we add a dedicated planned view.
   const activeSprints = props.sprints.filter((s) => s.status === 'active' || s.status === 'planned')
@@ -60,31 +69,39 @@ export function SprintsPageClient(props: {
   const averageVelocity = props.sprints.length ? Math.round(totalStoryPoints / props.sprints.length) : 0
   const backlogTasks = props.backlogTasks ?? []
   const backlogStoryPoints = backlogTasks.reduce((sum, t) => sum + Number(t.story_points ?? 0), 0)
+  const embedded = props.chromeEmbedded === true && Boolean(props.processId)
+  const planHref = props.processId
+    ? processSprintPlanPath(props.projectId, props.phaseId, props.processId)
+    : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/plan`
+  const backlogHref = props.processId
+    ? processBacklogPath(props.projectId, props.phaseId, props.processId)
+    : null
+  const summaryHref = props.processId
+    ? processSummaryPath(props.projectId, props.phaseId, props.processId)
+    : null
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4 mb-4">
-        <Link
-          href={`/dashboard/projects/${props.projectId}/phases/${props.phaseId}`}
-          className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Phase Overview
-        </Link>
-      </div>
-
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 pb-6">
+      <div className="flex flex-wrap justify-between items-start gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Sprints</h1>
-          <p className="text-gray-600 mt-1">Manage and track sprints for this phase</p>
+          <p className="text-gray-600 mt-1 text-sm">
+            {embedded
+              ? 'Create, plan, and review sprints — metrics live on Summary.'
+              : 'Manage and track sprints for this phase'}
+          </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {embedded && summaryHref ? (
+            <Link
+              href={summaryHref}
+              className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Summary & metrics
+            </Link>
+          ) : null}
           <Link
-            href={
-              props.processId
-                ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints/plan`
-                : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/plan`
-            }
+            href={planHref}
             className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
           >
             <Plus className="h-4 w-4" />
@@ -93,6 +110,8 @@ export function SprintsPageClient(props: {
         </div>
       </div>
 
+      {!embedded ? (
+        <>
       {props.processName || props.selectedProcessName ? (
         <Card className="border-blue-200 bg-blue-50 shadow-sm">
           <CardContent className="py-4">
@@ -143,6 +162,8 @@ export function SprintsPageClient(props: {
           </CardContent>
         </Card>
       </div>
+        </>
+      ) : null}
 
       <Card className="border-gray-200 shadow-sm">
         <CardHeader>
@@ -157,16 +178,16 @@ export function SprintsPageClient(props: {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              {props.processId ? (
+              {props.processId && backlogHref ? (
                 <>
                   <Link
-                    href={`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/backlog`}
+                    href={backlogHref}
                     className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     View backlog
                   </Link>
                   <Link
-                    href={`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints/plan`}
+                    href={planHref}
                     className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
                   >
                     Plan sprint
@@ -249,7 +270,7 @@ export function SprintsPageClient(props: {
                       <Link
                         href={
                           props.processId
-                            ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/board?sprintId=${encodeURIComponent(
+                            ? `${processBoardPath(props.projectId, props.phaseId, props.processId)}?sprintId=${encodeURIComponent(
                                 sprint.id
                               )}`
                             : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${sprint.id}`
@@ -323,9 +344,12 @@ export function SprintsPageClient(props: {
                   <Link
                     href={
                       props.processId
-                        ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints/${encodeURIComponent(
+                        ? processSprintDetailPath(
+                            props.projectId,
+                            props.phaseId,
+                            props.processId,
                             sprint.id
-                          )}`
+                          )
                         : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${sprint.id}`
                     }
                     className="text-sm text-blue-600 hover:text-blue-700 font-medium"
