@@ -41,6 +41,12 @@ export async function GET(request: NextRequest) {
   }
 
   if (code) {
+    // Invite links must not reuse an existing browser session (e.g. the admin who sent the invite).
+    const isInviteAcceptFlow = next.startsWith('/auth/invite/')
+    if (isInviteAcceptFlow) {
+      await supabase.auth.signOut()
+    }
+
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (error) {
       redirectTo.searchParams.set('error', 'auth_callback_failed')
@@ -49,6 +55,11 @@ export async function GET(request: NextRequest) {
   }
 
   // OTP link path
+  const isInviteAcceptFlow = next.startsWith('/auth/invite/')
+  if (isInviteAcceptFlow) {
+    await supabase.auth.signOut()
+  }
+
   const otpType = (typeParam || 'magiclink') as EmailOtpType
   const { error: verifyError } = await supabase.auth.verifyOtp({
     token_hash: token!,

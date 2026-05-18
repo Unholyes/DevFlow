@@ -80,6 +80,32 @@ export async function POST(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const { data: inviteRow, error: inviteLookupError } = await admin
+    .from('team_invitations')
+    .select('email,status')
+    .eq('token', token)
+    .limit(1)
+    .maybeSingle()
+
+  if (inviteLookupError) {
+    return NextResponse.json({ error: 'Failed to verify invitation' }, { status: 500 })
+  }
+  if (!inviteRow) {
+    return NextResponse.json({ error: 'Invalid or expired invitation' }, { status: 404 })
+  }
+
+  const invitedEmail = String(inviteRow.email ?? '').trim().toLowerCase()
+  const sessionEmail = String(user.email ?? '').trim().toLowerCase()
+  if (!invitedEmail || !sessionEmail || invitedEmail !== sessionEmail) {
+    return NextResponse.json(
+      {
+        error:
+          'This invitation is for a different email address. Open the invite link from the email that received the invitation.',
+      },
+      { status: 403 }
+    )
+  }
+
   // Accept via SECURITY DEFINER function (handles status update + membership insert).
   const { data: result, error } = await admin.rpc('accept_team_invitation', {
     invitation_token: token,
