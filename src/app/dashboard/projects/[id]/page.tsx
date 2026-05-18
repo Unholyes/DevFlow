@@ -10,6 +10,7 @@ import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { userCanManageProjectMembers } from '@/lib/permissions/project-members-permissions'
 import type { ProjectStatus } from '@/types'
+import { computePhaseProgressPercent } from '@/lib/projects/compute-phase-progress'
 
 const sdlcBadgeColors = {
   Scrum: 'bg-blue-100 text-blue-700 border-blue-200',
@@ -137,8 +138,9 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     }
   }
 
-  // Per-phase progress (task completion %) for the project overview cards.
-  // Uses the same "done" semantics as the phase page: completed_at OR stage marked is_done.
+  // Per-phase progress for timeline cards: % of processes fully complete (see compute-phase-progress).
+  // Project header stats below still use task totals across all phases.
+  // Done semantics match the phase page: completed_at OR stage marked is_done.
   const phaseIdsForProgress = (phases ?? []).map((phase) => phase.id)
   const { data: workflowStagesForProgress } =
     phaseIdsForProgress.length > 0
@@ -161,7 +163,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     stageIdsForProgress.length > 0
       ? await supabase
           .from('tasks')
-          .select('workflow_stage_id,completed_at')
+          .select('workflow_stage_id,completed_at,process_id')
           .eq('organization_id', orgId)
           .eq('project_id', project.id)
           .in('workflow_stage_id', stageIdsForProgress)
@@ -169,7 +171,13 @@ export default async function ProjectPage({ params }: { params: { id: string } }
 
   const phaseTotals = new Map<string, { total: number; done: number }>()
   for (const pid of phaseIdsForProgress) phaseTotals.set(pid, { total: 0, done: 0 })
-  for (const t of (tasksForProgress ?? []) as { workflow_stage_id: string; completed_at: string | null }[]) {
+  const progressTasks = (tasksForProgress ?? []) as {
+    workflow_stage_id: string
+    completed_at: string | null
+    process_id: string | null
+  }[]
+
+  for (const t of progressTasks) {
     const pid = stageIdToPhaseId.get(t.workflow_stage_id)
     if (!pid) continue
     const agg = phaseTotals.get(pid) ?? { total: 0, done: 0 }
@@ -259,12 +267,14 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       dbStatus: p.status as 'active' | 'completed' | 'archived',
       isGated: !!p.is_gated,
       processes,
-      progress: (() => {
-        if (p.status === 'completed') return 100
-        const agg = phaseTotals.get(p.id)
-        if (!agg?.total) return 0
-        return Math.round((agg.done / agg.total) * 100)
-      })(),
+      progress: computePhaseProgressPercent({
+        phaseId: p.id,
+        phaseStatus: p.status,
+        processes: phaseProcesses ?? [],
+        tasks: progressTasks,
+        stageIdToPhaseId,
+        doneStageIds,
+      }),
     }
   })
 
