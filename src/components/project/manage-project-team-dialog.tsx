@@ -24,12 +24,15 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import {
-  FUNCTIONAL_ROLE_OPTIONS,
   PROJECT_ACCESS_LEVELS,
-} from '@/lib/permissions/project-access-level'
+  PROJECT_FUNCTIONAL_ROLES,
+  getProjectTemplatePermissionLabel,
+  type ProjectAccessLevel,
+} from '@/lib/permissions/project-template-permissions'
 import { cn } from '@/lib/utils'
-import { ChevronDown, Info, Search, Users, User, UsersRound, X } from 'lucide-react'
-import { useId, useMemo, useState } from 'react'
+import { ChevronDown, Info, Loader2, Search, Users, User, UsersRound, X } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 
 type AssigneeKind = 'user' | 'team'
 
@@ -81,19 +84,9 @@ function InfoHint({ text }: { text: string }) {
   )
 }
 
-/** Placeholder directory until wired to Supabase (`profiles`, `teams`). */
-function useMockAssignees(organizationId: string | undefined): AssigneeOption[] {
-  return useMemo(
-    () => [
-      { kind: 'user', id: 'user-1', label: 'Karen Guanzon', subtitle: 'karen@example.com' },
-      { kind: 'user', id: 'user-2', label: 'Alex Rivera', subtitle: 'alex@example.com' },
-      { kind: 'user', id: 'user-3', label: 'Sam Patel', subtitle: 'sam@example.com' },
-      { kind: 'team', id: 'team-1', label: 'Platform Team', subtitle: organizationId ? 'Workspace team' : 'Team' },
-      { kind: 'team', id: 'team-2', label: 'QA Guild', subtitle: 'Workspace team' },
-      { kind: 'team', id: 'team-3', label: 'Mobile Squad', subtitle: 'Workspace team' },
-    ],
-    [organizationId],
-  )
+function parseAccessLevel(value: string): ProjectAccessLevel {
+  if (value === 'Admin' || value === 'Editor' || value === 'Viewer') return value
+  return 'Editor'
 }
 
 export function ManageProjectTeamDialog({
@@ -103,33 +96,131 @@ export function ManageProjectTeamDialog({
 }: {
   projectId: string
   projectName: string
-  /** Used when wiring search to org members / teams */
-  organizationId?: string
+  organizationId: string
 }) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [assignee, setAssignee] = useState<AssigneeOption | null>(null)
-  const [accessLevel, setAccessLevel] = useState<string>('Editor')
+  const [accessLevel, setAccessLevel] = useState<ProjectAccessLevel>('Editor')
   const [functionalRole, setFunctionalRole] = useState<string>('project_manager')
+  const [assigneeOptions, setAssigneeOptions] = useState<AssigneeOption[]>([])
+  const [projectTemplatePermissions, setProjectTemplatePermissions] = useState<
+    Record<ProjectAccessLevel, string[]>
+  >({ Admin: [], Editor: [], Viewer: [] })
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const baseId = useId()
 
-  const allOptions = useMockAssignees(organizationId)
+  const resetForm = useCallback(() => {
+    setAssignee(null)
+    setSearch('')
+    setPickerOpen(false)
+    setAccessLevel('Editor')
+    setFunctionalRole('project_manager')
+    setSaveError(null)
+  }, [])
+
+  const loadAssignees = useCallback(async () => {
+    setIsLoadingOptions(true)
+    setLoadError(null)
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/members`, {
+        credentials: 'same-origin',
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(typeof json.error === 'string' ? json.error : 'Failed to load assignees')
+      }
+      const list = Array.isArray(json.assignees) ? (json.assignees as AssigneeOption[]) : []
+      setAssigneeOptions(list)
+      if (json.projectTemplatePermissions && typeof json.projectTemplatePermissions === 'object') {
+        setProjectTemplatePermissions(json.projectTemplatePermissions as Record<ProjectAccessLevel, string[]>)
+      }
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Failed to load organization users and teams')
+      setAssigneeOptions([])
+    } finally {
+      setIsLoadingOptions(false)
+    }
+  }, [projectId])
+
+  useEffect(() => {
+    if (!open) return
+    void loadAssignees()
+  }, [open, loadAssignees])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return allOptions
-    return allOptions.filter(
+    if (!q) return assigneeOptions
+    return assigneeOptions.filter(
       (o) =>
         o.label.toLowerCase().includes(q) ||
         (o.subtitle && o.subtitle.toLowerCase().includes(q)) ||
         o.kind.toLowerCase().includes(q),
     )
-  }, [allOptions, search])
+  }, [assigneeOptions, search])
+
+  const effectivePermissions = useMemo(
+    () => projectTemplatePermissions[accessLevel] ?? [],
+    [accessLevel, projectTemplatePermissions],
+  )
+
+  const canSave = Boolean(assignee) && !isSaving && !isLoadingOptions
+
+  const handleSave = async (andNew: boolean) => {
+    if (!assignee) {
+      setSaveError('Select a user or team to assign')
+      return
+    }
+
+    setIsSaving(true)
+    setSaveError(null)
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          kind: assignee.kind,
+          assigneeId: assignee.id,
+          project_access_level: accessLevel,
+          functional_role: functionalRole,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(typeof json.error === 'string' ? json.error : 'Failed to save assignment')
+      }
+
+      router.refresh()
+
+      if (andNew) {
+        resetForm()
+        void loadAssignees()
+      } else {
+        setOpen(false)
+        resetForm()
+      }
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Failed to save assignment')
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   return (
     <TooltipProvider delayDuration={200}>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next)
+          if (!next) resetForm()
+        }}
+      >
         <DialogTrigger asChild>
           <Button variant="outline" size="sm" type="button">
             <Users className="mr-2 h-4 w-4" />
@@ -174,7 +265,8 @@ export function ManageProjectTeamDialog({
 
                 <div>
                   <FieldLabel required>User or team</FieldLabel>
-                  <InfoHint text="Search organization members and teams. Saving assignments will be wired to the database in a follow-up." />
+                  <InfoHint text="Organization members and workspace teams. Assigning a team adds each team member to this project with the access level and functional role below." />
+                  {loadError ? <p className="mt-1 text-sm text-red-600">{loadError}</p> : null}
                   <div className="relative mt-1">
                     <button
                       type="button"
@@ -182,13 +274,20 @@ export function ManageProjectTeamDialog({
                       className={cn(
                         'flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-left text-sm',
                         !assignee && 'text-muted-foreground',
+                        isLoadingOptions && 'opacity-60',
                       )}
-                      onClick={() => setPickerOpen((v) => !v)}
+                      onClick={() => !isLoadingOptions && setPickerOpen((v) => !v)}
+                      disabled={isLoadingOptions}
                       aria-expanded={pickerOpen}
                       aria-haspopup="listbox"
                     >
                       <span className="flex min-w-0 flex-1 items-center gap-2">
-                        {assignee ? (
+                        {isLoadingOptions ? (
+                          <>
+                            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-gray-400" />
+                            <span>Loading…</span>
+                          </>
+                        ) : assignee ? (
                           <>
                             {assignee.kind === 'user' ? (
                               <User className="h-4 w-4 shrink-0 text-gray-500" />
@@ -231,9 +330,11 @@ export function ManageProjectTeamDialog({
                           autoFocus
                         />
                       </div>
-                      <ul className="max-h-52 overflow-auto py-1">
+                      <ul className="max-h-52 overflow-auto py-1" role="listbox">
                         {filtered.length === 0 ? (
-                          <li className="px-3 py-2 text-sm text-gray-500">No matches.</li>
+                          <li className="px-3 py-2 text-sm text-gray-500">
+                            {isLoadingOptions ? 'Loading…' : 'No matches.'}
+                          </li>
                         ) : (
                           filtered.map((opt) => (
                             <li key={`${opt.kind}-${opt.id}`}>
@@ -278,9 +379,9 @@ export function ManageProjectTeamDialog({
                   <div>
                     <FieldLabel className="inline-flex items-center" htmlFor={`${baseId}-access`}>
                       Project access level
-                      <InfoHint text="Controls project-scoped permissions (sprints, gates, repo access, etc.). One level per person per project. Independent of workspace Owner/Admin/Member." />
+                      <InfoHint text="Uses the org template (Admin / Editor / Viewer) configured under Settings → Permissions. This controls project-scoped permissions." />
                     </FieldLabel>
-                    <Select value={accessLevel} onValueChange={setAccessLevel}>
+                    <Select value={accessLevel} onValueChange={(v) => setAccessLevel(parseAccessLevel(v))}>
                       <SelectTrigger id={`${baseId}-access`} className="h-9">
                         <SelectValue placeholder="Access level" />
                       </SelectTrigger>
@@ -296,15 +397,15 @@ export function ManageProjectTeamDialog({
                   <div>
                     <FieldLabel className="inline-flex items-center" htmlFor={`${baseId}-functional`}>
                       Functional role
-                      <InfoHint text="Descriptive tag only (e.g. QA). Does not grant permissions by itself and does not replace workspace system roles." />
+                      <InfoHint text="Descriptive tag only (e.g. QA Engineer). Does not grant permissions; use project access level for that." />
                     </FieldLabel>
                     <Select value={functionalRole} onValueChange={setFunctionalRole}>
                       <SelectTrigger id={`${baseId}-functional`} className="h-9">
                         <SelectValue placeholder="Functional role" />
                       </SelectTrigger>
                       <SelectContent>
-                        {FUNCTIONAL_ROLE_OPTIONS.map((r) => (
-                          <SelectItem key={r.value} value={r.value}>
+                        {PROJECT_FUNCTIONAL_ROLES.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
                             {r.label}
                           </SelectItem>
                         ))}
@@ -312,7 +413,25 @@ export function ManageProjectTeamDialog({
                     </Select>
                   </div>
                 </div>
+                <div className="rounded-md border border-blue-100 bg-blue-50/50 px-3 py-3">
+                  <p className="text-xs font-semibold text-blue-900">
+                    Permissions from <span className="font-medium">{accessLevel}</span> template
+                  </p>
+                  {effectivePermissions.length === 0 ? (
+                    <p className="mt-1 text-xs text-blue-800">No project-scoped permissions (read-only).</p>
+                  ) : (
+                    <ul className="mt-2 max-h-28 space-y-1 overflow-auto text-xs text-blue-900">
+                      {effectivePermissions.map((perm) => (
+                        <li key={perm} className="list-inside list-disc">
+                          {getProjectTemplatePermissionLabel(perm)}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </section>
+
+              {saveError ? <p className="text-sm text-red-600">{saveError}</p> : null}
             </div>
           </div>
 
@@ -320,13 +439,34 @@ export function ManageProjectTeamDialog({
             role="group"
             className="flex shrink-0 flex-row flex-wrap items-center justify-end gap-2 border-t border-gray-200 bg-gray-50 px-6 py-4"
           >
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isSaving}>
               Cancel
             </Button>
-            <Button type="button" variant="outline">
-              Save &amp; New
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!canSave}
+              onClick={() => void handleSave(true)}
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                'Save & New'
+              )}
             </Button>
-            <Button type="button">Save</Button>
+            <Button type="button" disabled={!canSave} onClick={() => void handleSave(false)}>
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                'Save'
+              )}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

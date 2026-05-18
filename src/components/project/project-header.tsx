@@ -55,11 +55,13 @@ export function ProjectHeader({ organizationId, project }: ProjectHeaderProps) {
             </div>
           </div>
           <div className="flex gap-3 ml-4">
-            <ManageProjectTeamDialog
-              organizationId={organizationId}
-              projectId={project.id}
-              projectName={project.name}
-            />
+            {organizationId ? (
+              <ManageProjectTeamDialog
+                organizationId={organizationId}
+                projectId={project.id}
+                projectName={project.name}
+              />
+            ) : null}
             <Button asChild variant="outline" size="sm">
               <Link href={`/dashboard/projects/${project.id}/settings`}>
                 <Settings className="h-4 w-4 mr-2" />

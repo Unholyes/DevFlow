@@ -4,6 +4,7 @@ import { getTenantSlug } from '@/lib/tenant/server'
 import { SprintsPageClient, type SprintWithStats } from '@/components/sprints/sprints-page-client'
 import { ScrumProcessChrome } from '@/components/processes/scrum-process-chrome'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
+import { userCanManageSprints } from '@/lib/permissions/sprint-permissions'
 
 export default async function ProcessSprintsPage({
   params,
@@ -111,6 +112,24 @@ export default async function ProcessSprintsPage({
     } as SprintWithStats
   })
 
+  const canManageSprints = await userCanManageSprints(supabase, {
+    organizationId: orgId,
+    userId: user.id,
+    projectId: project.id,
+  })
+
+  const { data: sprintStartStage } = await supabase
+    .from('workflow_stages')
+    .select('id,is_backlog,is_done,stage_order')
+    .eq('phase_id', phase.id)
+    .eq('organization_id', orgId)
+    .order('stage_order', { ascending: true })
+
+  const sprintStartStageId =
+    (sprintStartStage ?? []).find((s) => !s.is_backlog && !s.is_done)?.id ??
+    (sprintStartStage ?? []).find((s) => !s.is_backlog)?.id ??
+    null
+
   return (
     <ScrumProcessChrome
       projectId={project.id}
@@ -129,6 +148,8 @@ export default async function ProcessSprintsPage({
         sprints={sprintsWithStats}
         backlogTasks={(backlogTasks ?? []) as any}
         chromeEmbedded
+        canManageSprints={canManageSprints}
+        sprintStartStageId={sprintStartStageId ?? undefined}
       />
     </ScrumProcessChrome>
   )

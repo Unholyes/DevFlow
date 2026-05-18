@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { SprintPlanningPageClient } from '@/components/sprints/sprint-planning-page-client'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
+import { userCanCreateSprintDraft, userCanManageSprints } from '@/lib/permissions/sprint-permissions'
 
 export default async function SprintPlanningPage({
   params,
@@ -97,5 +98,30 @@ export default async function SprintPlanningPage({
     .is('sprint_id', null)
     .order('position', { ascending: true })
 
-  return <SprintPlanningPageClient projectId={project.id} phaseId={phase.id} backlogTasks={(tasks ?? []) as any} />
+  const [canCreateSprintDraft, canManageSprints] = await Promise.all([
+    userCanCreateSprintDraft(supabase, {
+      organizationId: orgId,
+      userId: user.id,
+      projectId: project.id,
+    }),
+    userCanManageSprints(supabase, {
+      organizationId: orgId,
+      userId: user.id,
+      projectId: project.id,
+    }),
+  ])
+
+  if (!canCreateSprintDraft && !canManageSprints) {
+    return redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}/sprints`)
+  }
+
+  return (
+    <SprintPlanningPageClient
+      projectId={project.id}
+      phaseId={phase.id}
+      backlogTasks={(tasks ?? []) as any}
+      canCreateSprintDraft={canCreateSprintDraft}
+      canManageSprints={canManageSprints}
+    />
+  )
 }

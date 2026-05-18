@@ -9,9 +9,10 @@ import {
   filterToGlobalAccountPermissions,
   isGlobalAccountPermissionId,
 } from '@/lib/permissions/global-account-permissions'
-import { PROJECT_ACCESS_CAPABILITY_MATRIX, PROJECT_ACCESS_LEVELS, type ProjectAccessLevel } from '@/lib/permissions/project-access-level'
+import { PROJECT_ACCESS_LEVELS, type ProjectAccessLevel } from '@/lib/permissions/project-access-level'
 import {
   ORDERED_PROJECT_TEMPLATE_GROUPS,
+  defaultProjectTemplatePermissions,
   filterToProjectTemplatePermissions,
   isProjectTemplatePermissionId,
   type ProjectTemplatePermissionId,
@@ -116,8 +117,15 @@ const ORDERED_GLOBAL_PERMISSION_GROUPS: Array<[GlobalPermissionCategory, typeof 
     return [c, perms] as [GlobalPermissionCategory, typeof GLOBAL_ACCOUNT_PERMISSIONS]
   }).filter((entry) => entry[1].length > 0)
 
-function defaultProjectTemplatePermissionsFromMatrix(level: ProjectAccessLevel): string[] {
-  return filterToProjectTemplatePermissions(PROJECT_ACCESS_CAPABILITY_MATRIX[level])
+function isMissingProjectTemplatesTable(error: unknown) {
+  const code = typeof error === 'object' && error !== null ? String((error as { code?: string }).code ?? '') : ''
+  const message =
+    typeof error === 'object' && error !== null ? String((error as { message?: string }).message ?? '') : String(error ?? '')
+  return (
+    code === 'PGRST205' ||
+    message.includes('organization_project_access_templates') ||
+    message.includes('schema cache')
+  )
 }
 
 export function PermissionsPageContent({
@@ -152,7 +160,6 @@ export function PermissionsPageContent({
     Editor: [],
     Viewer: [],
   })
-
   const [isNewRoleOpen, setIsNewRoleOpen] = useState(false)
   const [newRoleName, setNewRoleName] = useState('')
   const [isCreating, setIsCreating] = useState(false)
@@ -282,20 +289,20 @@ export function PermissionsPageContent({
           Editor: [],
           Viewer: [],
         }
-        if (!projectTemplatesError) {
-          for (const level of PROJECT_ACCESS_LEVELS) {
-            const row = (projectTemplates ?? []).find(
-              (r: { access_level?: string }) => String(r?.access_level ?? '') === level,
-            ) as { access_level?: string; permissions?: unknown } | undefined
-            if (row) {
-              nextProjectTemplates[level] = filterToProjectTemplatePermissions(row.permissions)
-            } else {
-              nextProjectTemplates[level] = defaultProjectTemplatePermissionsFromMatrix(level)
-            }
-          }
-        } else {
-          for (const level of PROJECT_ACCESS_LEVELS) {
-            nextProjectTemplates[level] = defaultProjectTemplatePermissionsFromMatrix(level)
+        if (projectTemplatesError && isMissingProjectTemplatesTable(projectTemplatesError)) {
+          throw new Error(
+            'Project access templates table is missing. Apply migration supabase/migrations/20260512140000_organization_project_access_templates.sql to your database, then reload.',
+          )
+        }
+
+        for (const level of PROJECT_ACCESS_LEVELS) {
+          const row = (projectTemplates ?? []).find(
+            (r: { access_level?: string }) => String(r?.access_level ?? '') === level,
+          ) as { access_level?: string; permissions?: unknown } | undefined
+          if (row) {
+            nextProjectTemplates[level] = filterToProjectTemplatePermissions(row.permissions)
+          } else {
+            nextProjectTemplates[level] = defaultProjectTemplatePermissions(level)
           }
         }
 
@@ -780,6 +787,7 @@ export function PermissionsPageContent({
               )
             })}
           </div>
+
         </div>
 
         {/* Main */}

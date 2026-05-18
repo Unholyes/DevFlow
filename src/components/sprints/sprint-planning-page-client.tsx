@@ -36,7 +36,15 @@ export function SprintPlanningPageClient(props: {
   backlogStageId?: string
   sprintStartStageId?: string
   backlogTasks: Task[]
+  /** `sdlc.sprints.create` — save sprint proposals as drafts (no dates). */
+  canCreateSprintDraft?: boolean
+  /** `pm.sprints.manage` — set dates, start sprints, approve drafts. */
+  canManageSprints?: boolean
 }) {
+  const canCreateSprintDraft = props.canCreateSprintDraft === true
+  const canManageSprints = props.canManageSprints === true
+  const canSaveDraft = canCreateSprintDraft
+  const canStartSprint = canManageSprints
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -200,8 +208,99 @@ export function SprintPlanningPageClient(props: {
     })
   }
 
+  const assignTasksToSprint = async (sprintId: string, moveToBoard: boolean) => {
+    const taskResults = await Promise.all(
+      sprintTasks.map(async (t) => {
+        const res = await fetch('/api/tasks', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: t.id,
+            sprint_id: sprintId,
+            ...(props.processId ? { process_id: props.processId } : {}),
+            ...(moveToBoard && props.sprintStartStageId ? { workflow_stage_id: props.sprintStartStageId } : {}),
+          }),
+        })
+        const json = await res.json().catch(() => ({}))
+        return { ok: res.ok, status: res.status, error: json?.error as string | undefined, taskId: t.id }
+      }),
+    )
+
+    const failed = taskResults.filter((r) => !r.ok)
+    if (failed.length > 0) {
+      const first = failed[0]
+      throw new Error(first.error || `Failed to assign ${failed.length} task(s) into the sprint (status ${first.status})`)
+    }
+  }
+
+  const handleSaveDraft = async () => {
+    setFormError(null)
+    if (!canSaveDraft) {
+      setFormError('You do not have permission to save sprint drafts')
+      return
+    }
+
+    if (!sprintName.trim()) {
+      setFormError('Please enter a sprint name')
+      return
+    }
+
+    if (sprintTasks.length === 0) {
+      setFormError('Please add at least one task to the sprint')
+      return
+    }
+
+    if (sprintBacklogStoryPoints > capacity) {
+      setFormError(`Sprint exceeds capacity (${sprintBacklogStoryPoints}/${capacity} points)`)
+      return
+    }
+
+    setLoading(true)
+    try {
+      const createRes = await fetch('/api/sprints', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: props.projectId,
+          phase_id: props.phaseId,
+          process_id: props.processId,
+          name: sprintName.trim(),
+          story_points_total: sprintTasks.reduce((sum, t) => sum + (t.story_points || 0), 0),
+          status: 'draft',
+        }),
+      })
+
+      const created = await createRes.json()
+      if (!createRes.ok) throw new Error(created?.error || 'Failed to save sprint draft')
+
+      const sprintId = created?.data?.id as string | undefined
+      if (!sprintId) throw new Error('Failed to save sprint draft (missing id)')
+
+      await assignTasksToSprint(sprintId, false)
+
+      if (props.processId) {
+        router.push(
+          `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints`,
+        )
+      } else {
+        router.push(`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`)
+      }
+      router.refresh()
+    } catch (e) {
+      console.error(e)
+      setFormError(e instanceof Error ? e.message : 'Failed to save sprint draft')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleStartSprint = async () => {
     setFormError(null)
+    if (!canStartSprint) {
+      setFormError('You do not have permission to start sprints')
+      return
+    }
+
     if (!sprintName || !startDate || !endDate) {
       setFormError('Please fill in all sprint details')
       return
@@ -245,31 +344,7 @@ export function SprintPlanningPageClient(props: {
       const sprintId = created?.data?.id as string | undefined
       if (!sprintId) throw new Error('Failed to create sprint (missing id)')
 
-      // Assign tasks into this sprint. Also ensure `process_id` is set so DB rules (e.g. Kanban WIP)
-      // can correctly detect methodology for hybrid phases.
-      const taskResults = await Promise.all(
-        sprintTasks.map(async (t) => {
-          const res = await fetch('/api/tasks', {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: t.id,
-              sprint_id: sprintId,
-              ...(props.processId ? { process_id: props.processId } : {}),
-              // Ensure sprint tasks show on the Scrum board by moving them out of the backlog stage.
-              ...(props.sprintStartStageId ? { workflow_stage_id: props.sprintStartStageId } : {}),
-            }),
-          })
-          const json = await res.json().catch(() => ({}))
-          return { ok: res.ok, status: res.status, error: json?.error as string | undefined, taskId: t.id }
-        })
-      )
-
-      const failed = taskResults.filter((r) => !r.ok)
-      if (failed.length > 0) {
-        const first = failed[0]
-        throw new Error(first.error || `Failed to assign ${failed.length} task(s) into the sprint (status ${first.status})`)
-      }
+      await assignTasksToSprint(sprintId, true)
 
       // After starting a sprint, drop users into the Scrum board for that sprint.
       if (props.processId) {
@@ -288,10 +363,6 @@ export function SprintPlanningPageClient(props: {
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleSaveDraft = () => {
-    alert('Draft saving will be implemented next.')
   }
 
   if (loading) {
@@ -317,21 +388,35 @@ export function SprintPlanningPageClient(props: {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Sprint Planning</h1>
-          <p className="text-gray-600 mt-1">Select tasks from backlog and plan your sprint</p>
+          <p className="text-gray-600 mt-1">
+            {canSaveDraft && !canStartSprint
+              ? 'Select backlog tasks and save a draft for sprint manager approval'
+              : 'Select tasks from backlog and plan your sprint'}
+          </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleSaveDraft}>
-            <Save className="h-4 w-4 mr-2" />
-            Save Draft
-          </Button>
-          <Button
-            className="bg-green-600 hover:bg-green-700"
-            onClick={handleStartSprint}
-            disabled={!sprintName || !startDate || !endDate || sprintTasks.length === 0 || sprintBacklogStoryPoints > capacity}
-          >
-            <Play className="h-4 w-4 mr-2" />
-            Start Sprint
-          </Button>
+          {canSaveDraft ? (
+            <Button
+              variant="outline"
+              onClick={handleSaveDraft}
+              disabled={!sprintName.trim() || sprintTasks.length === 0 || sprintBacklogStoryPoints > capacity}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Save Draft
+            </Button>
+          ) : null}
+          {canStartSprint ? (
+            <Button
+              className="bg-green-600 hover:bg-green-700"
+              onClick={handleStartSprint}
+              disabled={
+                !sprintName || !startDate || !endDate || sprintTasks.length === 0 || sprintBacklogStoryPoints > capacity
+              }
+            >
+              <Play className="h-4 w-4 mr-2" />
+              Start Sprint
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -340,19 +425,27 @@ export function SprintPlanningPageClient(props: {
           <CardTitle className="text-lg">Sprint Details</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className={`grid grid-cols-1 gap-4 ${canManageSprints ? 'md:grid-cols-3' : ''}`}>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Sprint Name</label>
               <Input value={sprintName} onChange={(e) => setSprintName(e.target.value)} placeholder="Sprint 1" />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-            </div>
+            {canManageSprints ? (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                  <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-gray-500 md:col-span-2">
+                Start and end dates are set when a sprint manager approves your draft.
+              </p>
+            )}
           </div>
           {formError ? <p className="mt-3 text-sm text-red-600">{formError}</p> : null}
         </CardContent>

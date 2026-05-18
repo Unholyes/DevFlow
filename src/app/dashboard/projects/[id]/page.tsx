@@ -91,6 +91,19 @@ export default async function ProjectPage({ params }: { params: { id: string } }
   if (!project) notFound()
   const projectDueDate = project.due_date ? new Date(project.due_date) : null
 
+  let teamMemberCount = 0
+  {
+    const { count, error: memberCountError } = await supabase
+      .from('project_members')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', project.id)
+      .eq('organization_id', orgId)
+
+    if (!memberCountError && typeof count === 'number') {
+      teamMemberCount = count
+    }
+  }
+
   // `is_gated` was introduced in `migrations/add_phase_gating.sql`.
   // Retry without it if needed.
   let phases:
@@ -274,7 +287,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           tasksCount: 0,
           completedTasks: 0,
           dueDate: projectDueDate,
-          teamMembers: 0,
+          teamMembers: teamMemberCount,
         }}
       />
       <ProjectStats
@@ -288,7 +301,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           tasksCount: 0,
           completedTasks: 0,
           dueDate: projectDueDate,
-          teamMembers: 0,
+          teamMembers: teamMemberCount,
         }}
       />
 
