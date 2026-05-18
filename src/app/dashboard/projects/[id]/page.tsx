@@ -177,6 +177,19 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     phaseTotals.set(pid, agg)
   }
 
+  let tasksCount = 0
+  let completedTasks = 0
+  for (const agg of phaseTotals.values()) {
+    tasksCount += agg.total
+    completedTasks += agg.done
+  }
+  const projectProgress =
+    project.status === 'completed'
+      ? 100
+      : tasksCount > 0
+        ? Math.min(100, Math.max(0, Math.round((completedTasks / tasksCount) * 100)))
+        : (project.progress_percent ?? 0)
+
   let phaseProcesses:
     | {
         id: string
@@ -283,9 +296,9 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           // MVP: treat project-level methodology as a display label; hybrid is modeled per-phase.
           sdlcMethodology: 'kanban',
           status: project.status as ProjectStatus,
-          progress: project.progress_percent ?? 0,
-          tasksCount: 0,
-          completedTasks: 0,
+          progress: projectProgress,
+          tasksCount,
+          completedTasks,
           dueDate: projectDueDate,
           teamMembers: teamMemberCount,
         }}
@@ -297,9 +310,9 @@ export default async function ProjectPage({ params }: { params: { id: string } }
           description: project.description ?? '',
           sdlcMethodology: 'kanban',
           status: project.status as ProjectStatus,
-          progress: project.progress_percent ?? 0,
-          tasksCount: 0,
-          completedTasks: 0,
+          progress: projectProgress,
+          tasksCount,
+          completedTasks,
           dueDate: projectDueDate,
           teamMembers: teamMemberCount,
         }}
