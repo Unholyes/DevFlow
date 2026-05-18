@@ -5,9 +5,9 @@ import { formatDistanceToNow } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { CheckCircle, Plus, MessageCircle, GitBranch } from 'lucide-react'
-import type { MemberDashboardActivity } from '@/lib/dashboard/load-team-member-dashboard'
+import type { RecentActivityItem } from '@/lib/activity/load-recent-activity'
 
-export type ActivityItem = MemberDashboardActivity
+export type ActivityItem = RecentActivityItem
 
 const activityIcons = {
   task_completed: CheckCircle,
@@ -25,20 +25,15 @@ const activityColors = {
 
 interface ActivityFeedProps {
   activities: ActivityItem[]
+  /** When true, render list only (no outer Card) for embedding in another panel. */
+  embedded?: boolean
+  title?: string
+  description?: string
 }
 
-export function ActivityFeed({ activities }: ActivityFeedProps) {
-  const rows = useMemo(() => activities ?? [], [activities])
-
+function ActivityFeedList({ rows }: { rows: ActivityItem[] }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg font-medium text-gray-900">Recent activity</CardTitle>
-        <p className="text-sm text-gray-500 font-normal leading-relaxed">
-          Latest task updates and comments in your workspace.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <>
         {rows.length === 0 ? (
           <div className="py-6 text-center px-2">
             <p className="text-sm text-gray-600">No recent activity yet.</p>
@@ -78,6 +73,34 @@ export function ActivityFeed({ activities }: ActivityFeedProps) {
             )
           })
         )}
+    </>
+  )
+}
+
+export function ActivityFeed({
+  activities,
+  embedded = false,
+  title = 'Recent activity',
+  description = 'Latest task updates and comments in your workspace.',
+}: ActivityFeedProps) {
+  const rows = useMemo(() => activities ?? [], [activities])
+
+  if (embedded) {
+    return (
+      <div className="space-y-4">
+        <ActivityFeedList rows={rows} />
+      </div>
+    )
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg font-medium text-gray-900">{title}</CardTitle>
+        <p className="text-sm text-gray-500 font-normal leading-relaxed">{description}</p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <ActivityFeedList rows={rows} />
       </CardContent>
     </Card>
   )

@@ -5,6 +5,7 @@ import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-
 import { ensureKanbanPhaseWorkflowStructure } from '@/lib/kanban/ensure-default-workflow-stages'
 import { computeKanbanProcessSummary } from '@/lib/kanban/compute-process-summary'
 import { computeKanbanFlowAnalytics } from '@/lib/kanban/compute-flow-analytics'
+import { loadRecentActivity } from '@/lib/activity/load-recent-activity'
 import { KanbanProcessChrome } from '@/components/processes/kanban-process-chrome'
 import { KanbanSummaryPageClient } from '@/components/kanban/kanban-summary-page-client'
 import { processWorkspacePath } from '@/lib/processes/process-workspace-routes'
@@ -157,6 +158,13 @@ export default async function KanbanProcessSummaryPage({
     }
   }
 
+  const recentActivity = await loadRecentActivity(supabase as any, {
+    organizationId: orgId,
+    projectId: project.id,
+    processId: process.id,
+    limit: 12,
+  })
+
   const summary = computeKanbanProcessSummary(
     tasks.map((t) => ({
       id: String(t.id),
@@ -206,6 +214,7 @@ export default async function KanbanProcessSummaryPage({
         processName={process.name}
         summary={summary}
         flowAnalytics={flowAnalytics}
+        recentActivity={recentActivity}
       />
     </KanbanProcessChrome>
   )

@@ -28,6 +28,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { TASK_TYPE_META, type TaskType } from '@/lib/tasks/task-type'
 import type { KanbanProcessSummaryData } from '@/lib/kanban/compute-process-summary'
+import type { RecentActivityItem } from '@/lib/activity/load-recent-activity'
+import { ActivityFeed } from '@/components/dashboard/activity-feed'
 import {
   AGING_CRITICAL_DAYS,
   AGING_WARN_DAYS,
@@ -155,6 +157,7 @@ export function KanbanSummaryPageClient(props: {
   processName: string
   summary: KanbanProcessSummaryData
   flowAnalytics: KanbanFlowAnalytics
+  recentActivity: RecentActivityItem[]
 }) {
   const boardHref = processBoardPath(props.projectId, props.phaseId, props.processId)
   const blockedBoardHref = `${boardHref}?blockedOnly=1`
@@ -506,6 +509,12 @@ export function KanbanSummaryPageClient(props: {
           </CardContent>
         </Card>
       </div>
+
+      <ActivityFeed
+        activities={props.recentActivity}
+        title="Recent activity"
+        description="Task creates, updates, completions, and comments on this process (inferred from timestamps)."
+      />
     </div>
   )
 }

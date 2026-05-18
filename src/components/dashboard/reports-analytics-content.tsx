@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
@@ -37,6 +37,8 @@ import {
 } from '@/components/ui/select'
 import type { BlockedTaskReportRow } from '@/lib/reports/load-blocked-tasks'
 import type { ReportsScopeData } from '@/lib/reports/load-reports-scope'
+import type { RecentActivityItem } from '@/lib/activity/load-recent-activity'
+import { ActivityFeed } from '@/components/dashboard/activity-feed'
 import {
   computeCompletionTrend,
   computeScopeStats,
@@ -134,6 +136,32 @@ export function ReportsAnalyticsContent({
       : filter.projectId
         ? selectedProject?.name ?? 'Project'
         : 'Organization'
+
+  const [recentActivity, setRecentActivity] = useState<RecentActivityItem[]>([])
+  const [activityLoading, setActivityLoading] = useState(false)
+
+  useEffect(() => {
+    const p = new URLSearchParams()
+    if (filter.projectId) p.set('project', filter.projectId)
+    if (filter.phaseId) p.set('phase', filter.phaseId)
+    if (filter.processId) p.set('process', filter.processId)
+    p.set('limit', '15')
+
+    const controller = new AbortController()
+    setActivityLoading(true)
+    fetch(`/api/activity/recent?${p.toString()}`, { signal: controller.signal })
+      .then((r) => r.json())
+      .then((json) => {
+        if (Array.isArray(json?.data)) setRecentActivity(json.data)
+        else setRecentActivity([])
+      })
+      .catch((err: { name?: string }) => {
+        if (err?.name !== 'AbortError') setRecentActivity([])
+      })
+      .finally(() => setActivityLoading(false))
+
+    return () => controller.abort()
+  }, [filter.projectId, filter.phaseId, filter.processId])
 
   const visibleProcesses = filter.phaseId
     ? processesForPhase
@@ -543,12 +571,20 @@ export function ReportsAnalyticsContent({
       <Card className="border-gray-200 shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg">Recent activity</CardTitle>
-          <CardDescription>Task-level activity feed — planned for a future release</CardDescription>
+          <CardDescription>
+            Inferred from task timestamps and comments — scoped to {scopeLabel.toLowerCase()}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-gray-500 text-center py-8">
-            Use process workspaces for live flow metrics. Org-wide activity streaming will be added in a later step.
-          </p>
+          {activityLoading ? (
+            <p className="text-sm text-gray-500 text-center py-8">Loading activity…</p>
+          ) : (
+            <ActivityFeed
+              embedded
+              activities={recentActivity}
+              description=""
+            />
+          )}
         </CardContent>
       </Card>
     </div>
