@@ -34,6 +34,9 @@ export async function PATCH(request: Request) {
     if (typeof updates?.sprint_capacity_points === 'number') {
       allowed.sprint_capacity_points = updates.sprint_capacity_points
     }
+    if (typeof updates?.wip_exclude_blocked === 'boolean') {
+      allowed.wip_exclude_blocked = updates.wip_exclude_blocked
+    }
 
     if (Object.keys(allowed).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
@@ -44,7 +47,7 @@ export async function PATCH(request: Request) {
       .update(allowed)
       .eq('id', id)
       .eq('organization_id', orgId)
-      .select('id,sprint_capacity_points')
+      .select('id,sprint_capacity_points,wip_exclude_blocked')
       .single()
 
     if (error) throw error

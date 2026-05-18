@@ -66,7 +66,7 @@ export default async function ProcessBoardPage({
 
   const { data: process } = await supabase
     .from('phase_processes')
-    .select('id,name,methodology')
+    .select('id,name,methodology,wip_exclude_blocked')
     .eq('id', params.processId)
     .eq('phase_id', phase.id)
     .eq('organization_id', orgId)
@@ -303,6 +303,7 @@ export default async function ProcessBoardPage({
         projectId={project.id}
         phaseId={phase.id}
         processId={process.id}
+        initialWipExcludeBlocked={(process as { wip_exclude_blocked?: boolean }).wip_exclude_blocked === true}
         stages={(stages ?? []) as any}
         tasks={(tasks ?? []) as any}
         teams={teamsForOrg}

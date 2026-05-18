@@ -38,6 +38,7 @@ import { cn } from '@/lib/utils'
 import { TaskTypeIcon } from '@/components/tasks/task-type-icon'
 import { BlockedTaskChip } from '@/components/tasks/blocked-task-chip'
 import { TASK_TYPE_META, TASK_TYPES } from '@/lib/tasks/task-type'
+import { countOpenWipTasksInStage } from '@/lib/kanban/wip-count'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -179,32 +180,33 @@ function findContainer(id: UniqueIdentifier, columns: Record<string, string[]>) 
   return undefined
 }
 
-/** Matches `enforce_kanban_wip_limit`: incomplete tasks = `completed_at IS NULL`. */
-function countOpenWipTasksInStage(tasks: TaskRow[], stageId: string, excludeTaskId?: string): number {
-  return tasks.filter(
-    (t) =>
-      t.workflow_stage_id === stageId &&
-      t.completed_at == null &&
-      (excludeTaskId == null || t.id !== excludeTaskId)
-  ).length
+/** WIP limits apply to active flow columns only — not backlog or done/complete terminals. */
+function wipAppliesToStage(stage: Stage | null | undefined): boolean {
+  if (stage == null) return false
+  return !stage.is_backlog && !stage.is_done
 }
 
 function isMoveBlockedByWip(
   tasks: TaskRow[],
   targetStageId: string,
   movingTaskId: string,
-  stageById: Record<string, Stage>
+  stageById: Record<string, Stage>,
+  wipExcludeBlocked: boolean
 ): boolean {
   const stage = stageById[targetStageId]
-  if (stage == null || stage.wip_limit == null) return false
-  const occupying = countOpenWipTasksInStage(tasks, targetStageId, movingTaskId)
+  if (stage == null || !wipAppliesToStage(stage) || stage.wip_limit == null) return false
+  const occupying = countOpenWipTasksInStage(tasks, targetStageId, {
+    excludeTaskId: movingTaskId,
+    excludeBlockedFromWip: wipExcludeBlocked,
+  })
   return occupying >= stage.wip_limit
 }
 
 function parseKanbanWipErrorMessage(
   message: string,
   stageById: Record<string, Stage>,
-  tasks: TaskRow[]
+  tasks: TaskRow[],
+  wipExcludeBlocked: boolean
 ): { stageName: string; limit: number; openCount: number } | null {
   if (!message.includes('WIP limit exceeded')) return null
   const limMatch = message.match(/limit=(\d+)\)/)
@@ -212,7 +214,9 @@ function parseKanbanWipErrorMessage(
   const limit = limMatch ? Number(limMatch[1]) : 0
   const sid = sidMatch?.[1]?.trim() ?? ''
   const stageName = sid && stageById[sid] ? stageById[sid].name : 'That column'
-  const openCount = sid ? countOpenWipTasksInStage(tasks, sid) : 0
+  const openCount = sid
+    ? countOpenWipTasksInStage(tasks, sid, { excludeBlockedFromWip: wipExcludeBlocked })
+    : 0
   return { stageName, limit, openCount }
 }
 
@@ -396,10 +400,15 @@ function KanbanColumn({
   onOpenTask,
   teamsList,
   showFlowAdvanced,
+  wipCountTasks,
+  wipExcludeBlocked,
   columnDragHandleProps,
 }: {
   stage: Stage
   tasksInColumn: TaskRow[]
+  /** All tasks in this column (unfiltered) — used for WIP counts. */
+  wipCountTasks: TaskRow[]
+  wipExcludeBlocked: boolean
   stageById: Record<string, Stage>
   disabled: boolean
   onRequestDelete?: () => void
@@ -435,23 +444,39 @@ function KanbanColumn({
           <span className="ml-2 text-xs text-gray-400 font-medium">{tasksInColumn.length} tasks</span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {stage.wip_limit != null ? (
-            <span className="text-[10px] font-bold bg-green-50 text-green-600 px-2 py-0.5 rounded border border-green-100 uppercase">
-              WIP:{' '}
-              {
-                tasksInColumn.filter((t) => {
-                  const st = stageById[t.workflow_stage_id]
-                  return st && !st.is_done && !t.completed_at
-                }).length
+          {!wipAppliesToStage(stage) ? (
+            <span
+              className="text-[10px] font-medium bg-gray-50 text-gray-500 px-2 py-0.5 rounded border border-gray-100"
+              title={
+                stage.is_done
+                  ? 'Done/complete columns hold finished work. WIP limits apply to in-flow columns (e.g. To Do, In Progress) only.'
+                  : 'Backlog is not WIP-limited on the board.'
               }
+            >
+              {stage.is_done ? 'No WIP (done)' : 'No WIP (backlog)'}
+            </span>
+          ) : stage.wip_limit != null ? (
+            <span
+              className="text-[10px] font-bold bg-green-50 text-green-600 px-2 py-0.5 rounded border border-green-100 uppercase"
+              title={
+                wipExcludeBlocked
+                  ? 'Open WIP count — blocked impediments are excluded from this limit.'
+                  : undefined
+              }
+            >
+              WIP:{' '}
+              {countOpenWipTasksInStage(wipCountTasks, stage.id, {
+                excludeBlockedFromWip: wipExcludeBlocked,
+              })}
               /{stage.wip_limit}
+              {wipExcludeBlocked ? ' *' : ''}
             </span>
           ) : (
             <span className="text-[10px] font-bold bg-gray-50 text-gray-500 px-2 py-0.5 rounded border border-gray-100 uppercase">
               No WIP cap
             </span>
           )}
-          {onEditWip ? (
+          {onEditWip && wipAppliesToStage(stage) ? (
             <button
               type="button"
               title="Edit WIP limit"
@@ -523,9 +548,13 @@ function SortableKanbanColumn({
   onOpenTask,
   teamsList,
   showFlowAdvanced,
+  wipCountTasks,
+  wipExcludeBlocked,
 }: {
   stage: Stage
   tasksInColumn: TaskRow[]
+  wipCountTasks: TaskRow[]
+  wipExcludeBlocked: boolean
   stageById: Record<string, Stage>
   disabled: boolean
   onRequestDelete?: () => void
@@ -559,6 +588,8 @@ function SortableKanbanColumn({
         onOpenTask={onOpenTask}
         teamsList={teamsList}
         showFlowAdvanced={showFlowAdvanced}
+        wipCountTasks={wipCountTasks}
+        wipExcludeBlocked={wipExcludeBlocked}
         columnDragHandleProps={{ ...attributes, ...listeners }}
       />
     </div>
@@ -605,6 +636,8 @@ export default function KanbanView(props: {
   flowMetrics?: KanbanFlowMetrics
   /** Workspace teams for labels + filter (optional). */
   teams?: { id: string; name: string }[]
+  /** When true, blocked impediments are excluded from WIP counts (server + client). */
+  initialWipExcludeBlocked?: boolean
 }) {
   const flowMetrics = props.flowMetrics ?? { throughput7d: 0, avgLeadTimeDays30d: null as number | null }
   const router = useRouter()
@@ -644,6 +677,8 @@ export default function KanbanView(props: {
   const [backlogCreateService, setBacklogCreateService] = useState<string>('standard')
   const [backlogCreateTaskType, setBacklogCreateTaskType] = useState<string>('task')
   const [showAdvancedFlowFields, setShowAdvancedFlowFields] = useState(false)
+  const [wipExcludeBlocked, setWipExcludeBlocked] = useState(props.initialWipExcludeBlocked === true)
+  const [wipExcludeSaving, setWipExcludeSaving] = useState(false)
 
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
   const [wipBlockedInfo, setWipBlockedInfo] = useState<{
@@ -654,6 +689,7 @@ export default function KanbanView(props: {
 
   const teamFilterId = (searchParams.get('teamId') ?? '').trim()
   const teamFilterActive = teamFilterId.length > 0
+  const blockedOnly = searchParams.get('blockedOnly') === '1'
 
   const setTeamFilter = useCallback(
     (id: string) => {
@@ -664,6 +700,44 @@ export default function KanbanView(props: {
       router.push(q ? `${pathname}?${q}` : pathname)
     },
     [pathname, router, searchParams]
+  )
+
+  const setBlockedOnlyFilter = useCallback(
+    (on: boolean) => {
+      const p = new URLSearchParams(searchParams.toString())
+      if (on) p.set('blockedOnly', '1')
+      else p.delete('blockedOnly')
+      const q = p.toString()
+      router.push(q ? `${pathname}?${q}` : pathname)
+    },
+    [pathname, router, searchParams]
+  )
+
+  useEffect(() => {
+    setWipExcludeBlocked(props.initialWipExcludeBlocked === true)
+  }, [props.initialWipExcludeBlocked])
+
+  const persistWipExcludeBlocked = useCallback(
+    async (on: boolean) => {
+      setWipExcludeBlocked(on)
+      setWipExcludeSaving(true)
+      try {
+        const res = await fetch('/api/phase-processes', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: props.processId, wip_exclude_blocked: on }),
+        })
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(json?.error || 'Failed to save WIP setting')
+        router.refresh()
+      } catch (e) {
+        setWipExcludeBlocked(!on)
+        alert(e instanceof Error ? e.message : 'Failed to save WIP setting')
+      } finally {
+        setWipExcludeSaving(false)
+      }
+    },
+    [props.processId, router]
   )
 
   useEffect(() => {
@@ -694,10 +768,12 @@ export default function KanbanView(props: {
     tasksRef.current = tasks
   }, [tasks])
 
-  const tasksForBoard = useMemo(
-    () => (teamFilterActive ? tasks.filter((t) => t.team_id === teamFilterId) : tasks),
-    [tasks, teamFilterActive, teamFilterId]
-  )
+  const tasksForBoard = useMemo(() => {
+    let list = tasks
+    if (teamFilterActive) list = list.filter((t) => t.team_id === teamFilterId)
+    if (blockedOnly) list = list.filter((t) => t.blocked)
+    return list
+  }, [tasks, teamFilterActive, teamFilterId, blockedOnly])
 
   const statsTasks = teamFilterActive ? tasksForBoard : tasks
 
@@ -910,7 +986,7 @@ export default function KanbanView(props: {
     } catch (e) {
       console.error(e)
       const msg = e instanceof Error ? e.message : 'Could not update board'
-      const wip = parseKanbanWipErrorMessage(msg, stageById, tasksRef.current)
+      const wip = parseKanbanWipErrorMessage(msg, stageById, tasksRef.current, wipExcludeBlocked)
       if (wip) setWipBlockedInfo(wip)
       else alert(msg)
 
@@ -1014,13 +1090,16 @@ export default function KanbanView(props: {
         return
       }
 
-      if (isMoveBlockedByWip(tasks, overContainer, activeTaskId, stageById)) {
+      if (isMoveBlockedByWip(tasks, overContainer, activeTaskId, stageById, wipExcludeBlocked)) {
         const st = stageById[overContainer]
         if (st && st.wip_limit != null) {
           setWipBlockedInfo({
             stageName: st.name,
             limit: st.wip_limit,
-            openCount: countOpenWipTasksInStage(tasks, overContainer, activeTaskId),
+            openCount: countOpenWipTasksInStage(tasks, overContainer, {
+              excludeTaskId: activeTaskId,
+              excludeBlockedFromWip: wipExcludeBlocked,
+            }),
           })
         }
         return
@@ -1118,6 +1197,11 @@ export default function KanbanView(props: {
 
   const saveWipLimit = async () => {
     if (!wipEditStage) return
+    if (!wipAppliesToStage(wipEditStage)) {
+      alert('WIP limits apply to in-flow columns only (not Done or Backlog). Set limits on To Do or In Progress instead.')
+      setWipEditStage(null)
+      return
+    }
     setWipSaving(true)
     try {
       const trimmed = wipEditValue.trim()
@@ -1376,6 +1460,33 @@ export default function KanbanView(props: {
                   ) : null}
                 </div>
               ) : null}
+              <div className="grid gap-1.5">
+                <span className="text-xs font-medium text-gray-600">Show</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={blockedOnly ? 'default' : 'outline'}
+                  className="h-9"
+                  onClick={() => setBlockedOnlyFilter(!blockedOnly)}
+                >
+                  Blocked only
+                </Button>
+              </div>
+              <div className="flex items-start gap-1.5">
+                <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300"
+                    checked={wipExcludeBlocked}
+                    disabled={wipExcludeSaving}
+                    onChange={(e) => void persistWipExcludeBlocked(e.target.checked)}
+                  />
+                  Exclude blocked from WIP
+                </label>
+                <HelpTip label="WIP and blocked items">
+                  When enabled, cards marked blocked (impediment) do not count toward column WIP limits.
+                </HelpTip>
+              </div>
               <div className="flex items-start gap-1.5">
                 <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer select-none">
                   <input
@@ -1392,6 +1503,11 @@ export default function KanbanView(props: {
                 </HelpTip>
               </div>
             </div>
+            {blockedOnly ? (
+              <p className="w-full text-xs text-amber-800">
+                Showing blocked impediments only — clear the filter to see all cards.
+              </p>
+            ) : null}
             <div className="flex items-center gap-2 shrink-0 sm:ml-auto">
               <Button variant="outline" size="sm" asChild>
                 <Link href={backlogHref} className="inline-flex items-center gap-1">
@@ -1514,7 +1630,8 @@ export default function KanbanView(props: {
               <DialogHeader>
                 <DialogTitle>WIP limit{wipEditStage ? `: ${wipEditStage.name}` : ''}</DialogTitle>
                 <DialogDescription>
-                  Maximum work items in this column (not counting done). Leave empty to remove the cap.
+                  Maximum incomplete cards in this in-flow column. Done/complete columns are not WIP-limited. Leave empty
+                  to remove the cap.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-2 py-2">
@@ -1708,19 +1825,27 @@ export default function KanbanView(props: {
                     const colTasks = tasksForBoard
                       .filter((t) => t.workflow_stage_id === stage.id && boardStageIds.has(stage.id))
                       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+                    const colTasksForWip = tasks
+                      .filter((t) => t.workflow_stage_id === stage.id && boardStageIds.has(stage.id))
 
                     return (
                       <SortableKanbanColumn
                         key={stage.id}
                         stage={stage}
                         tasksInColumn={colTasks}
+                        wipCountTasks={colTasksForWip}
+                        wipExcludeBlocked={wipExcludeBlocked}
                         stageById={stageById}
                         disabled={columnMutation || reorderingColumns || teamFilterActive}
                         onRequestDelete={() => setDeleteStage(stage)}
-                        onEditWip={() => {
-                          setWipEditStage(stage)
-                          setWipEditValue(stage.wip_limit != null ? String(stage.wip_limit) : '')
-                        }}
+                        onEditWip={
+                          wipAppliesToStage(stage)
+                            ? () => {
+                                setWipEditStage(stage)
+                                setWipEditValue(stage.wip_limit != null ? String(stage.wip_limit) : '')
+                              }
+                            : undefined
+                        }
                         onOpenTask={openTaskDetail}
                         teamsList={teamsList}
                         showFlowAdvanced={showAdvancedFlowFields}

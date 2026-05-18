@@ -323,12 +323,24 @@ export function ProductBacklogPageClient(props: {
 
   const teamFilterId = (searchParams.get('teamId') ?? '').trim()
   const teamFilterActive = teamFilterId.length > 0
+  const blockedOnly = searchParams.get('blockedOnly') === '1'
 
   const setTeamFilter = useCallback(
     (id: string) => {
       const p = new URLSearchParams(searchParams.toString())
       if (!id) p.delete('teamId')
       else p.set('teamId', id)
+      const q = p.toString()
+      router.push(q ? `${pathname}?${q}` : pathname)
+    },
+    [pathname, router, searchParams]
+  )
+
+  const setBlockedOnlyFilter = useCallback(
+    (on: boolean) => {
+      const p = new URLSearchParams(searchParams.toString())
+      if (on) p.set('blockedOnly', '1')
+      else p.delete('blockedOnly')
       const q = p.toString()
       router.push(q ? `${pathname}?${q}` : pathname)
     },
@@ -342,7 +354,7 @@ export function ProductBacklogPageClient(props: {
       : null
 
   const filtersActive =
-    searchQuery.trim().length > 0 || filterPriority !== 'all' || teamFilterActive
+    searchQuery.trim().length > 0 || filterPriority !== 'all' || teamFilterActive || blockedOnly
 
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
@@ -351,9 +363,10 @@ export function ProductBacklogPageClient(props: {
         (task.description?.toLowerCase() || '').includes(searchQuery.toLowerCase())
       const matchesFilter = filterPriority === 'all' || task.priority === filterPriority
       const matchesTeam = !teamFilterActive || task.team_id === teamFilterId
-      return matchesSearch && matchesFilter && matchesTeam
+      const matchesBlocked = !blockedOnly || task.blocked
+      return matchesSearch && matchesFilter && matchesTeam && matchesBlocked
     })
-  }, [tasks, searchQuery, filterPriority, teamFilterActive, teamFilterId])
+  }, [tasks, searchQuery, filterPriority, teamFilterActive, teamFilterId, blockedOnly])
 
   const sortedTasks = useMemo(
     () => [...filteredTasks].sort((a, b) => (a.position ?? 0) - (b.position ?? 0)),
@@ -994,7 +1007,24 @@ export function ProductBacklogPageClient(props: {
                 </Select>
               </div>
             ) : null}
+            <div className="grid gap-1.5">
+              <Label className="text-xs text-gray-600">Show</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant={blockedOnly ? 'default' : 'outline'}
+                className="h-10"
+                onClick={() => setBlockedOnlyFilter(!blockedOnly)}
+              >
+                Blocked only
+              </Button>
+            </div>
           </div>
+          {blockedOnly ? (
+            <p className="px-6 pb-4 text-xs text-amber-800">
+              Showing blocked impediments only — clear the filter to see all backlog items.
+            </p>
+          ) : null}
         </CardContent>
       </Card>
 
