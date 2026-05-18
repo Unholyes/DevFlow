@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { Button } from '@/components/ui/button'
+import { computeProjectProgressByIds } from '@/lib/projects/compute-project-progress'
 
 function normalizeName(input: string) {
   return input.trim().replace(/\s+/g, ' ')
@@ -74,9 +75,16 @@ export default async function ProjectsPage() {
 
   const { data: projects } = await supabase
     .from('projects')
-    .select('id,name,description,status,progress_percent,created_at')
+    .select('id,name,description,status,created_at')
     .eq('organization_id', orgId)
     .order('created_at', { ascending: false })
+
+  const projectList = projects ?? []
+  const progressByProjectId = await computeProjectProgressByIds(
+    supabase,
+    orgId,
+    projectList.map((p) => ({ id: p.id, status: p.status }))
+  )
 
   return (
     <div className="space-y-8">
@@ -94,7 +102,13 @@ export default async function ProjectsPage() {
 
       {/* Projects Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {(projects ?? []).map((project) => (
+        {projectList.map((project) => {
+          const agg = progressByProjectId.get(project.id) ?? {
+            progress: 0,
+            tasksCount: 0,
+            completedTasks: 0,
+          }
+          return (
           <Link
             key={project.id}
             href={`/dashboard/projects/${project.id}`}
@@ -120,14 +134,19 @@ export default async function ProjectsPage() {
               <div>
                 <div className="flex justify-between text-sm mb-1">
                   <span className="text-gray-600">Progress</span>
-                  <span className="font-medium text-gray-900">{project.progress_percent}%</span>
+                  <span className="font-medium text-gray-900">{agg.progress}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div
                     className="bg-purple-600 h-2 rounded-full transition-all"
-                    style={{ width: `${project.progress_percent}%` }}
+                    style={{ width: `${agg.progress}%` }}
                   />
                 </div>
+                {agg.tasksCount > 0 ? (
+                  <p className="mt-1.5 text-xs text-gray-500 tabular-nums">
+                    {agg.completedTasks}/{agg.tasksCount} tasks completed
+                  </p>
+                ) : null}
               </div>
 
               <div className="flex items-center text-sm text-gray-600 pt-2 border-t border-gray-100">
@@ -136,7 +155,8 @@ export default async function ProjectsPage() {
               </div>
             </div>
           </Link>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

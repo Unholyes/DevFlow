@@ -1,5 +1,6 @@
 'use client'
 
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -17,6 +18,7 @@ interface TaskBoardProps {
   }>
   boardTitle?: string
   boardDescription?: string
+  headerExtra?: ReactNode
 }
 
 const statusConfig = {
@@ -34,7 +36,12 @@ const priorityColors = {
   critical: 'bg-red-100 text-red-800',
 }
 
-export function TaskBoard({ tasks, boardTitle = 'Task Board', boardDescription }: TaskBoardProps) {
+export function TaskBoard({
+  tasks,
+  boardTitle = 'Task Board',
+  boardDescription,
+  headerExtra,
+}: TaskBoardProps) {
   // Group tasks by status dynamically
   const tasksByStatus = tasks.reduce((acc, task) => {
     if (!acc[task.status]) acc[task.status] = []
@@ -47,16 +54,19 @@ export function TaskBoard({ tasks, boardTitle = 'Task Board', boardDescription }
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg border border-gray-200">
       <div className="px-4 py-5 sm:p-6">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-6">
-          <div>
-            <h3 className="text-lg font-medium text-gray-900">{boardTitle}</h3>
-            {boardDescription ? (
-              <p className="mt-1 text-sm text-gray-500 max-w-2xl leading-relaxed">{boardDescription}</p>
-            ) : null}
+        <div className="mb-6 space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-lg font-medium text-gray-900">{boardTitle}</h3>
+              {boardDescription ? (
+                <p className="mt-1 text-sm text-gray-500 max-w-2xl leading-relaxed">{boardDescription}</p>
+              ) : null}
+            </div>
+            <Button asChild variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 shrink-0 -mr-2">
+              <Link href="/dashboard/tasks">View all tasks</Link>
+            </Button>
           </div>
-          <Button asChild variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 shrink-0 -mr-2">
-            <Link href="/dashboard/tasks">View all tasks</Link>
-          </Button>
+          {headerExtra}
         </div>
 
         {isEmpty ? (

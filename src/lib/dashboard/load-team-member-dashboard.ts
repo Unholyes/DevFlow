@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Project } from '@/types'
+import { computeProjectProgressByIds } from '@/lib/projects/compute-project-progress'
 import { enrichTasksForNavigator } from '@/lib/tasks/enrich-for-navigator'
 import { mapStageToStatus } from '@/lib/tasks/map-stage-to-status'
 import type { TaskPriority, TaskStatus } from '@/types'
@@ -23,6 +24,13 @@ export type MemberDashboardTask = {
   status: TaskStatus
   priority: TaskPriority
   assignee: string
+  dueDate: string | null
+}
+
+export type MemberDashboardSprintHint = {
+  name: string
+  endDate: string
+  href: string
 }
 
 export type MemberDashboardActivity = {
@@ -52,10 +60,11 @@ export async function loadMemberDashboardData(
   projects: MemberDashboardProject[]
   myTasks: MemberDashboardTask[]
   activities: MemberDashboardActivity[]
+  sprintHint: MemberDashboardSprintHint | null
 }> {
   const { data: projectRows, error: projectsError } = await supabase
     .from('projects')
-    .select('id,name,description,status,progress_percent,due_date,updated_at')
+    .select('id,name,description,status,due_date,updated_at')
     .eq('organization_id', organizationId)
     .eq('status', 'active')
     .order('updated_at', { ascending: false })
@@ -66,32 +75,18 @@ export async function loadMemberDashboardData(
   }
 
   const projects = projectRows ?? []
-  const projectIds = projects.map((p) => p.id)
-
-  let taskAgg = new Map<string, { total: number; done: number }>()
-  if (projectIds.length > 0) {
-    const { data: taskRows, error: tasksAggError } = await supabase
-      .from('tasks')
-      .select('project_id, completed_at')
-      .eq('organization_id', organizationId)
-      .in('project_id', projectIds)
-
-    if (tasksAggError) {
-      console.error('Dashboard task aggregates:', tasksAggError)
-    } else {
-      taskAgg = new Map()
-      for (const row of taskRows ?? []) {
-        const pid = row.project_id as string
-        const cur = taskAgg.get(pid) ?? { total: 0, done: 0 }
-        cur.total += 1
-        if (row.completed_at != null) cur.done += 1
-        taskAgg.set(pid, cur)
-      }
-    }
-  }
+  const progressByProjectId = await computeProjectProgressByIds(
+    supabase,
+    organizationId,
+    projects.map((p) => ({ id: p.id, status: p.status as string | null }))
+  )
 
   const dashboardProjects: MemberDashboardProject[] = projects.map((p) => {
-    const agg = taskAgg.get(p.id) ?? { total: 0, done: 0 }
+    const agg = progressByProjectId.get(p.id) ?? {
+      progress: 0,
+      tasksCount: 0,
+      completedTasks: 0,
+    }
     const due =
       p.due_date ??
       (typeof p.updated_at === 'string' ? p.updated_at.slice(0, 10) : new Date().toISOString().slice(0, 10))
@@ -101,9 +96,9 @@ export async function loadMemberDashboardData(
       description: (p.description as string | null) ?? '',
       sdlcMethodology: DEFAULT_METHODOLOGY,
       status: (p.status as Project['status']) ?? 'active',
-      progress: Math.min(100, Math.max(0, Number(p.progress_percent) || 0)),
-      tasksCount: agg.total,
-      completedTasks: agg.done,
+      progress: agg.progress,
+      tasksCount: agg.tasksCount,
+      completedTasks: agg.completedTasks,
       dueDate: typeof due === 'string' ? due : new Date(due).toISOString().slice(0, 10),
     }
   })
@@ -131,18 +126,72 @@ export async function loadMemberDashboardData(
       (row.completed_at as string | null) ?? null,
       Boolean(row.blocked)
     )
+    const dueRaw = row.due_date as string | null | undefined
+    const dueDate =
+      typeof dueRaw === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dueRaw)
+        ? dueRaw.slice(0, 10)
+        : dueRaw
+          ? new Date(dueRaw).toISOString().slice(0, 10)
+          : null
+
     return {
       id: row.id as string,
       title: (row.title as string)?.trim() || 'Untitled',
       status,
       priority: (row.priority as TaskPriority) ?? 'medium',
       assignee: 'You',
+      dueDate,
     }
   })
 
-  const activities = await loadRecentActivities(supabase, organizationId)
+  const [activities, sprintHint] = await Promise.all([
+    loadRecentActivities(supabase, organizationId),
+    loadNearestActiveSprint(supabase, organizationId),
+  ])
 
-  return { projects: dashboardProjects, myTasks, activities }
+  return { projects: dashboardProjects, myTasks, activities, sprintHint }
+}
+
+async function loadNearestActiveSprint(
+  supabase: SupabaseClient,
+  organizationId: string
+): Promise<MemberDashboardSprintHint | null> {
+  const today = new Date().toISOString().slice(0, 10)
+  const { data: rows, error } = await supabase
+    .from('sprints')
+    .select('id,name,end_date,project_id,phase_id,process_id,status')
+    .eq('organization_id', organizationId)
+    .eq('status', 'active')
+    .gte('end_date', today)
+    .order('end_date', { ascending: true })
+    .limit(1)
+
+  if (error) {
+    console.error('Dashboard sprint hint:', error)
+    return null
+  }
+
+  const sprint = rows?.[0]
+  if (!sprint?.end_date) return null
+
+  const pid = sprint.project_id as string | null
+  const phaseId = sprint.phase_id as string | null
+  const processId = sprint.process_id as string | null
+  let href = '/dashboard/calendar'
+  if (pid && phaseId && processId) {
+    href = `/dashboard/projects/${pid}/phases/${phaseId}/processes/${processId}/sprints/${sprint.id}`
+  }
+
+  const endDate =
+    typeof sprint.end_date === 'string'
+      ? sprint.end_date.slice(0, 10)
+      : new Date(sprint.end_date).toISOString().slice(0, 10)
+
+  return {
+    name: (sprint.name as string)?.trim() || 'Active sprint',
+    endDate,
+    href,
+  }
 }
 
 async function loadRecentActivities(
