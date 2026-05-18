@@ -22,28 +22,28 @@ export function LoginSdlcCarousel() {
         key: "kanban",
         name: "Kanban",
         description: "Visual workflow management with continuous delivery",
-        imageSrc: "/images/sdlc-kanban.svg",
+        imageSrc: "/images/kanban.jpg",
         Icon: KanbanSquare,
       },
       {
         key: "waterfall",
         name: "Waterfall",
         description: "Sequential development with defined phases",
-        imageSrc: "/images/sdlc-waterfall.svg",
+        imageSrc: "/images/waterfall.jpg",
         Icon: Layers,
       },
       {
         key: "scrum",
         name: "Scrum",
         description: "Agile framework that emphasizes incremental delivery.",
-        imageSrc: "/images/sdlc-scrum.svg",
+        imageSrc: "/images/sprint.jpg",
         Icon: Target,
       },
       {
         key: "devops",
         name: "DevOps",
         description: "Culture and practices for seamless development",
-        imageSrc: "/images/sdlc-devops.svg",
+        imageSrc: "/images/devops.jpg",
         Icon: Cog,
       },
     ],
@@ -96,7 +96,7 @@ export function LoginSdlcCarousel() {
               src={item.imageSrc}
               alt={`${item.name} preview`}
               className={[
-                "absolute inset-0 h-full w-full object-cover",
+                "absolute inset-0 h-full w-full object-contain",
                 "transition-opacity duration-500 ease-out will-change-opacity",
                 idx === activeIndex ? "opacity-100" : "opacity-0",
               ].join(" ")}
