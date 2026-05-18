@@ -8,6 +8,14 @@ function isUniqueViolation(error: unknown) {
   return typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
 }
 
+function errorMessage(error: unknown, fallback: string) {
+  if (typeof error === 'object' && error !== null) {
+    const message = String((error as { message?: unknown }).message ?? '').trim()
+    if (message) return message
+  }
+  return fallback
+}
+
 async function resolveOrgAndUser(supabase: ReturnType<typeof createClient>) {
   const {
     data: { user },
@@ -176,7 +184,7 @@ export async function POST(request: Request) {
       )
     }
     console.error('Error creating sprint:', error)
-    return NextResponse.json({ error: 'Failed to create sprint' }, { status: 500 })
+    return NextResponse.json({ error: errorMessage(error, 'Failed to create sprint') }, { status: 500 })
   }
 }
 
