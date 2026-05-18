@@ -56,6 +56,7 @@ const GLOBAL_ACCOUNT_PERMISSIONS: Array<{
   { id: 'account.users.invite', category: 'Account', label: 'Invite users' },
   { id: 'account.users.remove', category: 'Account', label: 'Remove users' },
   { id: 'pm.projects.create', category: 'Project Management', label: 'Create new project' },
+  { id: 'pm.project_members.manage', category: 'Project Management', label: 'Manage project team' },
   { id: 'projects.archive', category: 'Project Management', label: 'Archive project' },
   { id: 'system.api_tokens.generate', category: 'System', label: 'Generate API tokens' },
   { id: 'system.integrations.manage', category: 'System', label: 'Integration setup' },
