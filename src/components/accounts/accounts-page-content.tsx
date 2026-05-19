@@ -94,8 +94,6 @@ type RolePermission =
   | 'system.api_tokens.generate'
   | 'system.integrations.manage'
 
-const DEFAULT_ACCOUNT_ROLES = ['Owner', 'Admin', 'Member'] as const
-
 const ROLE_PERMISSION_CATALOG: Array<{
   id: RolePermission
   label: string
@@ -211,7 +209,6 @@ export function AccountsPageContent({
   const [inviteResendLink, setInviteResendLink] = useState<string | null>(null)
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
   const [draftSystemRole, setDraftSystemRole] = useState<SystemRole>('Member')
-  const [draftCustomRoles, setDraftCustomRoles] = useState<string[]>([])
   const [inviteSystemRole, setInviteSystemRole] = useState<SystemRole>('Member')
 
   const [isAddRoleModalOpen, setIsAddRoleModalOpen] = useState(false)
@@ -714,46 +711,23 @@ export function AccountsPageContent({
 
     setError(null)
     const prev = membersList
-    setMembersList((cur) =>
-      cur.map((m) =>
-        m.id === memberId ? { ...m, systemRole: nextSystemRole, customRoles: [...draftCustomRoles] } : m,
-      ),
-    )
+    setMembersList((cur) => cur.map((m) => (m.id === memberId ? { ...m, systemRole: nextSystemRole } : m)))
     setEditingMemberId(null)
 
-    try {
-      if (prevSystemRole !== nextSystemRole) {
-        const res = await fetch(
-          `/api/organizations/${encodeURIComponent(selectedOrganizationId)}/members/${encodeURIComponent(memberId)}/system-role`,
-          {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ system_role: nextSystemRole }),
-            credentials: 'same-origin',
-          },
-        )
-        const payload = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error((payload as any)?.error ?? 'Failed to update access level.')
-      }
+    if (prevSystemRole === nextSystemRole) return
 
-      const prevCustom = member.customRoles
-      const nextCustom = draftCustomRoles
-      const changedCustom =
-        prevCustom.length !== nextCustom.length ||
-        prevCustom.some((x) => !nextCustom.some((y) => y.toLowerCase() === x.toLowerCase()))
-      if (changedCustom) {
-        const res = await fetch(
-          `/api/organizations/${encodeURIComponent(selectedOrganizationId)}/members/${encodeURIComponent(memberId)}/custom-roles`,
-          {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ custom_roles: nextCustom }),
-            credentials: 'same-origin',
-          },
-        )
-        const payload = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error((payload as any)?.error ?? 'Failed to update assigned roles.')
-      }
+    try {
+      const res = await fetch(
+        `/api/organizations/${encodeURIComponent(selectedOrganizationId)}/members/${encodeURIComponent(memberId)}/system-role`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ system_role: nextSystemRole }),
+          credentials: 'same-origin',
+        },
+      )
+      const payload = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((payload as any)?.error ?? 'Failed to update access level.')
     } catch (e: any) {
       setMembersList(prev)
       setError(e?.message ?? 'Failed to update member access.')
@@ -1503,81 +1477,25 @@ export function AccountsPageContent({
                   <p className="text-sm text-gray-500 truncate">{m.email}</p>
 
                   {editingMemberId === m.id ? (
-                    <div className="mt-3 space-y-3">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <div className="text-sm font-medium text-gray-700">Access Level:</div>
-                        <Select
-                          value={draftSystemRole}
-                          onValueChange={(v) => setDraftSystemRole(v as SystemRole)}
-                          disabled={currentSystemRole !== 'Owner'}
-                        >
-                          <SelectTrigger className="h-9 w-[180px] bg-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Owner">Owner</SelectItem>
-                            <SelectItem value="Admin">Admin</SelectItem>
-                            <SelectItem value="Member">Member</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        {currentSystemRole !== 'Owner' ? (
-                          <span className="text-xs text-gray-500">Only Owners can change access level.</span>
-                        ) : null}
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="text-sm font-medium text-gray-700">Assigned Roles:</div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {draftCustomRoles.length === 0 ? (
-                            <span className="text-sm text-gray-500">None</span>
-                          ) : (
-                            draftCustomRoles.map((r) => (
-                              <span
-                                key={r}
-                                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700"
-                              >
-                                {r}
-                                <button
-                                  type="button"
-                                  className="rounded-full p-0.5 text-slate-500 hover:text-slate-700"
-                                  onClick={() => setDraftCustomRoles((cur) => cur.filter((x) => x.toLowerCase() !== r.toLowerCase()))}
-                                  aria-label={`Remove ${r}`}
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </span>
-                            ))
-                          )}
-
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button size="sm" variant="outline" className="h-7 px-2 text-xs">
-                                + Add Role
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className="min-w-[220px]">
-                              {[...DEFAULT_ACCOUNT_ROLES, ...(customRoles ?? []).map((r) => r.name)]
-                                .filter((name) => !draftCustomRoles.some((x) => x.toLowerCase() === name.toLowerCase()))
-                                .map((name) => (
-                                  <DropdownMenuCheckboxItem
-                                    key={name}
-                                    checked={false}
-                                    onSelect={(e) => e.preventDefault()}
-                                    onCheckedChange={(next) => {
-                                      if (!next) return
-                                      setDraftCustomRoles((cur) => Array.from(new Set([...cur, name])))
-                                    }}
-                                  >
-                                    {name}
-                                  </DropdownMenuCheckboxItem>
-                                ))}
-                              {customRoles.length === 0 ? (
-                                <div className="px-2 py-1 text-[11px] text-slate-500">No custom roles created yet.</div>
-                              ) : null}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <div className="text-sm font-medium text-gray-700">Access Level:</div>
+                      <Select
+                        value={draftSystemRole}
+                        onValueChange={(v) => setDraftSystemRole(v as SystemRole)}
+                        disabled={currentSystemRole !== 'Owner'}
+                      >
+                        <SelectTrigger className="h-9 w-[180px] bg-white">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Owner">Owner</SelectItem>
+                          <SelectItem value="Admin">Admin</SelectItem>
+                          <SelectItem value="Member">Member</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {currentSystemRole !== 'Owner' ? (
+                        <span className="text-xs text-gray-500">Only Owners can change access level.</span>
+                      ) : null}
                     </div>
                   ) : null}
                   <div className="flex items-center gap-2 mt-2">
@@ -1611,7 +1529,6 @@ export function AccountsPageContent({
                         onClick={() => {
                           setEditingMemberId(null)
                           setDraftSystemRole(m.systemRole)
-                          setDraftCustomRoles(m.customRoles)
                         }}
                         className="h-7 px-2 text-xs"
                       >
@@ -1626,12 +1543,11 @@ export function AccountsPageContent({
                         onClick={() => {
                           setEditingMemberId(m.id)
                           setDraftSystemRole(m.systemRole)
-                          setDraftCustomRoles(m.customRoles)
                         }}
                         className="h-7 px-2 text-xs"
                         disabled={!canManageAccounts}
                       >
-                        Edit Roles
+                        Edit Access
                       </Button>
                       <Button
                         size="sm"
