@@ -20,6 +20,12 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { supabase } from '@/lib/supabase/client'
 import { customRolesIncludeManageMembers, userCanManageOrganizationRoles } from '@/lib/permissions/can-manage-organization-roles'
+import {
+  getFunctionalRoleOption,
+  PROJECT_ACCESS_LEVELS,
+  type ProjectAccessLevel,
+} from '@/lib/permissions/project-template-permissions'
+import { cn } from '@/lib/utils'
 import { PermissionsPageContent } from '@/components/settings/permissions-page-content'
 import { OrganizationTeamRolesSettings } from '@/components/settings/organization-team-roles-settings'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -40,6 +46,13 @@ import {
 
 type SystemRole = 'Owner' | 'Admin' | 'Member'
 
+type MemberProjectInfo = {
+  projectId: string
+  name: string
+  accessLevel: ProjectAccessLevel | null
+  teamRoleName: string | null
+}
+
 type WorkspaceMember = {
   id: string
   userId: string
@@ -49,7 +62,12 @@ type WorkspaceMember = {
   customRoles: string[]
   joinedAt: string
   joinedAtRaw: string
-  projects: string[]
+  projects: MemberProjectInfo[]
+}
+
+function parseMemberProjectAccessLevel(value: unknown): ProjectAccessLevel | null {
+  const level = String(value ?? '').trim()
+  return (PROJECT_ACCESS_LEVELS as readonly string[]).includes(level) ? (level as ProjectAccessLevel) : null
 }
 
 type PendingInvite = {
@@ -210,6 +228,10 @@ export function AccountsPageContent({
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null)
   const [draftSystemRole, setDraftSystemRole] = useState<SystemRole>('Member')
   const [inviteSystemRole, setInviteSystemRole] = useState<SystemRole>('Member')
+  const [selectedMemberProject, setSelectedMemberProject] = useState<{
+    memberId: string
+    projectId: string
+  } | null>(null)
 
   const [isAddRoleModalOpen, setIsAddRoleModalOpen] = useState(false)
   const [roleName, setRoleName] = useState('')
@@ -238,7 +260,7 @@ export function AccountsPageContent({
     const set = new Set<string>()
     for (const m of membersList) {
       for (const p of m.projects) {
-        const name = String(p ?? '').trim()
+        const name = String(p.name ?? '').trim()
         if (name) set.add(name)
       }
     }
@@ -285,16 +307,16 @@ export function AccountsPageContent({
       const ac = a.projects.length
       const bc = b.projects.length
       if (bc !== ac) return bc - ac
-      const ap = (a.projects[0] ?? '').toLowerCase()
-      const bp = (b.projects[0] ?? '').toLowerCase()
+      const ap = (a.projects[0]?.name ?? '').toLowerCase()
+      const bp = (b.projects[0]?.name ?? '').toLowerCase()
       if (ap !== bp) return ap.localeCompare(bp)
       return byName(a, b)
     }
 
     const bySelectedProjectsFirst = (a: WorkspaceMember, b: WorkspaceMember) => {
       const selected = new Set(projectSortSelection.map((p) => p.toLowerCase()))
-      const aMatchCount = a.projects.filter((p) => selected.has(String(p).toLowerCase())).length
-      const bMatchCount = b.projects.filter((p) => selected.has(String(p).toLowerCase())).length
+      const aMatchCount = a.projects.filter((p) => selected.has(String(p.name).toLowerCase())).length
+      const bMatchCount = b.projects.filter((p) => selected.has(String(p.name).toLowerCase())).length
       const aHas = aMatchCount > 0
       const bHas = bMatchCount > 0
       if (aHas !== bHas) return aHas ? -1 : 1
@@ -365,6 +387,10 @@ export function AccountsPageContent({
 
   const currentMember = useMemo(() => membersList.find((m) => m.userId === currentUserId) ?? null, [membersList, currentUserId])
   const currentSystemRole: SystemRole = currentMember?.systemRole ?? 'Member'
+
+  useEffect(() => {
+    setSelectedMemberProject(null)
+  }, [selectedOrganizationId])
 
   useEffect(() => {
     let cancelled = false
@@ -438,7 +464,15 @@ export function AccountsPageContent({
           .select(
             `
             user_id,
+            project_id,
+            project_access_level,
+            functional_role,
+            project_team_role_id,
             projects:project_id (
+              id,
+              name
+            ),
+            project_team_roles:project_team_role_id (
               id,
               name
             )
@@ -449,13 +483,36 @@ export function AccountsPageContent({
 
         if (projectMembersError) throw projectMembersError
 
-        const projectsByUserId = new Map<string, string[]>()
+        const projectsByUserId = new Map<string, MemberProjectInfo[]>()
         for (const pm of projectMembers ?? []) {
-          const uid = (pm as any).user_id as string
-          const projectName = (pm as any).projects?.name as string | undefined
-          if (!uid || !projectName) continue
+          const row = pm as {
+            user_id?: string
+            project_id?: string
+            project_access_level?: unknown
+            functional_role?: string | null
+            projects?: { id?: string; name?: string } | null
+            project_team_roles?: { id?: string; name?: string } | null
+          }
+          const uid = String(row.user_id ?? '').trim()
+          const projectId = String(row.projects?.id ?? row.project_id ?? '').trim()
+          const projectName = String(row.projects?.name ?? '').trim()
+          if (!uid || !projectId || !projectName) continue
+
+          const teamRoleFromAssignment = String(row.project_team_roles?.name ?? '').trim()
+          const functionalRoleId = String(row.functional_role ?? '').trim()
+          const functionalLabel = functionalRoleId ? getFunctionalRoleOption(functionalRoleId)?.label : undefined
+          const teamRoleName = teamRoleFromAssignment || functionalLabel || null
+
+          const entry: MemberProjectInfo = {
+            projectId,
+            name: projectName,
+            accessLevel: parseMemberProjectAccessLevel(row.project_access_level),
+            teamRoleName,
+          }
+
           const arr = projectsByUserId.get(uid) ?? []
-          arr.push(projectName)
+          if (!arr.some((p) => p.projectId === projectId)) arr.push(entry)
+          arr.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
           projectsByUserId.set(uid, arr)
         }
 
@@ -1498,17 +1555,67 @@ export function AccountsPageContent({
                       ) : null}
                     </div>
                   ) : null}
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-xs text-gray-400">Projects:</span>
+                  <div className="mt-2 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-gray-400">Projects:</span>
                     {m.projects.length === 0 ? (
                       <span className="text-xs text-gray-500">None</span>
                     ) : (
-                      m.projects.map((project, idx) => (
-                        <Badge key={idx} variant="outline" className="text-xs bg-gray-50 border-gray-200">
-                          {project}
-                        </Badge>
-                      ))
+                      m.projects.map((project) => {
+                        const isSelected =
+                          selectedMemberProject?.memberId === m.id &&
+                          selectedMemberProject?.projectId === project.projectId
+                        return (
+                          <button
+                            key={project.projectId}
+                            type="button"
+                            onClick={() =>
+                              setSelectedMemberProject((cur) =>
+                                cur?.memberId === m.id && cur?.projectId === project.projectId
+                                  ? null
+                                  : { memberId: m.id, projectId: project.projectId },
+                              )
+                            }
+                            className={cn(
+                              'inline-flex items-center rounded-md border px-2 py-0.5 text-xs transition-colors',
+                              isSelected
+                                ? 'border-[#7a2233] bg-rose-50 text-[#7a2233] font-medium'
+                                : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 hover:bg-gray-100',
+                            )}
+                          >
+                            {project.name}
+                          </button>
+                        )
+                      })
                     )}
+                    </div>
+                    {selectedMemberProject?.memberId === m.id ? (
+                      (() => {
+                        const selectedProject = m.projects.find(
+                          (p) => p.projectId === selectedMemberProject.projectId,
+                        )
+                        if (!selectedProject) return null
+                        return (
+                          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                            <p className="font-medium text-gray-900">{selectedProject.name}</p>
+                            <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                              <div>
+                                <dt className="text-gray-500">Project access template</dt>
+                                <dd className="mt-0.5 font-medium text-gray-800">
+                                  {selectedProject.accessLevel ?? 'Not set'}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-gray-500">Team role</dt>
+                                <dd className="mt-0.5 font-medium text-gray-800">
+                                  {selectedProject.teamRoleName ?? 'Not assigned'}
+                                </dd>
+                              </div>
+                            </dl>
+                          </div>
+                        )
+                      })()
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
