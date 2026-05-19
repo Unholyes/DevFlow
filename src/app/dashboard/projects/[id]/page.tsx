@@ -11,6 +11,7 @@ import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-
 import { userCanManageProjectMembers } from '@/lib/permissions/project-members-permissions'
 import type { ProjectStatus } from '@/types'
 import { computePhaseProgressPercent } from '@/lib/projects/compute-phase-progress'
+import { isPhaseCompleteForGating, isPhaseLockedByGating } from '@/lib/projects/phase-gating'
 
 const sdlcBadgeColors = {
   Scrum: 'bg-blue-100 text-blue-700 border-blue-200',
@@ -278,14 +279,12 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     }
   })
 
-  const isPhaseLocked = (phaseIndex: number) => {
-    if (!project.phase_gating_enabled) return false
-    const phase = mappedPhases?.[phaseIndex]
-    if (!phase?.isGated) return false
-    if (phaseIndex === 0) return false
-    const prev = mappedPhases?.[phaseIndex - 1]
-    return prev?.dbStatus !== 'completed'
-  }
+  const phaseGatingSnapshots = mappedPhases.map((p) => ({
+    id: p.id,
+    status: p.dbStatus,
+    isGated: p.isGated,
+    progress: p.progress,
+  }))
 
   const canManageProjectTeam = await userCanManageProjectMembers(supabase, {
     organizationId: orgId,
@@ -343,8 +342,14 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {mappedPhases.map((phase, index) => {
-              const locked = isPhaseLocked(index)
-              const isCompleted = phase.dbStatus === 'completed'
+              const locked = isPhaseLockedByGating(
+                index,
+                phaseGatingSnapshots,
+                !!project.phase_gating_enabled
+              )
+              const isCompleted = project.phase_gating_enabled
+                ? isPhaseCompleteForGating(phaseGatingSnapshots[index]!)
+                : phase.dbStatus === 'completed'
               const isInProgress = !locked && !isCompleted
               const statusLabel = locked ? 'Locked' : isCompleted ? 'Completed' : 'Active'
               const progress = locked ? 0 : phase.progress
@@ -409,7 +414,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
                   <div className="relative z-20 mb-3 space-y-1">
                     <p className="text-[11px] uppercase tracking-wide text-gray-500 pointer-events-none">Processes</p>
                     {phase.processes.length > 0 ? (
-                      <div className="flex flex-wrap gap-1 pointer-events-auto">
+                      <div className={`flex flex-wrap gap-1 ${locked ? 'pointer-events-none' : 'pointer-events-auto'}`}>
                         {phase.processes.map((process, processIndex) => (
                           <Link
                             key={process.id ?? `${process.name}-${processIndex}`}

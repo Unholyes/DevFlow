@@ -2,6 +2,8 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
+import { loadProjectPhasesGatingContext } from '@/lib/projects/load-project-phases-gating'
+import { isPhaseLockedForProject } from '@/lib/projects/phase-gating'
 
 export default async function PhaseBoardPage({
   params,
@@ -58,11 +60,17 @@ export default async function PhaseBoardPage({
   const processes =
     attempt.error?.code === 'PGRST204' ? ([] as any[]) : ((attempt.data as any[]) ?? [])
 
-  const phaseIndex = (phases ?? []).findIndex((p) => p.id === phase.id)
-  const prev = phaseIndex > 0 ? (phases ?? [])[phaseIndex - 1] : null
-
-  const isLocked =
-    project.phase_gating_enabled && phase.is_gated && phaseIndex > 0 && prev?.status !== 'completed'
+  const gatingContext = await loadProjectPhasesGatingContext(
+    supabase,
+    orgId,
+    project.id,
+    !!project.phase_gating_enabled
+  )
+  const isLocked = isPhaseLockedForProject(
+    gatingContext.phases,
+    gatingContext.phaseGatingEnabled,
+    phase.id
+  )
 
   if (isLocked) {
     return redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}`)

@@ -13,6 +13,8 @@ import { ScrumSummaryPageClient } from '@/components/scrum/scrum-summary-page-cl
 import { computeScrumProcessSummary } from '@/lib/scrum/compute-process-summary'
 import { computeSprintBurndown } from '@/lib/scrum/compute-sprint-burndown'
 import { processWorkspacePath } from '@/lib/processes/process-workspace-routes'
+import { loadProjectPhasesGatingContext } from '@/lib/projects/load-project-phases-gating'
+import { isPhaseLockedForProject } from '@/lib/projects/phase-gating'
 
 const SUMMARY_TASK_COLUMNS =
   'id,title,workflow_stage_id,completed_at,priority,task_type,blocked,blocked_reason,assignee_id,team_id,created_at,updated_at,due_date,current_stage_entered_at'
@@ -60,10 +62,17 @@ export default async function KanbanProcessSummaryPage({
   const phase = (phases ?? []).find((p) => p.id === params.phaseId)
   if (!phase) notFound()
 
-  const phaseIndex = (phases ?? []).findIndex((p) => p.id === phase.id)
-  const prev = phaseIndex > 0 ? (phases ?? [])[phaseIndex - 1] : null
-  const isLocked =
-    project.phase_gating_enabled && (phase as any).is_gated && phaseIndex > 0 && (prev as any)?.status !== 'completed'
+  const gatingContext = await loadProjectPhasesGatingContext(
+    supabase,
+    orgId,
+    project.id,
+    !!project.phase_gating_enabled
+  )
+  const isLocked = isPhaseLockedForProject(
+    gatingContext.phases,
+    gatingContext.phaseGatingEnabled,
+    phase.id
+  )
 
   if (isLocked) {
     return redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}`)

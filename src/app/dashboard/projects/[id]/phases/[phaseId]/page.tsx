@@ -6,6 +6,8 @@ import { CompletePhaseButton } from '@/components/phases/complete-phase-button'
 import { userCanApprovePhaseGates } from '@/lib/permissions/phase-gate-permissions'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { processWorkspacePath } from '@/lib/processes/process-workspace-routes'
+import { loadProjectPhasesGatingContext } from '@/lib/projects/load-project-phases-gating'
+import { isPhaseLockedForProject } from '@/lib/projects/phase-gating'
 
 export default async function PhasePage({ params }: { params: { id: string; phaseId: string } }) {
   const tenantSlug = getTenantSlug()
@@ -70,11 +72,17 @@ export default async function PhasePage({ params }: { params: { id: string; phas
     }
   }
 
-  const phaseIndex = (phases ?? []).findIndex((p) => p.id === phase.id)
-  const prev = phaseIndex > 0 ? (phases ?? [])[phaseIndex - 1] : null
-
-  const isLocked =
-    project.phase_gating_enabled && phase.is_gated && phaseIndex > 0 && prev?.status !== 'completed'
+  const gatingContext = await loadProjectPhasesGatingContext(
+    supabase,
+    orgId,
+    project.id,
+    !!project.phase_gating_enabled
+  )
+  const isLocked = isPhaseLockedForProject(
+    gatingContext.phases,
+    gatingContext.phaseGatingEnabled,
+    phase.id
+  )
 
   if (isLocked) {
     return (

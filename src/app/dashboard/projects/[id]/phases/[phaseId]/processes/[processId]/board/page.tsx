@@ -8,6 +8,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { ensureKanbanPhaseWorkflowStructure } from '@/lib/kanban/ensure-default-workflow-stages'
+import { loadProjectPhasesGatingContext } from '@/lib/projects/load-project-phases-gating'
+import { isPhaseLockedForProject } from '@/lib/projects/phase-gating'
 
 export default async function ProcessBoardPage({
   params,
@@ -56,10 +58,17 @@ export default async function ProcessBoardPage({
   const phase = (phases ?? []).find((p) => p.id === params.phaseId)
   if (!phase) notFound()
 
-  const phaseIndex = (phases ?? []).findIndex((p) => p.id === phase.id)
-  const prev = phaseIndex > 0 ? (phases ?? [])[phaseIndex - 1] : null
-  const isLocked =
-    project.phase_gating_enabled && (phase as any).is_gated && phaseIndex > 0 && (prev as any)?.status !== 'completed'
+  const gatingContext = await loadProjectPhasesGatingContext(
+    supabase,
+    orgId,
+    project.id,
+    !!project.phase_gating_enabled
+  )
+  const isLocked = isPhaseLockedForProject(
+    gatingContext.phases,
+    gatingContext.phaseGatingEnabled,
+    phase.id
+  )
 
   if (isLocked) {
     return redirect(`/dashboard/projects/${params.id}/phases/${params.phaseId}`)
