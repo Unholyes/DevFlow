@@ -264,8 +264,11 @@ export function AccountsPageContent({
   const [selectedRolePermissions, setSelectedRolePermissions] = useState<RolePermission[]>([])
   const [isSubmittingRole, setIsSubmittingRole] = useState(false)
   const [rolePermissionQuery, setRolePermissionQuery] = useState('')
-  const [membersSort, setMembersSort] = useState<'role_level' | 'role_specific' | 'projects' | 'join_date'>('role_level')
+  const [membersSort, setMembersSort] = useState<
+    'role_level' | 'role_specific' | 'projects' | 'teams' | 'join_date'
+  >('role_level')
   const [projectSortSelection, setProjectSortSelection] = useState<string[]>([])
+  const [teamSortSelection, setTeamSortSelection] = useState<string[]>([])
   const [roleSortSelection, setRoleSortSelection] = useState<string[]>([])
 
   const filteredTeams = useMemo(() => {
@@ -287,6 +290,17 @@ export function AccountsPageContent({
     for (const m of membersList) {
       for (const p of m.projects) {
         const name = String(p.name ?? '').trim()
+        if (name) set.add(name)
+      }
+    }
+    return Array.from(set).sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+  }, [membersList])
+
+  const availableTeamsForSort = useMemo(() => {
+    const set = new Set<string>()
+    for (const m of membersList) {
+      for (const t of m.teams) {
+        const name = String(t.name ?? '').trim()
         if (name) set.add(name)
       }
     }
@@ -350,6 +364,27 @@ export function AccountsPageContent({
       return byName(a, b)
     }
 
+    const byTeamsDesc = (a: WorkspaceMember, b: WorkspaceMember) => {
+      const ac = a.teams.length
+      const bc = b.teams.length
+      if (bc !== ac) return bc - ac
+      const at = (a.teams[0]?.name ?? '').toLowerCase()
+      const bt = (b.teams[0]?.name ?? '').toLowerCase()
+      if (at !== bt) return at.localeCompare(bt)
+      return byName(a, b)
+    }
+
+    const bySelectedTeamsFirst = (a: WorkspaceMember, b: WorkspaceMember) => {
+      const selected = new Set(teamSortSelection.map((t) => t.toLowerCase()))
+      const aMatchCount = a.teams.filter((t) => selected.has(String(t.name).toLowerCase())).length
+      const bMatchCount = b.teams.filter((t) => selected.has(String(t.name).toLowerCase())).length
+      const aHas = aMatchCount > 0
+      const bHas = bMatchCount > 0
+      if (aHas !== bHas) return aHas ? -1 : 1
+      if (bMatchCount !== aMatchCount) return bMatchCount - aMatchCount
+      return byName(a, b)
+    }
+
     const memberHasRole = (m: WorkspaceMember, roleName: string) => {
       const r = roleName.toLowerCase()
       if (m.systemRole.toLowerCase() === r) return true
@@ -378,9 +413,10 @@ export function AccountsPageContent({
     if (membersSort === 'join_date') out.sort(byJoinDateDesc)
     else if (membersSort === 'role_specific') out.sort(roleSortSelection.length ? bySelectedRolesFirst : byRoleLevelDesc)
     else if (membersSort === 'projects') out.sort(projectSortSelection.length ? bySelectedProjectsFirst : byProjectsDesc)
+    else if (membersSort === 'teams') out.sort(teamSortSelection.length ? bySelectedTeamsFirst : byTeamsDesc)
     else out.sort(byRoleLevelDesc)
     return out
-  }, [filteredMembers, membersSort, projectSortSelection, roleSortSelection])
+  }, [filteredMembers, membersSort, projectSortSelection, teamSortSelection, roleSortSelection])
 
   const assignCandidates = useMemo(() => {
     const q = assignQuery.trim().toLowerCase()
@@ -1406,17 +1442,24 @@ export function AccountsPageContent({
                           : 'Specific role'
                       : membersSort === 'join_date'
                         ? 'Join date'
-                        : projectSortSelection.length
-                          ? `Projects assigned (${projectSortSelection.length})`
-                          : 'Projects assigned'}
+                        : membersSort === 'teams'
+                          ? teamSortSelection.length
+                            ? `Sort by Teams (${teamSortSelection.length})`
+                            : 'Sort by Teams'
+                          : membersSort === 'projects'
+                            ? projectSortSelection.length
+                              ? `Projects assigned (${projectSortSelection.length})`
+                              : 'Projects assigned'
+                            : 'Role level'}
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-[220px] text-left">
                   <DropdownMenuRadioGroup
                     value={membersSort}
                     onValueChange={(v) => {
-                      setMembersSort(v as any)
+                      setMembersSort(v as typeof membersSort)
                       if (v !== 'projects') setProjectSortSelection([])
+                      if (v !== 'teams') setTeamSortSelection([])
                       if (v !== 'role_specific') setRoleSortSelection([])
                     }}
                   >
@@ -1565,6 +1608,82 @@ export function AccountsPageContent({
                                       e.preventDefault()
                                       setProjectSortSelection((cur) =>
                                         cur.filter((p) => p.toLowerCase() !== name.toLowerCase()),
+                                      )
+                                    }}
+                                  >
+                                    {name}
+                                  </DropdownMenuItem>
+                                ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuSub>
+
+                  <DropdownMenuSub>
+                    <DropdownMenuSubTrigger
+                      onPointerEnter={() => {
+                        setMembersSort('teams')
+                      }}
+                      onFocus={() => setMembersSort('teams')}
+                    >
+                      Sort by Teams
+                    </DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="p-0">
+                      <div className="flex min-w-[520px]">
+                        <div className="max-h-[360px] w-[320px] overflow-auto p-2">
+                          <DropdownMenuLabel className="px-2 py-1.5 text-xs text-slate-600">Teams</DropdownMenuLabel>
+                          {availableTeamsForSort.length === 0 ? (
+                            <div className="px-2 py-2 text-sm text-slate-500">No teams found.</div>
+                          ) : (
+                            availableTeamsForSort.map((name) => {
+                              const checked = teamSortSelection.some((t) => t.toLowerCase() === name.toLowerCase())
+                              return (
+                                <DropdownMenuCheckboxItem
+                                  key={name}
+                                  checked={checked}
+                                  onSelect={(e) => e.preventDefault()}
+                                  onCheckedChange={(next) => {
+                                    setMembersSort('teams')
+                                    setTeamSortSelection((cur) => {
+                                      if (!next) return cur.filter((t) => t.toLowerCase() !== name.toLowerCase())
+                                      return Array.from(new Set([...cur, name]))
+                                    })
+                                  }}
+                                >
+                                  {name}
+                                </DropdownMenuCheckboxItem>
+                              )
+                            })
+                          )}
+                        </div>
+
+                        <div className="w-[200px] border-l border-slate-200 p-2">
+                          <DropdownMenuLabel className="px-2 py-1.5 text-xs text-slate-600">Selected</DropdownMenuLabel>
+                          <DropdownMenuItem
+                            onSelect={(e) => {
+                              e.preventDefault()
+                              setMembersSort('teams')
+                              setTeamSortSelection([])
+                            }}
+                            className={teamSortSelection.length === 0 ? 'bg-accent' : undefined}
+                          >
+                            All
+                          </DropdownMenuItem>
+                          {teamSortSelection.length > 0 ? <DropdownMenuSeparator /> : null}
+                          {teamSortSelection.length > 0 ? (
+                            <div className="max-h-[280px] overflow-auto">
+                              {teamSortSelection
+                                .slice()
+                                .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+                                .map((name) => (
+                                  <DropdownMenuItem
+                                    key={name}
+                                    onSelect={(e) => {
+                                      e.preventDefault()
+                                      setTeamSortSelection((cur) =>
+                                        cur.filter((t) => t.toLowerCase() !== name.toLowerCase()),
                                       )
                                     }}
                                   >
