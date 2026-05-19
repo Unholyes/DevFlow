@@ -53,6 +53,14 @@ type MemberProjectInfo = {
   teamRoleName: string | null
 }
 
+type MemberTeamInfo = {
+  teamId: string
+  name: string
+  teamRole: 'lead' | 'member' | null
+  description: string | null
+  joinedAt: string | null
+}
+
 type WorkspaceMember = {
   id: string
   userId: string
@@ -63,11 +71,25 @@ type WorkspaceMember = {
   joinedAt: string
   joinedAtRaw: string
   projects: MemberProjectInfo[]
+  teams: MemberTeamInfo[]
 }
 
 function parseMemberProjectAccessLevel(value: unknown): ProjectAccessLevel | null {
   const level = String(value ?? '').trim()
   return (PROJECT_ACCESS_LEVELS as readonly string[]).includes(level) ? (level as ProjectAccessLevel) : null
+}
+
+function parseMemberTeamRole(value: unknown): 'lead' | 'member' | null {
+  const role = String(value ?? '').trim().toLowerCase()
+  if (role === 'lead') return 'lead'
+  if (role === 'member') return 'member'
+  return null
+}
+
+function formatMemberTeamRoleLabel(role: 'lead' | 'member' | null): string {
+  if (role === 'lead') return 'Lead'
+  if (role === 'member') return 'Member'
+  return 'Not set'
 }
 
 type PendingInvite = {
@@ -232,6 +254,10 @@ export function AccountsPageContent({
     memberId: string
     projectId: string
   } | null>(null)
+  const [selectedMemberTeam, setSelectedMemberTeam] = useState<{
+    memberId: string
+    teamId: string
+  } | null>(null)
 
   const [isAddRoleModalOpen, setIsAddRoleModalOpen] = useState(false)
   const [roleName, setRoleName] = useState('')
@@ -390,6 +416,7 @@ export function AccountsPageContent({
 
   useEffect(() => {
     setSelectedMemberProject(null)
+    setSelectedMemberTeam(null)
   }, [selectedOrganizationId])
 
   useEffect(() => {
@@ -459,10 +486,15 @@ export function AccountsPageContent({
 
         const memberUserIds = (members ?? []).map((m: any) => m.user_id as string)
 
-        const { data: projectMembers, error: projectMembersError } = await supabase
-          .from('project_members')
-          .select(
-            `
+        const emptyUserFilter =
+          memberUserIds.length > 0 ? memberUserIds : ['00000000-0000-0000-0000-000000000000']
+
+        const [{ data: projectMembers, error: projectMembersError }, { data: teamMemberships, error: teamMembersError }] =
+          await Promise.all([
+            supabase
+              .from('project_members')
+              .select(
+                `
             user_id,
             project_id,
             project_access_level,
@@ -477,11 +509,29 @@ export function AccountsPageContent({
               name
             )
           `,
-          )
-          .eq('organization_id', selectedOrganizationId)
-          .in('user_id', memberUserIds.length > 0 ? memberUserIds : ['00000000-0000-0000-0000-000000000000'])
+              )
+              .eq('organization_id', selectedOrganizationId)
+              .in('user_id', emptyUserFilter),
+            supabase
+              .from('team_members')
+              .select(
+                `
+            user_id,
+            team_role,
+            created_at,
+            teams:team_id (
+              id,
+              name,
+              description,
+              organization_id
+            )
+          `,
+              )
+              .in('user_id', emptyUserFilter),
+          ])
 
         if (projectMembersError) throw projectMembersError
+        if (teamMembersError) throw teamMembersError
 
         const projectsByUserId = new Map<string, MemberProjectInfo[]>()
         for (const pm of projectMembers ?? []) {
@@ -516,6 +566,39 @@ export function AccountsPageContent({
           projectsByUserId.set(uid, arr)
         }
 
+        const teamsByUserId = new Map<string, MemberTeamInfo[]>()
+        for (const tm of teamMemberships ?? []) {
+          const row = tm as {
+            user_id?: string
+            team_role?: unknown
+            created_at?: string | null
+            teams?: {
+              id?: string
+              name?: string
+              description?: string | null
+              organization_id?: string
+            } | null
+          }
+          const uid = String(row.user_id ?? '').trim()
+          const teamId = String(row.teams?.id ?? '').trim()
+          const teamName = String(row.teams?.name ?? '').trim()
+          const teamOrgId = String(row.teams?.organization_id ?? '').trim()
+          if (!uid || !teamId || !teamName || teamOrgId !== selectedOrganizationId) continue
+
+          const entry: MemberTeamInfo = {
+            teamId,
+            name: teamName,
+            teamRole: parseMemberTeamRole(row.team_role),
+            description: row.teams?.description ? String(row.teams.description).trim() || null : null,
+            joinedAt: row.created_at ? formatRelativeDate(row.created_at) : null,
+          }
+
+          const arr = teamsByUserId.get(uid) ?? []
+          if (!arr.some((t) => t.teamId === teamId)) arr.push(entry)
+          arr.sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()))
+          teamsByUserId.set(uid, arr)
+        }
+
         const normalizedMembers: WorkspaceMember[] = (members ?? []).map((m: any) => {
           const fullName = (m.profiles?.full_name as string | null) ?? 'Unknown User'
           const email = (m.profiles?.email as string | null) ?? '—'
@@ -533,6 +616,7 @@ export function AccountsPageContent({
             joinedAtRaw: String(m.joined_at ?? ''),
             joinedAt: formatRelativeDate(m.joined_at),
             projects: projectsByUserId.get(m.user_id) ?? [],
+            teams: teamsByUserId.get(m.user_id) ?? [],
           }
         })
 
@@ -1600,18 +1684,80 @@ export function AccountsPageContent({
                             <p className="font-medium text-gray-900">{selectedProject.name}</p>
                             <dl className="mt-2 grid gap-2 sm:grid-cols-2">
                               <div>
-                                <dt className="text-gray-500">Project access template</dt>
+                                <dt className="text-gray-500">Project Role</dt>
                                 <dd className="mt-0.5 font-medium text-gray-800">
                                   {selectedProject.accessLevel ?? 'Not set'}
                                 </dd>
                               </div>
                               <div>
-                                <dt className="text-gray-500">Team role</dt>
+                                <dt className="text-gray-500">Title</dt>
                                 <dd className="mt-0.5 font-medium text-gray-800">
                                   {selectedProject.teamRoleName ?? 'Not assigned'}
                                 </dd>
                               </div>
                             </dl>
+                          </div>
+                        )
+                      })()
+                    ) : null}
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-gray-400">Teams:</span>
+                      {m.teams.length === 0 ? (
+                        <span className="text-xs text-gray-500">None</span>
+                      ) : (
+                        m.teams.map((team) => {
+                          const isSelected =
+                            selectedMemberTeam?.memberId === m.id && selectedMemberTeam?.teamId === team.teamId
+                          return (
+                            <button
+                              key={team.teamId}
+                              type="button"
+                              onClick={() =>
+                                setSelectedMemberTeam((cur) =>
+                                  cur?.memberId === m.id && cur?.teamId === team.teamId
+                                    ? null
+                                    : { memberId: m.id, teamId: team.teamId },
+                                )
+                              }
+                              className={cn(
+                                'inline-flex items-center rounded-md border px-2 py-0.5 text-xs transition-colors',
+                                isSelected
+                                  ? 'border-[#7a2233] bg-rose-50 text-[#7a2233] font-medium'
+                                  : 'border-gray-200 bg-gray-50 text-gray-700 hover:border-gray-300 hover:bg-gray-100',
+                              )}
+                            >
+                              {team.name}
+                            </button>
+                          )
+                        })
+                      )}
+                    </div>
+                    {selectedMemberTeam?.memberId === m.id ? (
+                      (() => {
+                        const selectedTeam = m.teams.find((t) => t.teamId === selectedMemberTeam.teamId)
+                        if (!selectedTeam) return null
+                        return (
+                          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+                            <p className="font-medium text-gray-900">{selectedTeam.name}</p>
+                            <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                              <div>
+                                <dt className="text-gray-500">Team role</dt>
+                                <dd className="mt-0.5 font-medium text-gray-800">
+                                  {formatMemberTeamRoleLabel(selectedTeam.teamRole)}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt className="text-gray-500">Joined team</dt>
+                                <dd className="mt-0.5 font-medium text-gray-800">
+                                  {selectedTeam.joinedAt ?? 'Unknown'}
+                                </dd>
+                              </div>
+                            </dl>
+                            {selectedTeam.description ? (
+                              <p className="mt-2 text-gray-600">{selectedTeam.description}</p>
+                            ) : null}
                           </div>
                         )
                       })()
