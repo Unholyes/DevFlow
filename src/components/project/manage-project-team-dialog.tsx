@@ -25,10 +25,15 @@ import {
 } from '@/components/ui/tooltip'
 import {
   PROJECT_ACCESS_LEVELS,
-  PROJECT_FUNCTIONAL_ROLES,
   getProjectTemplatePermissionLabel,
   type ProjectAccessLevel,
 } from '@/lib/permissions/project-template-permissions'
+
+type ProjectTeamRoleOption = {
+  id: string
+  name: string
+  effectivePermissions: string[]
+}
 import { cn } from '@/lib/utils'
 import { ChevronDown, Info, Loader2, Search, Users, User, UsersRound, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
@@ -104,11 +109,12 @@ export function ManageProjectTeamDialog({
   const [pickerOpen, setPickerOpen] = useState(false)
   const [assignee, setAssignee] = useState<AssigneeOption | null>(null)
   const [accessLevel, setAccessLevel] = useState<ProjectAccessLevel>('Editor')
-  const [functionalRole, setFunctionalRole] = useState<string>('project_manager')
+  const [projectTeamRoleId, setProjectTeamRoleId] = useState<string>('')
   const [assigneeOptions, setAssigneeOptions] = useState<AssigneeOption[]>([])
   const [projectTemplatePermissions, setProjectTemplatePermissions] = useState<
     Record<ProjectAccessLevel, string[]>
   >({ Admin: [], Editor: [], Viewer: [] })
+  const [teamRoles, setTeamRoles] = useState<ProjectTeamRoleOption[]>([])
   const [isLoadingOptions, setIsLoadingOptions] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -120,7 +126,7 @@ export function ManageProjectTeamDialog({
     setSearch('')
     setPickerOpen(false)
     setAccessLevel('Editor')
-    setFunctionalRole('project_manager')
+    setProjectTeamRoleId('')
     setSaveError(null)
   }, [])
 
@@ -139,6 +145,11 @@ export function ManageProjectTeamDialog({
       setAssigneeOptions(list)
       if (json.projectTemplatePermissions && typeof json.projectTemplatePermissions === 'object') {
         setProjectTemplatePermissions(json.projectTemplatePermissions as Record<ProjectAccessLevel, string[]>)
+      }
+      if (Array.isArray(json.teamRoles)) {
+        const roles = json.teamRoles as ProjectTeamRoleOption[]
+        setTeamRoles(roles)
+        setProjectTeamRoleId((cur) => cur || roles[0]?.id || '')
       }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Failed to load organization users and teams')
@@ -164,12 +175,19 @@ export function ManageProjectTeamDialog({
     )
   }, [assigneeOptions, search])
 
-  const effectivePermissions = useMemo(
-    () => projectTemplatePermissions[accessLevel] ?? [],
-    [accessLevel, projectTemplatePermissions],
+  const selectedTeamRole = useMemo(
+    () => teamRoles.find((r) => r.id === projectTeamRoleId) ?? null,
+    [projectTeamRoleId, teamRoles],
   )
 
-  const canSave = Boolean(assignee) && !isSaving && !isLoadingOptions
+  const effectivePermissions = useMemo(() => {
+    if (selectedTeamRole?.effectivePermissions?.length) return selectedTeamRole.effectivePermissions
+    if (selectedTeamRole) return selectedTeamRole.effectivePermissions
+    return projectTemplatePermissions[accessLevel] ?? []
+  }, [accessLevel, projectTemplatePermissions, selectedTeamRole])
+
+  const canSave =
+    Boolean(assignee) && !isSaving && !isLoadingOptions && (teamRoles.length === 0 || Boolean(projectTeamRoleId))
 
   const handleSave = async (andNew: boolean) => {
     if (!assignee) {
@@ -188,7 +206,7 @@ export function ManageProjectTeamDialog({
           kind: assignee.kind,
           assigneeId: assignee.id,
           project_access_level: accessLevel,
-          functional_role: functionalRole,
+          project_team_role_id: projectTeamRoleId || null,
         }),
       })
       const json = await res.json().catch(() => ({}))
@@ -379,7 +397,7 @@ export function ManageProjectTeamDialog({
                   <div>
                     <FieldLabel className="inline-flex items-center" htmlFor={`${baseId}-access`}>
                       Project access level
-                      <InfoHint text="Uses the org template (Admin / Editor / Viewer) configured under Settings → Permissions. This controls project-scoped permissions." />
+                      <InfoHint text="Fallback when no functional role is set. Org templates are under workspace Settings → Permissions." />
                     </FieldLabel>
                     <Select value={accessLevel} onValueChange={(v) => setAccessLevel(parseAccessLevel(v))}>
                       <SelectTrigger id={`${baseId}-access`} className="h-9">
@@ -395,18 +413,18 @@ export function ManageProjectTeamDialog({
                     </Select>
                   </div>
                   <div>
-                    <FieldLabel className="inline-flex items-center" htmlFor={`${baseId}-functional`}>
-                      Functional role
-                      <InfoHint text="Descriptive tag only (e.g. QA Engineer). Does not grant permissions; use project access level for that." />
+                    <FieldLabel className="inline-flex items-center" htmlFor={`${baseId}-team-role`}>
+                      Team role
+                      <InfoHint text="Primary permission profile for this assignment. Configure under Project settings → Team roles." />
                     </FieldLabel>
-                    <Select value={functionalRole} onValueChange={setFunctionalRole}>
-                      <SelectTrigger id={`${baseId}-functional`} className="h-9">
-                        <SelectValue placeholder="Functional role" />
+                    <Select value={projectTeamRoleId} onValueChange={setProjectTeamRoleId}>
+                      <SelectTrigger id={`${baseId}-team-role`} className="h-9">
+                        <SelectValue placeholder="Team role" />
                       </SelectTrigger>
                       <SelectContent>
-                        {PROJECT_FUNCTIONAL_ROLES.map((r) => (
+                        {teamRoles.map((r) => (
                           <SelectItem key={r.id} value={r.id}>
-                            {r.label}
+                            {r.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -415,7 +433,7 @@ export function ManageProjectTeamDialog({
                 </div>
                 <div className="rounded-md border border-blue-100 bg-blue-50/50 px-3 py-3">
                   <p className="text-xs font-semibold text-blue-900">
-                    Permissions from <span className="font-medium">{accessLevel}</span> template
+                    Permissions from <span className="font-medium">{selectedTeamRole?.name ?? 'team role'}</span>
                   </p>
                   {effectivePermissions.length === 0 ? (
                     <p className="mt-1 text-xs text-blue-800">No project-scoped permissions (read-only).</p>

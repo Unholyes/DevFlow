@@ -103,7 +103,7 @@ export type FunctionalRoleId =
   | 'devops_engineer'
   | 'tech_writer'
 
-/** Descriptive job tags on project_members; they do not grant permissions. */
+/** Job tags on project_members; permissions come from per-project templates when set. */
 export const PROJECT_FUNCTIONAL_ROLES: Array<{
   id: FunctionalRoleId
   label: string
@@ -200,4 +200,36 @@ export const DEFAULT_PROJECT_TEMPLATE_PERMISSIONS: Record<ProjectAccessLevel, re
 
 export function defaultProjectTemplatePermissions(level: ProjectAccessLevel): string[] {
   return filterToProjectTemplatePermissions([...DEFAULT_PROJECT_TEMPLATE_PERMISSIONS[level]])
+}
+
+/** Default permission sets per functional role (used when no project row exists yet). */
+export const DEFAULT_FUNCTIONAL_ROLE_PERMISSIONS: Record<FunctionalRoleId, readonly ProjectTemplatePermissionId[]> = {
+  project_manager: DEFAULT_PROJECT_TEMPLATE_PERMISSIONS.Admin,
+  lead_developer: DEFAULT_PROJECT_TEMPLATE_PERMISSIONS.Editor,
+  qa_engineer: DEFAULT_PROJECT_TEMPLATE_PERMISSIONS.Viewer,
+  business_analyst: DEFAULT_PROJECT_TEMPLATE_PERMISSIONS.Editor,
+  designer: DEFAULT_PROJECT_TEMPLATE_PERMISSIONS.Viewer,
+  devops_engineer: DEFAULT_PROJECT_TEMPLATE_PERMISSIONS.Editor,
+  tech_writer: DEFAULT_PROJECT_TEMPLATE_PERMISSIONS.Viewer,
+}
+
+export function defaultFunctionalRolePermissions(functionalRole: FunctionalRoleId): string[] {
+  return filterToProjectTemplatePermissions([...DEFAULT_FUNCTIONAL_ROLE_PERMISSIONS[functionalRole]])
+}
+
+export function buildFunctionalRolePermissionsMap(
+  rows: Array<{ functional_role?: unknown; permissions?: unknown }> | null | undefined,
+): Record<FunctionalRoleId, string[]> {
+  const out = {} as Record<FunctionalRoleId, string[]>
+  for (const role of PROJECT_FUNCTIONAL_ROLES) {
+    const row = (rows ?? []).find(
+      (r) => String((r as { functional_role?: unknown }).functional_role ?? '') === role.id,
+    )
+    if (row?.permissions != null) {
+      out[role.id] = filterToProjectTemplatePermissions(row.permissions)
+    } else {
+      out[role.id] = defaultFunctionalRolePermissions(role.id)
+    }
+  }
+  return out
 }

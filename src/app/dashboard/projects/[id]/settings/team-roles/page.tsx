@@ -2,10 +2,11 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
-import { ProjectSettingsForm } from '@/components/project/project-settings-form'
+import { ProjectTeamRolesSettings } from '@/components/project/project-team-roles-settings'
 import { loadProjectForSettings } from '@/lib/projects/load-project-for-settings'
+import { userCanManageProjectMembers } from '@/lib/permissions/project-members-permissions'
 
-export default async function ProjectSettingsPage({ params }: { params: { id: string } }) {
+export default async function ProjectTeamRolesSettingsPage({ params }: { params: { id: string } }) {
   const tenantSlug = getTenantSlug()
   const supabase = createClient()
 
@@ -30,16 +31,11 @@ export default async function ProjectSettingsPage({ params }: { params: { id: st
   const project = await loadProjectForSettings(supabase, orgId, params.id)
   if (!project) notFound()
 
-  return (
-    <ProjectSettingsForm
-      project={{
-        id: project.id,
-        name: project.name,
-        description: project.description,
-        status: project.status,
-        phaseGatingEnabled: project.phaseGatingEnabled,
-        dueDate: project.dueDate,
-      }}
-    />
-  )
+  const canEdit = await userCanManageProjectMembers(supabase, {
+    organizationId: project.organizationId,
+    userId: user.id,
+    projectId: project.id,
+  })
+
+  return <ProjectTeamRolesSettings projectId={project.id} canEdit={canEdit} />
 }

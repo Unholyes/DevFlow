@@ -2,11 +2,13 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { userCanManageProjectMembers } from '@/lib/permissions/project-members-permissions'
+import { loadProjectTeamRoles } from '@/lib/permissions/team-roles'
 import {
   PROJECT_ACCESS_LEVELS,
   PROJECT_FUNCTIONAL_ROLES,
   defaultProjectTemplatePermissions,
   filterToProjectTemplatePermissions,
+  isFunctionalRoleId,
   type ProjectAccessLevel,
 } from '@/lib/permissions/project-template-permissions'
 
@@ -109,7 +111,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
         .order('name', { ascending: true }),
       supabase
         .from('project_members')
-        .select('id,user_id,project_access_level,functional_role,joined_at')
+        .select('id,user_id,project_access_level,functional_role,project_team_role_id,joined_at')
         .eq('project_id', ctx.projectId)
         .eq('organization_id', ctx.organizationId)
         .order('joined_at', { ascending: true }),
@@ -148,16 +150,28 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     userId: String((m as { user_id?: unknown }).user_id ?? ''),
     projectAccessLevel: String((m as { project_access_level?: unknown }).project_access_level ?? 'Viewer'),
     functionalRole: ((m as { functional_role?: unknown }).functional_role ?? null) as string | null,
+    projectTeamRoleId: ((m as { project_team_role_id?: unknown }).project_team_role_id ?? null) as string | null,
     joinedAt: String((m as { joined_at?: unknown }).joined_at ?? ''),
   }))
 
-  const projectTemplatePermissions = await loadProjectTemplatePermissions(supabase, ctx.organizationId)
+  const [projectTemplatePermissions, teamRoles] = await Promise.all([
+    loadProjectTemplatePermissions(supabase, ctx.organizationId),
+    loadProjectTeamRoles(supabase, ctx.projectId, ctx.organizationId),
+  ])
 
   return NextResponse.json({
     organizationId: ctx.organizationId,
     assignees: [...users, ...teamOptions],
     members: memberRows,
     projectTemplatePermissions,
+    teamRoles: teamRoles.map((r) => ({
+      id: r.id,
+      name: r.name,
+      description: r.description,
+      organizationTeamRoleId: r.organization_team_role_id,
+      inheritsFromOrg: r.inherits_from_org,
+      effectivePermissions: r.effectivePermissions,
+    })),
     functionalRoles: PROJECT_FUNCTIONAL_ROLES,
   })
 }
@@ -202,6 +216,10 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     typeof parsed.functional_role === 'string' && parsed.functional_role.trim().length > 0
       ? parsed.functional_role.trim()
       : null
+  const projectTeamRoleId =
+    typeof parsed.project_team_role_id === 'string' && parsed.project_team_role_id.trim().length > 0
+      ? parsed.project_team_role_id.trim()
+      : null
 
   if (!kind || !assigneeId) {
     return jsonError(400, 'kind and assigneeId are required')
@@ -214,6 +232,34 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   const admin = createAdminClient()
+
+  let resolvedTeamRoleId = projectTeamRoleId
+  if (resolvedTeamRoleId) {
+    const { data: teamRoleRow, error: teamRoleError } = await admin
+      .from('project_team_roles')
+      .select('id')
+      .eq('id', resolvedTeamRoleId)
+      .eq('project_id', ctx.projectId)
+      .maybeSingle()
+    if (teamRoleError) return jsonError(500, teamRoleError.message)
+    if (!teamRoleRow?.id) return jsonError(400, 'Invalid project_team_role_id')
+  } else if (functionalRole && isFunctionalRoleId(functionalRole)) {
+    const { data: orgRole } = await admin
+      .from('organization_team_roles')
+      .select('id')
+      .eq('organization_id', ctx.organizationId)
+      .eq('slug', functionalRole)
+      .maybeSingle()
+    if (orgRole?.id) {
+      const { data: projectRole } = await admin
+        .from('project_team_roles')
+        .select('id')
+        .eq('project_id', ctx.projectId)
+        .eq('organization_team_role_id', orgRole.id)
+        .maybeSingle()
+      if (projectRole?.id) resolvedTeamRoleId = String(projectRole.id)
+    }
+  }
   let userIds: string[] = []
 
   if (kind === 'user') {
@@ -278,12 +324,13 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     user_id: userId,
     project_access_level: projectAccessLevel,
     functional_role: functionalRole,
+    project_team_role_id: resolvedTeamRoleId,
   }))
 
   const { data: upserted, error: upsertError } = await supabase
     .from('project_members')
     .upsert(rows, { onConflict: 'project_id,user_id' })
-    .select('id,user_id,project_access_level,functional_role')
+    .select('id,user_id,project_access_level,functional_role,project_team_role_id')
 
   if (upsertError) {
     if (upsertError.code === '42P01') {

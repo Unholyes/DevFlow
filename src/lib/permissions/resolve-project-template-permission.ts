@@ -1,6 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { canonicalBuiltinRoleKey } from '@/lib/permissions/can-manage-organization-roles'
 import {
+  loadProjectFunctionalRolePermissions,
+  parseFunctionalRole,
+} from '@/lib/permissions/project-functional-role-templates'
+import { resolvePermissionsForProjectTeamRoleId } from '@/lib/permissions/team-roles'
+import {
   defaultProjectTemplatePermissions,
   filterToProjectTemplatePermissions,
   type ProjectAccessLevel,
@@ -156,6 +161,49 @@ export async function resolveProjectAccessLevelForUser(
   return 'Viewer'
 }
 
+export async function resolveProjectPermissionsForUser(
+  supabase: SupabaseClient,
+  params: {
+    organizationId: string
+    userId: string
+    projectId?: string | null
+  },
+): Promise<string[]> {
+  const { organizationId, userId, projectId } = params
+
+  if (projectId) {
+    const { data: member } = await supabase
+      .from('project_members')
+      .select('project_team_role_id,functional_role,project_access_level')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    const projectTeamRoleId = String((member as { project_team_role_id?: unknown })?.project_team_role_id ?? '').trim()
+    if (projectTeamRoleId) {
+      const fromTeamRole = await resolvePermissionsForProjectTeamRoleId(
+        supabase,
+        projectTeamRoleId,
+        organizationId,
+      )
+      if (fromTeamRole.length > 0 || projectTeamRoleId) return fromTeamRole
+    }
+
+    const functionalRole = parseFunctionalRole((member as { functional_role?: unknown })?.functional_role)
+    if (functionalRole) {
+      return loadProjectFunctionalRolePermissions(supabase, projectId, functionalRole)
+    }
+
+    const level = parseProjectAccessLevel((member as { project_access_level?: unknown })?.project_access_level)
+    if (level) {
+      return loadTemplatePermissions(supabase, organizationId, level)
+    }
+  }
+
+  const accessLevel = await resolveProjectAccessLevelForUser(supabase, params)
+  return loadTemplatePermissions(supabase, organizationId, accessLevel)
+}
+
 export async function userHasProjectTemplatePermission(
   supabase: SupabaseClient,
   params: {
@@ -165,8 +213,7 @@ export async function userHasProjectTemplatePermission(
     projectId?: string | null
   },
 ): Promise<boolean> {
-  const accessLevel = await resolveProjectAccessLevelForUser(supabase, params)
-  const permissions = await loadTemplatePermissions(supabase, params.organizationId, accessLevel)
+  const permissions = await resolveProjectPermissionsForUser(supabase, params)
   const target = params.permissionId.toLowerCase()
   return permissions.some((p) => p.toLowerCase() === target)
 }

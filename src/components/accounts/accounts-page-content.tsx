@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/lib/supabase/client'
 import { customRolesIncludeManageMembers, userCanManageOrganizationRoles } from '@/lib/permissions/can-manage-organization-roles'
 import { PermissionsPageContent } from '@/components/settings/permissions-page-content'
+import { OrganizationTeamRolesSettings } from '@/components/settings/organization-team-roles-settings'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -177,10 +178,11 @@ export function AccountsPageContent({
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const [activeTab, setActiveTab] = useState<'members' | 'teams' | 'roles'>(() => {
+  const [activeTab, setActiveTab] = useState<'members' | 'teams' | 'roles' | 'team-roles'>(() => {
     const tab = (searchParams?.get('tab') ?? '').toLowerCase()
     if (tab === 'teams') return 'teams'
     if (tab === 'roles') return 'roles'
+    if (tab === 'team-roles' || tab === 'team_roles') return 'team-roles'
     return 'members'
   })
   const [teamsQuery, setTeamsQuery] = useState('')
@@ -578,7 +580,7 @@ export function AccountsPageContent({
 
   useEffect(() => {
     if (isLoading) return
-    if (!canManageRoles && activeTab === 'roles') setActiveTab('members')
+    if (!canManageRoles && (activeTab === 'roles' || activeTab === 'team-roles')) setActiveTab('members')
   }, [isLoading, canManageRoles, activeTab])
 
   useEffect(() => {
@@ -921,13 +923,29 @@ export function AccountsPageContent({
                 activeTab === 'roles' ? 'text-gray-900 border-b-2 border-[#7a2233]' : 'text-gray-500 hover:text-gray-700',
               ].join(' ')}
             >
-              Roles
+              Account roles
+            </button>
+          ) : null}
+          {!isLoading && canManageAccounts && canManageRoles ? (
+            <button
+              type="button"
+              onClick={() => setActiveTab('team-roles')}
+              className={[
+                'pb-3 text-sm font-medium',
+                activeTab === 'team-roles' ? 'text-gray-900 border-b-2 border-[#7a2233]' : 'text-gray-500 hover:text-gray-700',
+              ].join(' ')}
+            >
+              Team roles
             </button>
           ) : null}
         </div>
       </div>
 
-      {activeTab === 'roles' ? (
+      {activeTab === 'team-roles' ? (
+        <div className="pt-2">
+          <OrganizationTeamRolesSettings organizationId={selectedOrganizationId} canEdit={canManageRoles} />
+        </div>
+      ) : activeTab === 'roles' ? (
         <div className="pt-2">
           {canManageRoles ? (
             <div className="mb-3 flex items-center justify-end">

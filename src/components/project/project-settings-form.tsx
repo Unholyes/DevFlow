@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -118,12 +117,6 @@ export function ProjectSettingsForm({ project }: ProjectSettingsFormProps) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <Link href={`/dashboard/projects/${project.id}`} className="text-sm font-medium text-gray-600 hover:text-blue-600">
-          Back to project
-        </Link>
-      </div>
-
       <Card className="border-gray-200 shadow-sm">
         <CardHeader>
           <CardTitle>Project settings</CardTitle>
