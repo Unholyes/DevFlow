@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,6 +9,16 @@ import { Badge } from '@/components/ui/badge'
 import { supabase } from '@/lib/supabase/client'
 import { TENANT_SLUG_HEADER } from '@/lib/tenant/resolve'
 import Stepper, { Step } from '@/components/react-bits/Stepper/Stepper'
+import { cn } from '@/lib/utils'
+import { AlertCircle } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 type Phase = {
   title: string
@@ -69,16 +79,93 @@ export function SetupProjectWizard({
   const [currentStep, setCurrentStep] = useState(1)
   const totalSteps = 3
 
+  const [existingProjectNames, setExistingProjectNames] = useState<string[]>([])
+  const [errorModalOpen, setErrorModalOpen] = useState(false)
+  const [errorModalMessage, setErrorModalMessage] = useState('')
+
+  useEffect(() => {
+    let active = true
+    async function loadProjects() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user || !active) return
+
+        let orgId: string | null = null
+
+        if (tenantSlug) {
+          const { data: orgBySlug } = await supabase
+            .from('organizations')
+            .select('id')
+            .eq('slug', tenantSlug)
+            .maybeSingle()
+          orgId = orgBySlug?.id ?? null
+        }
+
+        if (!orgId) {
+          const { data: members } = await supabase
+            .from('organization_members')
+            .select('organization_id')
+            .eq('user_id', user.id)
+
+          if (members && members.length > 0) {
+            orgId = members[0].organization_id
+          }
+        }
+
+        if (orgId && active) {
+          const { data: projects } = await supabase
+            .from('projects')
+            .select('name')
+            .eq('organization_id', orgId)
+
+          if (projects && active) {
+            setExistingProjectNames(projects.map((p: { name: string }) => p.name.trim().toLowerCase()))
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load existing projects for validation:', err)
+      }
+    }
+    loadProjects()
+    return () => {
+      active = false
+    }
+  }, [tenantSlug])
+
+  const isNameDuplicate = useMemo(() => {
+    return existingProjectNames.includes(projectName.trim().toLowerCase())
+  }, [projectName, existingProjectNames])
+
   const isValid = useMemo(() => {
     return (
       projectName.trim().length > 0 &&
+      !isNameDuplicate &&
       phases.filter(
         (phase) =>
           phase.title.trim().length > 0 &&
           phase.processes.some((process) => process.name.trim().length > 0)
       ).length > 0
     )
-  }, [projectName, phases])
+  }, [projectName, phases, isNameDuplicate])
+
+  const validationErrorMessage = useMemo(() => {
+    if (projectName.trim().length === 0) {
+      return 'Please enter a project name.'
+    }
+    if (isNameDuplicate) {
+      return 'A project with this name already exists in your organization.'
+    }
+    const hasValidPhases = phases.filter(
+      (phase) =>
+        phase.title.trim().length > 0 &&
+        phase.processes.some((process) => process.name.trim().length > 0)
+    ).length > 0
+
+    if (!hasValidPhases) {
+      return 'Please add at least one phase with a process before completing setup.'
+    }
+    return null
+  }, [projectName, isNameDuplicate, phases])
 
   const submit = async (): Promise<boolean> => {
     if (!isValid) return false
@@ -109,7 +196,8 @@ export function SetupProjectWizard({
       return true
     } catch (e) {
       console.error(e)
-      alert(e instanceof Error ? e.message : 'Failed to complete setup')
+      setErrorModalMessage(e instanceof Error ? e.message : 'Failed to complete setup')
+      setErrorModalOpen(true)
       return false
     } finally {
       setSaving(false)
@@ -183,7 +271,20 @@ export function SetupProjectWizard({
               <CardContent className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Project name</label>
-                  <Input value={projectName} onChange={(e) => setProjectName(e.target.value)} />
+                  <Input
+                    value={projectName}
+                    onChange={(e) => setProjectName(e.target.value)}
+                    className={cn(
+                      "transition-all duration-200",
+                      isNameDuplicate ? "border-red-500 ring-2 ring-red-100 focus-visible:ring-red-500 focus-visible:border-red-500" : ""
+                    )}
+                  />
+                  {isNameDuplicate && (
+                    <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <AlertCircle className="h-4 w-4" />
+                      A project with this name already exists in your organization.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
@@ -419,15 +520,41 @@ export function SetupProjectWizard({
                   </div>
                 </div>
 
-                {!isValid ? (
+                {validationErrorMessage ? (
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                    Please fill in a project name and at least one phase with a process before completing setup.
+                    {validationErrorMessage}
                   </div>
                 ) : null}
               </CardContent>
             </Card>
           </Step>
         </Stepper>
+
+        <Dialog open={errorModalOpen} onOpenChange={setErrorModalOpen}>
+          <DialogContent className="sm:max-w-md border-red-100 bg-white">
+            <DialogHeader>
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600 mb-4">
+                <AlertCircle className="h-6 w-6" aria-hidden="true" />
+              </div>
+              <DialogTitle className="text-center text-xl font-semibold text-gray-900">
+                Project Creation Error
+              </DialogTitle>
+              <DialogDescription className="text-center text-sm text-gray-600 mt-2">
+                {errorModalMessage}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-4 justify-center sm:justify-center">
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => setErrorModalOpen(false)}
+                className="w-full sm:w-auto px-6 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-md shadow-sm transition-all"
+              >
+                Okay
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )

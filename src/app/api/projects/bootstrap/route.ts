@@ -121,6 +121,26 @@ export async function POST(request: Request) {
     if (!projectName?.trim()) {
       return NextResponse.json({ error: 'Project name is required' }, { status: 400 })
     }
+
+    const trimmedName = projectName.trim()
+    const { data: existingProject, error: checkError } = await supabase
+      .from('projects')
+      .select('id, name')
+      .eq('organization_id', orgId)
+      .ilike('name', trimmedName)
+      .maybeSingle()
+
+    if (checkError) {
+      console.error('Error checking duplicate project name:', checkError)
+      throw checkError
+    }
+
+    if (existingProject) {
+      return NextResponse.json(
+        { error: `A project named "${existingProject.name}" already exists in this organization.` },
+        { status: 409 }
+      )
+    }
     if (!Array.isArray(phases) || phases.length < 1) {
       return NextResponse.json({ error: 'At least one phase is required' }, { status: 400 })
     }
