@@ -23,9 +23,13 @@ import {
 type Phase = {
   title: string
   is_gated: boolean
+  assigned_team_id?: string | null
+  assigned_user_id?: string | null
   processes: {
     name: string
     methodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
+    assigned_team_id?: string | null
+    assigned_user_id?: string | null
   }[]
 }
 
@@ -76,12 +80,21 @@ export function SetupProjectWizard({
   const [projectDescription, setProjectDescription] = useState('')
   const [phaseGatingEnabled, setPhaseGatingEnabled] = useState(true)
   const [phases, setPhases] = useState<Phase[]>(DEFAULT_PHASES)
+
+  // Teams and Members loaded from database
+  const [teams, setTeams] = useState<{ id: string; name: string }[]>([])
+  const [members, setMembers] = useState<{ userId: string; fullName: string; email: string }[]>([])
+  const [skipAssignments, setSkipAssignments] = useState(false)
+
   const [currentStep, setCurrentStep] = useState(1)
-  const totalSteps = 3
+  const totalSteps = 4
 
   const [existingProjectNames, setExistingProjectNames] = useState<string[]>([])
   const [errorModalOpen, setErrorModalOpen] = useState(false)
   const [errorModalMessage, setErrorModalMessage] = useState('')
+
+  const getTeamName = (id?: string | null) => teams.find((t) => t.id === id)?.name || ''
+  const getMemberName = (id?: string | null) => members.find((m) => m.userId === id)?.fullName || ''
 
   useEffect(() => {
     let active = true
@@ -113,13 +126,52 @@ export function SetupProjectWizard({
         }
 
         if (orgId && active) {
-          const { data: projects } = await supabase
-            .from('projects')
-            .select('name')
-            .eq('organization_id', orgId)
+          const [projectsRes, teamsRes, membersRes] = await Promise.all([
+            supabase
+              .from('projects')
+              .select('name')
+              .eq('organization_id', orgId),
+            supabase
+              .from('teams')
+              .select('id, name')
+              .eq('organization_id', orgId)
+              .order('name', { ascending: true }),
+            supabase
+              .from('organization_members')
+              .select(`
+                user_id,
+                profiles:user_id (
+                  full_name,
+                  email
+                )
+              `)
+              .eq('organization_id', orgId)
+          ])
 
-          if (projects && active) {
-            setExistingProjectNames(projects.map((p: { name: string }) => p.name.trim().toLowerCase()))
+          if (!active) return
+
+          if (projectsRes.data) {
+            setExistingProjectNames(projectsRes.data.map((p: any) => p.name.trim().toLowerCase()))
+          }
+
+          if (teamsRes.data) {
+            setTeams(teamsRes.data as { id: string; name: string }[])
+          }
+
+          if (membersRes.data) {
+            const normalizedMembers = membersRes.data
+              .map((m: any) => {
+                const profile = m.profiles
+                const fullName = profile?.full_name || 'Unknown Member'
+                const email = profile?.email || ''
+                return {
+                  userId: m.user_id,
+                  fullName,
+                  email,
+                }
+              })
+              .filter((m) => m.userId)
+            setMembers(normalizedMembers)
           }
         }
       } catch (err) {
@@ -170,6 +222,21 @@ export function SetupProjectWizard({
   const submit = async (): Promise<boolean> => {
     if (!isValid) return false
     setSaving(true)
+
+    // Clear assignments if skipped
+    const finalPhases = skipAssignments
+      ? phases.map((p) => ({
+          ...p,
+          assigned_team_id: null,
+          assigned_user_id: null,
+          processes: p.processes.map((pr) => ({
+            ...pr,
+            assigned_team_id: null,
+            assigned_user_id: null,
+          })),
+        }))
+      : phases
+
     try {
       const res = await fetch(submitEndpoint, {
         method: 'POST',
@@ -181,7 +248,7 @@ export function SetupProjectWizard({
           projectName,
           projectDescription,
           phaseGatingEnabled,
-          phases,
+          phases: finalPhases,
         }),
       })
 
@@ -478,6 +545,164 @@ export function SetupProjectWizard({
           </Step>
 
           <Step>
+            <Card className="border-gray-200 bg-white text-slate-900 shadow-sm [&_select]:text-slate-900">
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <CardTitle>Assign teams & members (Optional)</CardTitle>
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={skipAssignments}
+                      onChange={(e) => setSkipAssignments(e.target.checked)}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
+                    />
+                    Skip assignments for now
+                  </label>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-gray-600">
+                  Assign teams or specific members to drive each phase and process. You can skip this now and edit assignments anytime in project settings.
+                </p>
+
+                {skipAssignments ? (
+                  <div className="rounded-lg border-2 border-dashed border-gray-200 bg-gray-50/50 p-8 text-center text-gray-500">
+                    <div className="text-sm font-medium text-gray-900 mb-1">Assignments Skipped</div>
+                    <p className="text-xs text-gray-500 max-w-sm mx-auto">
+                      No teams or members will be assigned during setup. You can always configure these later from your project settings or dashboard.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4 max-h-[40dvh] overflow-y-auto pr-1">
+                    {phases.map((p, idx) => (
+                      <div key={idx} className="rounded-lg border border-gray-200 bg-white p-4 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-2">
+                          <span className="text-sm font-semibold text-gray-900">
+                            Phase {idx + 1}: {p.title || 'New Phase'}
+                          </span>
+                        </div>
+                        
+                        {/* Phase assignments */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-2">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Assign Team to Phase</label>
+                            <select
+                              value={p.assigned_team_id || ''}
+                              onChange={(e) => {
+                                const val = e.target.value || null
+                                setPhases((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, assigned_team_id: val } : x))
+                                )
+                              }}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-md bg-white text-sm"
+                            >
+                              <option value="">Unassigned</option>
+                              {teams.map((t) => (
+                                <option key={t.id} value={t.id}>{t.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Assign Member to Phase</label>
+                            <select
+                              value={p.assigned_user_id || ''}
+                              onChange={(e) => {
+                                const val = e.target.value || null
+                                setPhases((prev) =>
+                                  prev.map((x, i) => (i === idx ? { ...x, assigned_user_id: val } : x))
+                                )
+                              }}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-md bg-white text-sm"
+                            >
+                              <option value="">Unassigned</option>
+                              {members.map((m) => (
+                                <option key={m.userId} value={m.userId}>{m.fullName} ({m.email})</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Nested process assignments */}
+                        {p.processes.length > 0 && (
+                          <div className="mt-3 pl-3 border-l-2 border-gray-100 space-y-2">
+                            <p className="text-xs font-medium text-gray-400">Process Assignments</p>
+                            {p.processes.map((process, processIdx) => (
+                              <div
+                                key={processIdx}
+                                className="rounded border border-gray-100 bg-gray-50/30 p-2 space-y-2"
+                              >
+                                <div className="text-xs font-medium text-gray-700">
+                                  Process: {process.name || 'New Process'}
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  <div>
+                                    <label className="block text-[10px] font-medium text-gray-400 mb-0.5">Assign Team</label>
+                                    <select
+                                      value={process.assigned_team_id || ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value || null
+                                        setPhases((prev) =>
+                                          prev.map((x, i) =>
+                                            i === idx
+                                              ? {
+                                                  ...x,
+                                                  processes: x.processes.map((y, j) =>
+                                                    j === processIdx ? { ...y, assigned_team_id: val } : y
+                                                  ),
+                                                }
+                                              : x
+                                          )
+                                        )
+                                      }}
+                                      className="w-full px-2 py-1.5 border border-gray-200 rounded bg-white text-xs"
+                                    >
+                                      <option value="">Unassigned</option>
+                                      {teams.map((t) => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-[10px] font-medium text-gray-400 mb-0.5">Assign Member</label>
+                                    <select
+                                      value={process.assigned_user_id || ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value || null
+                                        setPhases((prev) =>
+                                          prev.map((x, i) =>
+                                            i === idx
+                                              ? {
+                                                  ...x,
+                                                  processes: x.processes.map((y, j) =>
+                                                    j === processIdx ? { ...y, assigned_user_id: val } : y
+                                                  ),
+                                                }
+                                              : x
+                                          )
+                                        )
+                                      }}
+                                      className="w-full px-2 py-1.5 border border-gray-200 rounded bg-white text-xs"
+                                    >
+                                      <option value="">Unassigned</option>
+                                      {members.map((m) => (
+                                        <option key={m.userId} value={m.userId}>{m.fullName}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </Step>
+
+          <Step>
             <Card className="border-gray-200 bg-white text-slate-900 shadow-sm">
               <CardHeader>
                 <CardTitle>Review & create</CardTitle>
@@ -493,26 +718,47 @@ export function SetupProjectWizard({
                 </div>
 
                 <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-700">
-                  <div className="font-medium mb-2">Phases</div>
-                  <div className="space-y-2">
+                  <div className="font-medium mb-2">Phases & Assignments</div>
+                  <div className="space-y-3">
                     {phases
                       .filter((p) => p.title.trim())
-                      .map((p, idx) => (
-                        <div key={idx} className="flex items-center justify-between">
-                          <div>
-                            <span className="font-medium">
-                              {idx + 1}. {p.title}
-                            </span>
-                            <div className="mt-1 text-xs text-gray-500">
-                              {p.processes
-                                .filter((process) => process.name.trim())
-                                .map((process) => `${process.name} (${process.methodology})`)
-                                .join(' · ')}
+                      .map((p, idx) => {
+                        const phaseTeam = getTeamName(p.assigned_team_id)
+                        const phaseMember = getMemberName(p.assigned_user_id)
+                        const hasPhaseAssignment = !skipAssignments && (phaseTeam || phaseMember)
+
+                        return (
+                          <div key={idx} className="border-b border-gray-100 last:border-0 pb-3 last:pb-0">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="font-medium text-gray-900">
+                                  {idx + 1}. {p.title}
+                                </span>
+                                <div className="mt-1 text-xs text-gray-500">
+                                  {p.processes
+                                    .filter((process) => process.name.trim())
+                                    .map((process) => {
+                                      const procTeam = getTeamName(process.assigned_team_id)
+                                      const procMember = getMemberName(process.assigned_user_id)
+                                      const hasProcAssignment = !skipAssignments && (procTeam || procMember)
+                                      const assignmentStr = hasProcAssignment
+                                        ? ` [Assigned: ${[procTeam, procMember].filter(Boolean).join(', ')}]`
+                                        : ''
+                                      return `${process.name} (${process.methodology})${assignmentStr}`
+                                    })
+                                    .join(' · ')}
+                                </div>
+                              </div>
+                              <Badge variant="outline">{p.is_gated ? 'gated' : 'not gated'}</Badge>
                             </div>
+                            {hasPhaseAssignment && (
+                              <div className="mt-1 text-xs text-blue-600 font-medium">
+                                Phase Owner: {[phaseTeam, phaseMember].filter(Boolean).join(' / ')}
+                              </div>
+                            )}
                           </div>
-                          <Badge variant="outline">{p.is_gated ? 'gated' : 'not gated'}</Badge>
-                        </div>
-                      ))}
+                        )
+                      })}
                   </div>
                   <div className="mt-3 text-xs text-gray-500">
                     Workflow stages are created from each phase&apos;s primary process. Scrum uses a Backlog stage and DevOps

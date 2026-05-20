@@ -670,6 +670,8 @@ CREATE TABLE IF NOT EXISTS public.sdlc_phases (
   completed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  assigned_team_id UUID REFERENCES public.teams(id) ON DELETE SET NULL,
+  assigned_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   UNIQUE (project_id, order_index)
 );
 
@@ -776,6 +778,8 @@ CREATE TABLE IF NOT EXISTS public.phase_processes (
   order_index INTEGER NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  assigned_team_id UUID REFERENCES public.teams(id) ON DELETE SET NULL,
+  assigned_user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   UNIQUE (phase_id, order_index)
 );
 

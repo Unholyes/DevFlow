@@ -6,9 +6,13 @@ type PhaseInput = {
   title: string
   is_gated: boolean
   methodology?: 'scrum' | 'kanban' | 'waterfall' | 'devops'
+  assigned_team_id?: string | null
+  assigned_user_id?: string | null
   processes?: {
     name: string
     methodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
+    assigned_team_id?: string | null
+    assigned_user_id?: string | null
   }[]
 }
 
@@ -52,21 +56,30 @@ function defaultStagesForMethodology(methodology: PhaseInput['methodology']) {
 
 const ALLOWED_METHODS = new Set(['scrum', 'kanban', 'waterfall', 'devops'])
 
-function normalizeMethodology(value: unknown): PhaseInput['methodology'] {
+function normalizeMethodology(value: unknown): 'scrum' | 'kanban' | 'waterfall' | 'devops' {
   if (typeof value !== 'string') return 'kanban'
-  return ALLOWED_METHODS.has(value) ? (value as PhaseInput['methodology']) : 'kanban'
+  return ALLOWED_METHODS.has(value) ? (value as 'scrum' | 'kanban' | 'waterfall' | 'devops') : 'kanban'
 }
 
 function normalizeProcesses(phase: PhaseInput) {
-  const processRows =
+  const processRows: NonNullable<PhaseInput['processes']> =
     Array.isArray(phase.processes) && phase.processes.length > 0
       ? phase.processes
-      : [{ name: 'Default Process', methodology: normalizeMethodology(phase.methodology) }]
+      : [
+          {
+            name: 'Default Process',
+            methodology: normalizeMethodology(phase.methodology),
+            assigned_team_id: null,
+            assigned_user_id: null,
+          },
+        ]
 
   return processRows
     .map((process) => ({
       name: typeof process?.name === 'string' ? process.name.trim() : '',
       methodology: normalizeMethodology(process?.methodology),
+      assigned_team_id: process?.assigned_team_id || null,
+      assigned_user_id: process?.assigned_user_id || null,
     }))
     .filter((process) => process.name.length > 0)
 }
@@ -178,6 +191,8 @@ export async function POST(request: Request) {
         // Keep all phases "active"; gating logic controls access.
         // (phase_status_enum is: active | completed | archived)
         status: 'active',
+        assigned_team_id: p.assigned_team_id || null,
+        assigned_user_id: p.assigned_user_id || null,
       } as Record<string, unknown>
 
       // `is_gated` was introduced in `migrations/add_phase_gating.sql`.
@@ -220,6 +235,8 @@ export async function POST(request: Request) {
           name: process.name,
           methodology: process.methodology,
           order_index: processIndex,
+          assigned_team_id: process.assigned_team_id || null,
+          assigned_user_id: process.assigned_user_id || null,
         }))
 
         const { error: processError } = await supabase.from('phase_processes').insert(processRows)
