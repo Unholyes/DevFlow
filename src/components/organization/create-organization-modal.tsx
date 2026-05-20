@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
@@ -16,7 +16,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
-import { CheckCircle2 } from 'lucide-react'
+import { CheckCircle2, AlertCircle } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import Stepper, { Step } from '@/components/react-bits/Stepper/Stepper'
 
 const organizationApplicationSchema = z.object({
@@ -71,18 +72,60 @@ export function CreateOrganizationModal({
   const [showError, setShowError] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
 
+  const [currentStep, setCurrentStep] = useState(1)
+  const [isCheckingName, setIsCheckingName] = useState(false)
+  const [isNameDuplicate, setIsNameDuplicate] = useState(false)
+  const [duplicateMessage, setDuplicateMessage] = useState<string | null>(null)
+
   const {
     register,
     formState: { errors },
     reset,
     trigger,
     getValues,
+    watch,
   } = useForm<OrganizationApplicationFormData>({
     resolver: zodResolver(organizationApplicationSchema),
     defaultValues: {
       contactEmail: userEmail || '',
     },
   })
+
+  const organizationName = watch('organizationName')
+
+  useEffect(() => {
+    if (!organizationName || organizationName.trim().length < 2) {
+      setIsNameDuplicate(false)
+      setDuplicateMessage(null)
+      return
+    }
+
+    const trimmed = organizationName.trim()
+    const delayDebounceFn = setTimeout(async () => {
+      setIsCheckingName(true)
+      try {
+        const res = await fetch(`/api/organization-applications/check-name?name=${encodeURIComponent(trimmed)}`)
+        const data = await res.json()
+        if (data.exists) {
+          setIsNameDuplicate(true)
+          setDuplicateMessage(
+            data.type === 'organization'
+              ? `An organization named "${data.name}" already exists.`
+              : `An organization application for "${data.name}" is already pending or approved.`
+          )
+        } else {
+          setIsNameDuplicate(false)
+          setDuplicateMessage(null)
+        }
+      } catch (err) {
+        console.error('Error checking organization name uniqueness:', err)
+      } finally {
+        setIsCheckingName(false)
+      }
+    }, 500)
+
+    return () => clearTimeout(delayDebounceFn)
+  }, [organizationName])
 
   const submitApplication = async (data: OrganizationApplicationFormData): Promise<boolean> => {
     setIsLoading(true)
@@ -110,7 +153,7 @@ export function CreateOrganizationModal({
       setShowSuccess(true)
       onSubmitted?.()
       return true
-    } catch (err) {
+    } catch {
       setErrorMessage('An unexpected error occurred')
       setShowError(true)
       return false
@@ -130,6 +173,10 @@ export function CreateOrganizationModal({
       reset()
       setErrorMessage(null)
       setShowError(false)
+      setIsCheckingName(false)
+      setIsNameDuplicate(false)
+      setDuplicateMessage(null)
+      setCurrentStep(1)
     }
     onOpenChange(nextOpen)
   }
@@ -150,7 +197,7 @@ export function CreateOrganizationModal({
           <DialogHeader className="shrink-0 space-y-1.5 pr-10 text-left">
             <DialogTitle>Create Organization Application</DialogTitle>
             <DialogDescription>
-              Submit your organization application for review. Once approved, you'll be able to create and manage your workspace.
+              Submit your organization application for review. Once approved, you&apos;ll be able to create and manage your workspace.
             </DialogDescription>
           </DialogHeader>
 
@@ -159,6 +206,7 @@ export function CreateOrganizationModal({
               <div className="h-full">
                 <Stepper
                   initialStep={1}
+                  onStepChange={setCurrentStep}
                   onFinalStepCompleted={async () => {
                     const valid = await trigger()
                     if (!valid) {
@@ -174,7 +222,12 @@ export function CreateOrganizationModal({
                   backButtonText="Previous"
                   nextButtonText="Next"
                   completeButtonText={isLoading ? 'Submitting…' : 'Submit'}
-                  nextButtonProps={{ disabled: isLoading }}
+                  nextButtonProps={{
+                    disabled:
+                      isLoading ||
+                      isCheckingName ||
+                      (currentStep === 1 && (!organizationName?.trim() || isNameDuplicate || isCheckingName)),
+                  }}
                 >
                   <Step>
                     <div className="space-y-5">
@@ -187,8 +240,28 @@ export function CreateOrganizationModal({
 
                       <div className="space-y-2">
                         <Label htmlFor="organizationName">Organization Name *</Label>
-                        <Input id="organizationName" placeholder="Your Company Name" {...register('organizationName')} />
-                        {errors.organizationName && (
+                        <Input
+                          id="organizationName"
+                          placeholder="Your Company Name"
+                          {...register('organizationName')}
+                          className={cn(
+                            "transition-all duration-200",
+                            isNameDuplicate ? "border-red-500 ring-2 ring-red-100 focus-visible:ring-red-500 focus-visible:border-red-500" : ""
+                          )}
+                        />
+                        {isCheckingName && (
+                          <p className="mt-1.5 text-sm text-gray-500 flex items-center gap-1.5 animate-in fade-in duration-200">
+                            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-300 border-t-purple-600" />
+                            Checking availability...
+                          </p>
+                        )}
+                        {isNameDuplicate && duplicateMessage && (
+                          <p className="mt-1.5 text-sm text-red-600 flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1 duration-200">
+                            <AlertCircle className="h-4 w-4" />
+                            {duplicateMessage}
+                          </p>
+                        )}
+                        {!isNameDuplicate && !isCheckingName && errors.organizationName && (
                           <p className="text-sm text-red-600">{errors.organizationName.message}</p>
                         )}
                       </div>

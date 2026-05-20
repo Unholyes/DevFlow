@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
@@ -25,6 +26,48 @@ export async function POST(request: Request) {
     // Validate required fields
     if (!organizationName || !description || !contactEmail || !useCase) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    const adminSupabase = createAdminClient()
+    const trimmedOrgName = organizationName.trim()
+
+    // 1. Check if organization name exists in public.organizations
+    const { data: existingOrg, error: orgError } = await adminSupabase
+      .from('organizations')
+      .select('name')
+      .ilike('name', trimmedOrgName)
+      .maybeSingle()
+
+    if (orgError) {
+      console.error('Error querying organizations:', orgError)
+      return NextResponse.json({ error: 'Failed to verify organization name' }, { status: 500 })
+    }
+
+    if (existingOrg) {
+      return NextResponse.json(
+        { error: `An organization named "${existingOrg.name}" already exists.` },
+        { status: 409 }
+      )
+    }
+
+    // 2. Check if organization name exists in public.organization_applications with pending/approved status
+    const { data: existingApp, error: appError } = await adminSupabase
+      .from('organization_applications')
+      .select('organization_name')
+      .ilike('organization_name', trimmedOrgName)
+      .in('status', ['pending', 'approved'])
+      .maybeSingle()
+
+    if (appError) {
+      console.error('Error querying organization applications:', appError)
+      return NextResponse.json({ error: 'Failed to verify organization applications' }, { status: 500 })
+    }
+
+    if (existingApp) {
+      return NextResponse.json(
+        { error: `An organization application for "${existingApp.organization_name}" already exists or is under review.` },
+        { status: 409 }
+      )
     }
 
     // Check if user already has a pending or approved application
