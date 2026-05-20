@@ -1107,6 +1107,9 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   -- Scrum association (optional)
   sprint_id UUID REFERENCES public.sprints(id) ON DELETE SET NULL,
 
+  -- Restores To Do / In Progress / In Review when the task re-enters a sprint after closure
+  last_sprint_workflow_stage_id UUID REFERENCES public.workflow_stages(id) ON DELETE SET NULL,
+
   -- Optional: for process-scoped boards/backlogs
   process_id UUID REFERENCES public.phase_processes(id) ON DELETE SET NULL,
 
@@ -1428,13 +1431,19 @@ BEGIN
     LIMIT 1;
 
     IF v_backlog_stage_id IS NOT NULL THEN
-      -- Return unfinished tasks to the backlog.
-      UPDATE public.tasks
+      -- Return unfinished tasks to the backlog; remember their last active column.
+      UPDATE public.tasks t
       SET
+        last_sprint_workflow_stage_id = CASE
+          WHEN ws.is_backlog IS NOT TRUE AND ws.is_done IS NOT TRUE THEN t.workflow_stage_id
+          ELSE t.last_sprint_workflow_stage_id
+        END,
         sprint_id = NULL,
         workflow_stage_id = v_backlog_stage_id
-      WHERE sprint_id = NEW.id
-        AND completed_at IS NULL;
+      FROM public.workflow_stages ws
+      WHERE t.sprint_id = NEW.id
+        AND t.completed_at IS NULL
+        AND ws.id = t.workflow_stage_id;
     END IF;
   END IF;
 

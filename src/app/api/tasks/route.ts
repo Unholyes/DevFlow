@@ -7,6 +7,10 @@ import { enrichTasksForNavigator } from '@/lib/tasks/enrich-for-navigator'
 import { parseTaskTypeFromBody } from '@/lib/tasks/task-type'
 import { notifyTaskAssigned } from '@/lib/notifications/create-notifications'
 import { loadTaskNotificationContext } from '@/lib/notifications/load-task-context'
+import {
+  loadPhaseIdForSprint,
+  resolveWorkflowStageForSprintAssignment,
+} from '@/lib/tasks/resolve-sprint-resume-stage'
 
 function isUniqueViolation(error: unknown) {
   return typeof error === 'object' && error !== null && (error as any).code === '23505'
@@ -312,6 +316,51 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: ar.error, code: ar.code }, { status: ar.status })
       }
       updates.assignee_id = ar.assigneeId
+    }
+
+    const sprintIdUpdate = updates.sprint_id
+    const enteringSprint =
+      typeof id === 'string' &&
+      typeof sprintIdUpdate === 'string' &&
+      uuidRe.test(sprintIdUpdate)
+
+    if (enteringSprint) {
+      const { data: existingForSprint, error: sprintLoadError } = await supabase
+        .from('tasks')
+        .select('sprint_id,last_sprint_workflow_stage_id,workflow_stage_id')
+        .eq('id', id)
+        .eq('organization_id', orgId)
+        .maybeSingle()
+
+      if (sprintLoadError) throw sprintLoadError
+
+      if (existingForSprint && existingForSprint.sprint_id == null) {
+        const phaseId = await loadPhaseIdForSprint(supabase as any, orgId, sprintIdUpdate)
+        if (phaseId) {
+          const fallbackStageId =
+            typeof updates.workflow_stage_id === 'string' ? updates.workflow_stage_id : null
+          const { workflowStageId, clearResume } = await resolveWorkflowStageForSprintAssignment(
+            supabase as any,
+            orgId,
+            phaseId,
+            {
+              last_sprint_workflow_stage_id:
+                (existingForSprint.last_sprint_workflow_stage_id as string | null) ?? null,
+            },
+            fallbackStageId,
+          )
+
+          if (workflowStageId) {
+            if (workflowStageId !== existingForSprint.workflow_stage_id) {
+              updates.current_stage_entered_at = new Date().toISOString()
+            }
+            updates.workflow_stage_id = workflowStageId
+            if (clearResume) {
+              updates.last_sprint_workflow_stage_id = null
+            }
+          }
+        }
+      }
     }
 
     if (updates.workflow_stage_id !== undefined && typeof updates.workflow_stage_id === 'string') {

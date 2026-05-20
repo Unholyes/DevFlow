@@ -3,6 +3,10 @@ import { userCanCreateSprintDraft, userCanManageSprints } from '@/lib/permission
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { NextResponse } from 'next/server'
+import {
+  loadPhaseIdForSprint,
+  resolveWorkflowStageForSprintAssignment,
+} from '@/lib/tasks/resolve-sprint-resume-stage'
 
 function isUniqueViolation(error: unknown) {
   return typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
@@ -285,11 +289,46 @@ export async function PATCH(request: Request) {
       if (error) throw error
 
       if (sprint_start_stage_id) {
-        await supabase
-          .from('tasks')
-          .update({ workflow_stage_id: sprint_start_stage_id })
-          .eq('sprint_id', id)
-          .eq('organization_id', orgId)
+        const phaseId = await loadPhaseIdForSprint(supabase as any, orgId, id)
+        if (phaseId) {
+          const { data: sprintTasks, error: tasksError } = await supabase
+            .from('tasks')
+            .select('id,last_sprint_workflow_stage_id,workflow_stage_id')
+            .eq('sprint_id', id)
+            .eq('organization_id', orgId)
+
+          if (tasksError) throw tasksError
+
+          const nowIso = new Date().toISOString()
+          for (const task of sprintTasks ?? []) {
+            const { workflowStageId, clearResume } = await resolveWorkflowStageForSprintAssignment(
+              supabase as any,
+              orgId,
+              phaseId,
+              {
+                last_sprint_workflow_stage_id:
+                  (task.last_sprint_workflow_stage_id as string | null) ?? null,
+              },
+              sprint_start_stage_id,
+            )
+
+            if (!workflowStageId || workflowStageId === task.workflow_stage_id) continue
+
+            const row: Record<string, unknown> = {
+              workflow_stage_id: workflowStageId,
+              current_stage_entered_at: nowIso,
+            }
+            if (clearResume) row.last_sprint_workflow_stage_id = null
+
+            const { error: taskUpdateError } = await supabase
+              .from('tasks')
+              .update(row)
+              .eq('id', task.id)
+              .eq('organization_id', orgId)
+
+            if (taskUpdateError) throw taskUpdateError
+          }
+        }
       }
 
       return NextResponse.json({ data })

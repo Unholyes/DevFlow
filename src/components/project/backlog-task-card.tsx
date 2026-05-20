@@ -94,13 +94,24 @@ export function BacklogTaskCard({
         {/* Actions */}
         {showActions ? (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button variant="ghost" size="sm" onClick={onEdit} className="h-8 w-8 p-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                onEdit()
+              }}
+              className="h-8 w-8 p-0"
+            >
               <Edit2 className="h-4 w-4" />
             </Button>
             <Button
               variant="ghost"
               size="sm"
-              onClick={onDelete}
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete()
+              }}
               className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
             >
               <Trash2 className="h-4 w-4" />

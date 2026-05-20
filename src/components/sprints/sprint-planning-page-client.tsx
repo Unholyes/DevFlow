@@ -3,12 +3,21 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowRight, ArrowLeft, Save, Play, Target, Minus, Plus } from 'lucide-react'
+import { ArrowRight, ArrowLeft, Save, Play, Target, Minus, Plus, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { BacklogTaskCard } from '@/components/project/backlog-task-card'
+import { KanbanTaskDetailModal, type TaskRowLite } from '@/components/project/KanbanTaskDetailModal'
 
 type Task = {
   id: string
@@ -69,6 +78,11 @@ export function SprintPlanningPageClient(props: {
   const [backlogTasks, setBacklogTasks] = useState<Task[]>(props.backlogTasks)
   const [sprintTasks, setSprintTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(false)
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const [deleteConfirmTask, setDeleteConfirmTask] = useState<{ id: string; title: string } | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   useEffect(() => {
     const tasksParam = searchParams.get('tasks')
@@ -188,6 +202,71 @@ export function SprintPlanningPageClient(props: {
     // Remove the added tasks from backlog (even if there were duplicates).
     setBacklogTasks((prev) => prev.filter((t) => !selectedTasks.has(t.id)))
     setSelectedTasks(new Set())
+  }
+
+  const openTaskEdit = (taskId: string) => {
+    setDetailTaskId(taskId)
+    setDetailOpen(true)
+  }
+
+  const mapSavedTaskToLocal = (row: TaskRowLite): Task => ({
+    id: row.id,
+    title: row.title,
+    description: row.description ?? null,
+    priority: row.priority,
+    story_points: row.story_points,
+    assignee_id: row.assignee_id ?? null,
+    position: row.position,
+  })
+
+  const handleTaskSaved = (row: TaskRowLite) => {
+    const updated = mapSavedTaskToLocal(row)
+    setBacklogTasks((prev) => prev.map((t) => (t.id === row.id ? updated : t)))
+    setSprintTasks((prev) => prev.map((t) => (t.id === row.id ? updated : t)))
+    router.refresh()
+  }
+
+  const findTaskTitle = (taskId: string) => {
+    const task = backlogTasks.find((t) => t.id === taskId) ?? sprintTasks.find((t) => t.id === taskId)
+    return task?.title ?? 'this task'
+  }
+
+  const requestDeleteTask = (taskId: string) => {
+    setDeleteError(null)
+    setDeleteConfirmTask({ id: taskId, title: findTaskTitle(taskId) })
+  }
+
+  const closeDeleteDialog = () => {
+    if (deleteLoading) return
+    setDeleteConfirmTask(null)
+    setDeleteError(null)
+  }
+
+  const confirmDeleteTask = async () => {
+    if (!deleteConfirmTask) return
+    const taskId = deleteConfirmTask.id
+    setDeleteLoading(true)
+    setDeleteError(null)
+    try {
+      const res = await fetch(`/api/tasks?id=${encodeURIComponent(taskId)}`, { method: 'DELETE' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error((json?.error as string) || 'Failed to delete task')
+
+      setBacklogTasks((prev) => prev.filter((t) => t.id !== taskId))
+      setSprintTasks((prev) => prev.filter((t) => t.id !== taskId))
+      setSelectedTasks((prev) => {
+        if (!prev.has(taskId)) return prev
+        const next = new Set(prev)
+        next.delete(taskId)
+        return next
+      })
+      setDeleteConfirmTask(null)
+      router.refresh()
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : 'Failed to delete task')
+    } finally {
+      setDeleteLoading(false)
+    }
   }
 
   const handleRemoveFromSprint = (taskId: string) => {
@@ -624,8 +703,8 @@ export function SprintPlanningPageClient(props: {
                     }}
                     isSelected={selectedTasks.has(task.id)}
                     onSelect={() => toggleTaskSelection(task.id)}
-                    onEdit={() => {}}
-                    onDelete={() => {}}
+                    onEdit={() => openTaskEdit(task.id)}
+                    onDelete={() => requestDeleteTask(task.id)}
                   />
                 ))}
               </div>
@@ -672,7 +751,8 @@ export function SprintPlanningPageClient(props: {
                     }}
                     isSelected={false}
                     onSelect={() => {}}
-                    onEdit={() => {}}
+                    showCheckbox={false}
+                    onEdit={() => openTaskEdit(task.id)}
                     onDelete={() => handleRemoveFromSprint(task.id)}
                   />
                 ))}
@@ -681,6 +761,54 @@ export function SprintPlanningPageClient(props: {
           </CardContent>
         </Card>
       </div>
+
+      <KanbanTaskDetailModal
+        taskId={detailTaskId}
+        open={detailOpen}
+        onOpenChange={(open) => {
+          setDetailOpen(open)
+          if (!open) setDetailTaskId(null)
+        }}
+        onTaskSaved={handleTaskSaved}
+      />
+
+      <Dialog open={!!deleteConfirmTask} onOpenChange={(open) => !open && closeDeleteDialog()}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete task</DialogTitle>
+            <DialogDescription>
+              {deleteConfirmTask ? (
+                <>
+                  Permanently delete{' '}
+                  <span className="font-medium text-gray-900">&ldquo;{deleteConfirmTask.title}&rdquo;</span>? This
+                  removes the task from the backlog and cannot be undone.
+                </>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError ? <p className="text-sm text-red-600">{deleteError}</p> : null}
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={closeDeleteDialog} disabled={deleteLoading}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void confirmDeleteTask()}
+              disabled={deleteLoading}
+            >
+              {deleteLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                'Delete task'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
