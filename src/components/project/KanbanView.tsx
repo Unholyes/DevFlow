@@ -419,7 +419,7 @@ function KanbanColumn({
   const ids = tasksInColumn.map((t) => t.id)
 
   return (
-    <div className="min-w-[320px] flex flex-col gap-4">
+    <div className="flex w-[280px] shrink-0 flex-col gap-4">
       <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex justify-between items-center gap-2">
         <div className="min-w-0 flex-1 flex items-center gap-1.5">
           {columnDragHandleProps ? (
@@ -1305,7 +1305,7 @@ export default function KanbanView(props: {
         flowAdvancedFields={showAdvancedFlowFields}
       />
 
-      <Card className="border-gray-100 shadow-sm">
+      <Card className="min-w-0 max-w-full overflow-hidden border-gray-100 shadow-sm">
         <CardHeader className="flex flex-col gap-2 pb-2">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex flex-wrap items-center gap-2">
@@ -1351,7 +1351,7 @@ export default function KanbanView(props: {
           </div>
           <p className="text-sm text-gray-500">Drag cards to move work; use column grips to reorder.</p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between rounded-lg border border-gray-100 bg-slate-50/90 p-3">
             <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
               {teamsList.length > 0 ? (
@@ -1740,7 +1740,8 @@ export default function KanbanView(props: {
                 items={boardStages.map((s) => boardColSortableId(s.id))}
                 strategy={horizontalListSortingStrategy}
               >
-                <div className="flex gap-2 overflow-x-auto pb-6 items-stretch">
+                <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain pb-2">
+                  <div className="flex w-max min-h-[min(60vh,520px)] gap-2 items-stretch pb-4 pr-1">
                   {boardStages.map((stage) => {
                     const colTasks = tasksForBoard
                       .filter((t) => t.workflow_stage_id === stage.id && boardStageIds.has(stage.id))
@@ -1776,6 +1777,7 @@ export default function KanbanView(props: {
                     onClick={() => setAddOpen(true)}
                     disabled={columnMutation || reorderingColumns}
                   />
+                  </div>
                 </div>
               </SortableContext>
 
@@ -1816,7 +1818,8 @@ export default function KanbanView(props: {
                       const backlogIds = backlogTasks.map((t) => t.id)
                       return (
                         <SortableContext items={backlogIds} strategy={horizontalListSortingStrategy}>
-                          <div className="flex gap-3 overflow-x-auto pb-1 min-h-[88px]">
+                          <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain">
+                            <div className="flex w-max gap-3 pb-1 min-h-[88px]">
                             {backlogStageEntity
                               ? backlogTasks.map((task) => (
                                   <div key={task.id} className="min-w-[260px] max-w-[280px] shrink-0">
@@ -1840,6 +1843,7 @@ export default function KanbanView(props: {
                                 </HelpTip>
                               </p>
                             ) : null}
+                            </div>
                           </div>
                         </SortableContext>
                       )
