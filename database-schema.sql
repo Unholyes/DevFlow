@@ -1104,6 +1104,9 @@ CREATE TABLE IF NOT EXISTS public.tasks (
   project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
   workflow_stage_id UUID NOT NULL REFERENCES public.workflow_stages(id) ON DELETE RESTRICT,
 
+  -- Denormalized from workflow_stages.phase_id for phase-scoped uniqueness and queries
+  phase_id UUID REFERENCES public.sdlc_phases(id) ON DELETE CASCADE,
+
   -- Scrum association (optional)
   sprint_id UUID REFERENCES public.sprints(id) ON DELETE SET NULL,
 
@@ -1134,10 +1137,10 @@ CREATE TABLE IF NOT EXISTS public.tasks (
 
 ALTER TABLE public.tasks ENABLE ROW LEVEL SECURITY;
 
--- Task titles must be unique within the same sprint (but can repeat in other sprints)
-CREATE UNIQUE INDEX IF NOT EXISTS tasks_sprint_title_unique_idx
-ON public.tasks (sprint_id, lower(btrim(title)))
-WHERE sprint_id IS NOT NULL;
+-- Task titles must be unique within the same process (case-insensitive)
+CREATE UNIQUE INDEX IF NOT EXISTS tasks_process_title_unique_idx
+ON public.tasks (process_id, lower(btrim(title)))
+WHERE process_id IS NOT NULL;
 
 CREATE POLICY "Tasks: select members/owner" ON public.tasks
   FOR SELECT

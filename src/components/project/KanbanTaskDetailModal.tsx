@@ -27,6 +27,7 @@ import { supabase } from '@/lib/supabase/client'
 import { TASK_TYPE_META, TASK_TYPES, normalizeTaskType, type TaskType } from '@/lib/tasks/task-type'
 import { TaskTypeIcon } from '@/components/tasks/task-type-icon'
 import { BlockedTaskChip } from '@/components/tasks/blocked-task-chip'
+import { TaskMessageDialog, taskErrorDialogFromUnknown } from '@/components/tasks/task-message-dialog'
 
 const UNASSIGNED = '__unassigned__'
 
@@ -144,6 +145,7 @@ export function KanbanTaskDetailModal({
   const [blockedReason, setBlockedReason] = useState('')
   const [taskType, setTaskType] = useState<TaskType>('task')
   const [saveLoading, setSaveLoading] = useState(false)
+  const [saveErrorDialog, setSaveErrorDialog] = useState<{ title: string; message: string } | null>(null)
 
   const [commentText, setCommentText] = useState('')
   const [commentLoading, setCommentLoading] = useState(false)
@@ -308,8 +310,9 @@ export function KanbanTaskDetailModal({
         blocked_reason: (updated as { blocked_reason?: string | null }).blocked_reason ?? null,
         task_type: normalizeTaskType((updated as { task_type?: string }).task_type),
       })
+      onOpenChange(false)
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Save failed')
+      setSaveErrorDialog(taskErrorDialogFromUnknown(e, 'Save failed'))
     } finally {
       setSaveLoading(false)
     }
@@ -340,7 +343,16 @@ export function KanbanTaskDetailModal({
   const task = detail?.task
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <TaskMessageDialog
+        open={!!saveErrorDialog}
+        onOpenChange={(open) => !open && setSaveErrorDialog(null)}
+        title={saveErrorDialog?.title ?? ''}
+        message={saveErrorDialog?.message ?? ''}
+        variant="error"
+      />
+
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="pr-8">Task details</DialogTitle>
@@ -628,5 +640,6 @@ export function KanbanTaskDetailModal({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    </>
   )
 }

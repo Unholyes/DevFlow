@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dialog'
 import { BacklogTaskCard } from '@/components/project/backlog-task-card'
 import { KanbanTaskDetailModal, type TaskRowLite } from '@/components/project/KanbanTaskDetailModal'
+import { TaskMessageDialog, taskErrorDialogFromUnknown } from '@/components/tasks/task-message-dialog'
 
 type Task = {
   id: string
@@ -83,6 +84,7 @@ export function SprintPlanningPageClient(props: {
   const [deleteConfirmTask, setDeleteConfirmTask] = useState<{ id: string; title: string } | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [createErrorDialog, setCreateErrorDialog] = useState<{ title: string; message: string } | null>(null)
 
   useEffect(() => {
     const tasksParam = searchParams.get('tasks')
@@ -147,6 +149,7 @@ export function SprintPlanningPageClient(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           project_id: props.projectId,
+          phase_id: props.phaseId,
           process_id: props.processId,
           workflow_stage_id: props.backlogStageId,
           title,
@@ -181,7 +184,7 @@ export function SprintPlanningPageClient(props: {
       setIsCreating(false)
       router.refresh()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to create task')
+      setCreateErrorDialog(taskErrorDialogFromUnknown(e, 'Failed to create task'))
     } finally {
       setCreateLoading(false)
     }
@@ -770,6 +773,14 @@ export function SprintPlanningPageClient(props: {
           if (!open) setDetailTaskId(null)
         }}
         onTaskSaved={handleTaskSaved}
+      />
+
+      <TaskMessageDialog
+        open={!!createErrorDialog}
+        onOpenChange={(open) => !open && setCreateErrorDialog(null)}
+        title={createErrorDialog?.title ?? ''}
+        message={createErrorDialog?.message ?? ''}
+        variant="error"
       />
 
       <Dialog open={!!deleteConfirmTask} onOpenChange={(open) => !open && closeDeleteDialog()}>

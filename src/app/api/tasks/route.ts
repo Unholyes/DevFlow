@@ -11,6 +11,12 @@ import {
   loadPhaseIdForSprint,
   resolveWorkflowStageForSprintAssignment,
 } from '@/lib/tasks/resolve-sprint-resume-stage'
+import {
+  DUPLICATE_TASK_TITLE_IN_PROCESS,
+  findDuplicateTaskTitleInProcess,
+  loadPhaseIdForWorkflowStage,
+  normalizeTaskTitle,
+} from '@/lib/tasks/validate-task-title'
 
 function isUniqueViolation(error: unknown) {
   return typeof error === 'object' && error !== null && (error as any).code === '23505'
@@ -140,6 +146,7 @@ export async function POST(request: Request) {
       due_date,
       assignee_id,
       workflow_stage_id,
+      phase_id: bodyPhaseIdRaw,
       sprint_id,
       size_band: sizeBandRaw,
       service_class: serviceClassRaw,
@@ -185,6 +192,44 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'project_id is required', data: null }, { status: 400 })
     }
 
+    const trimmedTitle = normalizeTaskTitle(title)
+    if (!trimmedTitle) {
+      return NextResponse.json({ error: 'Task title is required', data: null }, { status: 400 })
+    }
+
+    if (!workflow_stage_id || typeof workflow_stage_id !== 'string') {
+      return NextResponse.json({ error: 'workflow_stage_id is required', data: null }, { status: 400 })
+    }
+
+    const createPhaseId = await loadPhaseIdForWorkflowStage(supabase as any, orgId, workflow_stage_id)
+    if (!createPhaseId) {
+      return NextResponse.json({ error: 'Invalid workflow stage', data: null }, { status: 400 })
+    }
+
+    if (bodyPhaseIdRaw != null && bodyPhaseIdRaw !== '') {
+      const bodyPhaseId = String(bodyPhaseIdRaw)
+      if (bodyPhaseId !== createPhaseId) {
+        return NextResponse.json(
+          { error: 'Workflow stage does not belong to the specified phase.', data: null },
+          { status: 400 },
+        )
+      }
+    }
+
+    const validProcessId =
+      process_id && uuidRe.test(String(process_id)) ? String(process_id) : null
+
+    const duplicateOnCreate = await findDuplicateTaskTitleInProcess(
+      supabase as any,
+      orgId,
+      validProcessId,
+      createPhaseId,
+      trimmedTitle,
+    )
+    if (duplicateOnCreate) {
+      return NextResponse.json({ error: DUPLICATE_TASK_TITLE_IN_PROCESS, data: null }, { status: 409 })
+    }
+
     const teamResolved = await resolveTeamIdForTask(supabase, orgId, teamIdRaw)
     if (!teamResolved.ok) {
       return NextResponse.json(
@@ -222,7 +267,8 @@ export async function POST(request: Request) {
       organization_id: orgId,
       project_id: validProjectId,
       process_id: process_id ?? null,
-      title,
+      phase_id: createPhaseId,
+      title: trimmedTitle,
       description,
       priority,
       story_points,
@@ -271,10 +317,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ data })
   } catch (error) {
     if (isUniqueViolation(error)) {
-      return NextResponse.json(
-        { error: 'A task with this name already exists in this sprint.', data: null },
-        { status: 409 }
-      )
+      return NextResponse.json({ error: DUPLICATE_TASK_TITLE_IN_PROCESS, data: null }, { status: 409 })
     }
     console.error('Error creating task:', error)
     return NextResponse.json({ error: 'Failed to create task', data: null }, { status: 500 })
@@ -295,6 +338,69 @@ export async function PATCH(request: Request) {
 
     const body = await request.json()
     const { id, ...updates } = body as Record<string, unknown> & { id?: string }
+
+    if (!id || typeof id !== 'string') {
+      return NextResponse.json({ error: 'Task id is required' }, { status: 400 })
+    }
+
+    if (updates.title !== undefined) {
+      const trimmedTitle = normalizeTaskTitle(updates.title)
+      if (!trimmedTitle) {
+        return NextResponse.json({ error: 'Task title is required' }, { status: 400 })
+      }
+      updates.title = trimmedTitle
+
+      const titlePhaseId =
+        typeof updates.workflow_stage_id === 'string'
+          ? await loadPhaseIdForWorkflowStage(supabase as any, orgId, updates.workflow_stage_id)
+          : null
+
+      const { data: taskForTitle, error: titleLoadError } = await supabase
+        .from('tasks')
+        .select('phase_id, process_id, workflow_stage_id')
+        .eq('id', id)
+        .eq('organization_id', orgId)
+        .maybeSingle()
+
+      if (titleLoadError) throw titleLoadError
+      if (!taskForTitle) {
+        return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+      }
+
+      const phaseIdForTitle =
+        titlePhaseId ??
+        (taskForTitle.phase_id as string | null) ??
+        (taskForTitle.workflow_stage_id
+          ? await loadPhaseIdForWorkflowStage(
+              supabase as any,
+              orgId,
+              String(taskForTitle.workflow_stage_id),
+            )
+          : null)
+
+      const processIdForTitle =
+        updates.process_id !== undefined
+          ? updates.process_id == null || updates.process_id === ''
+            ? null
+            : String(updates.process_id)
+          : (taskForTitle.process_id as string | null)
+
+      if (!processIdForTitle && !phaseIdForTitle) {
+        return NextResponse.json({ error: 'Task process or phase could not be resolved' }, { status: 400 })
+      }
+
+      const duplicateOnUpdate = await findDuplicateTaskTitleInProcess(
+        supabase as any,
+        orgId,
+        processIdForTitle,
+        phaseIdForTitle,
+        trimmedTitle,
+        id,
+      )
+      if (duplicateOnUpdate) {
+        return NextResponse.json({ error: DUPLICATE_TASK_TITLE_IN_PROCESS }, { status: 409 })
+      }
+    }
 
     const assigneeChanging = updates.assignee_id !== undefined
     const beforeCtx =
@@ -412,10 +518,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ data })
   } catch (error: unknown) {
     if (isUniqueViolation(error)) {
-      return NextResponse.json(
-        { error: 'A task with this name already exists in this sprint.' },
-        { status: 409 }
-      )
+      return NextResponse.json({ error: DUPLICATE_TASK_TITLE_IN_PROCESS }, { status: 409 })
     }
     const msg =
       typeof error === 'object' && error !== null && 'message' in error

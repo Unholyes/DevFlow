@@ -111,6 +111,7 @@ export default async function ProductBacklogPage({
       projectId={project.id}
       phaseId={phase.id}
       phaseTitle={phase.title}
+      backlogStageId={backlogStage.id}
       tasks={(tasks ?? []) as any}
     />
   )

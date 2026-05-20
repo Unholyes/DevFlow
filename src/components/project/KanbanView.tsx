@@ -63,6 +63,7 @@ import {
 import { BarChart3, GripVertical, HelpCircle, LayoutList, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
 import { processSummaryPath } from '@/lib/processes/process-workspace-routes'
 import { KanbanTaskDetailModal, type TaskRowLite } from '@/components/project/KanbanTaskDetailModal'
+import { TaskMessageDialog, taskErrorDialogFromUnknown } from '@/components/tasks/task-message-dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 
 type Stage = {
@@ -670,6 +671,7 @@ export default function KanbanView(props: {
   const [backlogCreateSize, setBacklogCreateSize] = useState<string>('')
   const [backlogCreateService, setBacklogCreateService] = useState<string>('standard')
   const [backlogCreateTaskType, setBacklogCreateTaskType] = useState<string>('task')
+  const [createErrorDialog, setCreateErrorDialog] = useState<{ title: string; message: string } | null>(null)
   const [showAdvancedFlowFields, setShowAdvancedFlowFields] = useState(false)
   const [wipExcludeBlocked, setWipExcludeBlocked] = useState(props.initialWipExcludeBlocked === true)
   const [wipExcludeSaving, setWipExcludeSaving] = useState(false)
@@ -1127,6 +1129,7 @@ export default function KanbanView(props: {
     try {
       const body: Record<string, unknown> = {
         project_id: props.projectId,
+        phase_id: props.phaseId,
         process_id: props.processId,
         workflow_stage_id: backlogStageId,
         title,
@@ -1158,7 +1161,7 @@ export default function KanbanView(props: {
       setBacklogCreateTaskType('task')
       router.refresh()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to create task')
+      setCreateErrorDialog(taskErrorDialogFromUnknown(e, 'Failed to create task'))
     } finally {
       setBacklogCreateLoading(false)
     }
@@ -1295,6 +1298,14 @@ export default function KanbanView(props: {
 
   return (
     <TooltipProvider delayDuration={250}>
+      <TaskMessageDialog
+        open={!!createErrorDialog}
+        onOpenChange={(open) => !open && setCreateErrorDialog(null)}
+        title={createErrorDialog?.title ?? ''}
+        message={createErrorDialog?.message ?? ''}
+        variant="error"
+      />
+
       <KanbanTaskDetailModal
         taskId={detailTaskId}
         open={detailTaskId !== null}

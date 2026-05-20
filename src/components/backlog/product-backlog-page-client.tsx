@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import { KanbanTaskDetailModal, type TaskRowLite } from '@/components/project/KanbanTaskDetailModal'
+import { TaskMessageDialog, taskErrorDialogFromUnknown } from '@/components/tasks/task-message-dialog'
 import { TaskTypeIcon } from '@/components/tasks/task-type-icon'
 import { BlockedTaskChip } from '@/components/tasks/blocked-task-chip'
 import { TASK_TYPE_META, TASK_TYPES, type TaskType } from '@/lib/tasks/task-type'
@@ -316,6 +317,7 @@ export function ProductBacklogPageClient(props: {
   const [bulkLoading, setBulkLoading] = useState(false)
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
   const [reordering, setReordering] = useState(false)
+  const [createErrorDialog, setCreateErrorDialog] = useState<{ title: string; message: string } | null>(null)
 
   useEffect(() => {
     setTasks(props.tasks)
@@ -557,6 +559,7 @@ export function ProductBacklogPageClient(props: {
     try {
       const payload: Record<string, unknown> = {
         project_id: props.projectId,
+        phase_id: props.phaseId,
         process_id: props.processId,
         workflow_stage_id: props.backlogStageId,
         title,
@@ -612,7 +615,7 @@ export function ProductBacklogPageClient(props: {
       setIsCreating(false)
       router.refresh()
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to create task')
+      setCreateErrorDialog(taskErrorDialogFromUnknown(e, 'Failed to create task'))
     } finally {
       setCreateLoading(false)
     }
@@ -623,6 +626,14 @@ export function ProductBacklogPageClient(props: {
 
   return (
     <div className="space-y-6">
+      <TaskMessageDialog
+        open={!!createErrorDialog}
+        onOpenChange={(open) => !open && setCreateErrorDialog(null)}
+        title={createErrorDialog?.title ?? ''}
+        message={createErrorDialog?.message ?? ''}
+        variant="error"
+      />
+
       <KanbanTaskDetailModal
         taskId={detailTaskId}
         open={detailTaskId !== null}
