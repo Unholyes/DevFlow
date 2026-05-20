@@ -16,7 +16,6 @@ export default async function NewProjectPage() {
       title="Create Project"
       description="Set up your project, define phases, and configure one or more processes with execution methods per phase."
       submitEndpoint="/api/projects/bootstrap"
-      submitLabel="Create project"
     />
   )
 }

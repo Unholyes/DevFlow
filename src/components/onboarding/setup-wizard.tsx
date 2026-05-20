@@ -33,7 +33,6 @@ export function SetupWizard(props: { tenantSlug: string }) {
       title="Tenant Setup Wizard"
       description="Configure your first project. This is where “Hybrid SDLC” becomes real: phases are sequential milestones, and each phase can run Scrum or Kanban."
       submitEndpoint="/api/onboarding/bootstrap"
-      submitLabel="Finish setup"
       tenantSlug={props.tenantSlug}
       showSignOut
       cancelHref={null}
@@ -45,7 +44,6 @@ type SetupProjectWizardProps = {
   title: string
   description: string
   submitEndpoint: string
-  submitLabel?: string
   tenantSlug?: string | null
   showSignOut?: boolean
   /** Where Cancel navigates. Pass `null` to hide Cancel (e.g. forced onboarding). */
@@ -56,7 +54,6 @@ export function SetupProjectWizard({
   title,
   description,
   submitEndpoint,
-  submitLabel = 'Finish setup',
   tenantSlug,
   showSignOut = false,
   cancelHref = '/dashboard/projects',
@@ -69,6 +66,8 @@ export function SetupProjectWizard({
   const [projectDescription, setProjectDescription] = useState('')
   const [phaseGatingEnabled, setPhaseGatingEnabled] = useState(true)
   const [phases, setPhases] = useState<Phase[]>(DEFAULT_PHASES)
+  const [currentStep, setCurrentStep] = useState(1)
+  const totalSteps = 3
 
   const isValid = useMemo(() => {
     return (
@@ -165,13 +164,16 @@ export function SetupProjectWizard({
 
         <Stepper
           initialStep={1}
+          onStepChange={setCurrentStep}
           onFinalStepCompleted={submit}
           className="rb-stepper__outer-container--embed"
           contentClassName="rb-stepper__content--modal"
           backButtonText="Back"
           nextButtonText="Next"
           stepCircleContainerClassName="rb-stepper__wide"
-          nextButtonProps={{ disabled: saving }}
+          nextButtonProps={{
+            disabled: saving || (currentStep === totalSteps && !isValid),
+          }}
         >
           <Step>
             <Card className="border-gray-200 bg-white text-slate-900 shadow-sm [&_input]:bg-white [&_input]:text-slate-900">
@@ -422,12 +424,6 @@ export function SetupProjectWizard({
                     Please fill in a project name and at least one phase with a process before completing setup.
                   </div>
                 ) : null}
-
-                <div className="flex items-center justify-end">
-                  <Button onClick={submit} disabled={!isValid || saving}>
-                    {saving ? 'Creating…' : submitLabel}
-                  </Button>
-                </div>
               </CardContent>
             </Card>
           </Step>
