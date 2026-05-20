@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getTenantSlugFromRequest, resolveWorkspaceOrgId } from '@/lib/api/resolve-workspace-org'
 import { userCanApprovePhaseGates } from '@/lib/permissions/phase-gate-permissions'
 import { NextResponse } from 'next/server'
+import { notifyPhaseCompleted } from '@/lib/notifications/create-notifications'
 
 export async function PATCH(request: Request) {
   const supabase = createClient()
@@ -42,7 +43,7 @@ export async function PATCH(request: Request) {
     // Load phase to find project/order so we can activate the next phase.
     const { data: currentPhase, error: currentError } = await supabase
       .from('sdlc_phases')
-      .select('id,project_id,order_index')
+      .select('id,project_id,order_index,title')
       .eq('id', id)
       .eq('organization_id', orgId)
       .maybeSingle()
@@ -87,6 +88,15 @@ export async function PATCH(request: Request) {
         .eq('project_id', currentPhase.project_id)
         .eq('order_index', currentPhase.order_index + 1)
         .neq('status', 'completed')
+
+      void notifyPhaseCompleted({
+        supabase,
+        organizationId: orgId,
+        actorId: user.id,
+        projectId,
+        phaseId: currentPhase.id as string,
+        phaseTitle: String((currentPhase as { title?: string }).title ?? 'Phase'),
+      })
     }
 
     return NextResponse.json({ data })

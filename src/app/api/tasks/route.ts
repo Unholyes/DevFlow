@@ -5,6 +5,8 @@ import { NextResponse } from 'next/server'
 import { resolveAssigneeIdForTask, resolveTeamIdForTask } from '@/lib/tasks/validate-task-assignments'
 import { enrichTasksForNavigator } from '@/lib/tasks/enrich-for-navigator'
 import { parseTaskTypeFromBody } from '@/lib/tasks/task-type'
+import { notifyTaskAssigned } from '@/lib/notifications/create-notifications'
+import { loadTaskNotificationContext } from '@/lib/notifications/load-task-context'
 
 function isUniqueViolation(error: unknown) {
   return typeof error === 'object' && error !== null && (error as any).code === '23505'
@@ -240,6 +242,28 @@ export async function POST(request: Request) {
 
     if (error) throw error
 
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (user && data?.id && assigneeResolved.assigneeId) {
+      const ctx = await loadTaskNotificationContext(supabase, orgId, data.id as string)
+      if (ctx) {
+        void notifyTaskAssigned({
+          supabase,
+          organizationId: orgId,
+          actorId: user.id,
+          assigneeId: ctx.assignee_id,
+          task: {
+            id: ctx.id,
+            title: ctx.title,
+            project_id: ctx.project_id,
+            phase_id: ctx.phase_id,
+            process_id: ctx.process_id,
+          },
+        })
+      }
+    }
+
     return NextResponse.json({ data })
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -257,11 +281,22 @@ export async function PATCH(request: Request) {
   const supabase = createClient()
   
   try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const orgId = await resolveOrgId(supabase)
     if (!orgId) return NextResponse.json({ error: 'Missing tenant context' }, { status: 400 })
 
     const body = await request.json()
     const { id, ...updates } = body as Record<string, unknown> & { id?: string }
+
+    const assigneeChanging = updates.assignee_id !== undefined
+    const beforeCtx =
+      assigneeChanging && typeof id === 'string'
+        ? await loadTaskNotificationContext(supabase, orgId, id)
+        : null
 
     if (updates.team_id !== undefined) {
       const tr = await resolveTeamIdForTask(supabase, orgId, updates.team_id)
@@ -301,6 +336,29 @@ export async function PATCH(request: Request) {
       .single()
 
     if (error) throw error
+
+    if (assigneeChanging && data?.id) {
+      const newAssignee = (data.assignee_id as string | null) ?? null
+      const prevAssignee = beforeCtx?.assignee_id ?? null
+      if (newAssignee && newAssignee !== prevAssignee) {
+        const ctx = await loadTaskNotificationContext(supabase, orgId, data.id as string)
+        if (ctx) {
+          void notifyTaskAssigned({
+            supabase,
+            organizationId: orgId,
+            actorId: user.id,
+            assigneeId: newAssignee,
+            task: {
+              id: ctx.id,
+              title: ctx.title,
+              project_id: ctx.project_id,
+              phase_id: ctx.phase_id,
+              process_id: ctx.process_id,
+            },
+          })
+        }
+      }
+    }
 
     return NextResponse.json({ data })
   } catch (error: unknown) {

@@ -3,7 +3,7 @@
 import { KeyboardEvent, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Search, Bell, Settings, User, LogOut, Menu, Building2 } from 'lucide-react'
+import { Search, Settings, User, LogOut, Menu, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -17,6 +17,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { supabase } from '@/lib/supabase/client'
 import { useOrganizationName } from '@/lib/hooks/use-organization-name'
+import { NotificationsDropdown } from '@/components/dashboard/notifications-dropdown'
 
 type HeaderUser = {
   fullName: string
@@ -283,10 +284,7 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
             </div>
           )}
 
-          {/* Notifications */}
-          <Button variant="ghost" size="sm" className="relative">
-            <Bell className="h-5 w-5" />
-          </Button>
+          <NotificationsDropdown />
 
           {/* User Menu */}
           <DropdownMenu>

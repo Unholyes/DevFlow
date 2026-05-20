@@ -2,6 +2,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { NextResponse } from 'next/server'
+import { notifyTaskComment } from '@/lib/notifications/create-notifications'
+import { loadTaskNotificationContext } from '@/lib/notifications/load-task-context'
 
 async function resolveOrgId(supabase: ReturnType<typeof createClient>) {
   const tenantSlug = getTenantSlug()
@@ -58,6 +60,24 @@ export async function POST(request: Request, { params }: { params: { id: string 
       .single()
 
     if (insErr) throw insErr
+
+    const ctx = await loadTaskNotificationContext(supabase, orgId, taskId)
+    if (ctx) {
+      void notifyTaskComment({
+        supabase,
+        organizationId: orgId,
+        actorId: user.id,
+        task: {
+          id: ctx.id,
+          title: ctx.title,
+          project_id: ctx.project_id,
+          assignee_id: ctx.assignee_id,
+          phase_id: ctx.phase_id,
+          process_id: ctx.process_id,
+        },
+        commentPreview: content,
+      })
+    }
 
     const { data: profile } = await supabase
       .from('profiles')
