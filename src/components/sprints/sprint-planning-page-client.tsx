@@ -96,8 +96,7 @@ export function SprintPlanningPageClient(props: {
     [backlogTasks, selectedTasks]
   )
   const selectedStoryPoints = selectedTaskObjects.reduce((sum, t) => sum + (t.story_points || 0), 0)
-  const remainingBacklog = backlogTasks.filter((t) => !selectedTasks.has(t.id))
-
+  const remainingBacklog = backlogTasks
   const capacity = Math.max(1, capacityPoints || defaultCapacity)
   const sprintBacklogStoryPoints = sprintTasks.reduce((sum, t) => sum + (t.story_points || 0), 0)
   const capacityStatus =

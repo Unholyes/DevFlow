@@ -25,25 +25,61 @@ type SprintRow = {
   story_points_total: number
 }
 
-function DraftSprintReviewCard({
+function UpcomingSprintCard({
   sprint,
+  hasActiveSprint,
   sprintStartStageId,
-  onDone,
+  onRefresh,
+  canManageSprints,
 }: {
   sprint: SprintWithStats
+  hasActiveSprint: boolean
   sprintStartStageId?: string
-  onDone: () => void
+  onRefresh: () => void
+  canManageSprints?: boolean
 }) {
-  const router = useRouter()
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-  const [busy, setBusy] = useState<'approve' | 'reject' | null>(null)
+  const [busy, setBusy] = useState<'approve' | 'reject' | 'today' | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const handleStartToday = async () => {
+    if (hasActiveSprint) return
+    setError(null)
+    setBusy('today')
+    const today = new Date()
+    const end = new Date()
+    end.setDate(today.getDate() + 14) // default 14 days
+    const startStr = today.toISOString().split('T')[0]
+    const endStr = end.toISOString().split('T')[0]
+
+    try {
+      const res = await fetch('/api/sprints', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: sprint.id,
+          action: sprint.status === 'draft' ? 'approve' : undefined,
+          status: 'active',
+          start_date: startStr,
+          end_date: endStr,
+          ...(sprintStartStageId ? { sprint_start_stage_id: sprintStartStageId } : {}),
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || 'Failed to start sprint')
+      onRefresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to start sprint')
+    } finally {
+      setBusy(null)
+    }
+  }
 
   const handleApprove = async () => {
     setError(null)
     if (!startDate || !endDate) {
-      setError('Start and end dates are required to approve')
+      setError('Start and end dates are required to start')
       return
     }
     setBusy('approve')
@@ -53,25 +89,25 @@ function DraftSprintReviewCard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: sprint.id,
-          action: 'approve',
+          action: sprint.status === 'draft' ? 'approve' : undefined,
+          status: 'active',
           start_date: startDate,
           end_date: endDate,
           ...(sprintStartStageId ? { sprint_start_stage_id: sprintStartStageId } : {}),
         }),
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json?.error || 'Failed to approve sprint')
-      onDone()
-      router.refresh()
+      if (!res.ok) throw new Error(json?.error || 'Failed to start sprint')
+      onRefresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to approve sprint')
+      setError(e instanceof Error ? e.message : 'Failed to start sprint')
     } finally {
       setBusy(null)
     }
   }
 
   const handleReject = async () => {
-    if (!confirm(`Reject draft "${sprint.name}"? Tasks will return to the backlog.`)) return
+    if (!confirm(`Reject "${sprint.name}"? Tasks will return to the backlog.`)) return
     setBusy('reject')
     setError(null)
     try {
@@ -82,8 +118,7 @@ function DraftSprintReviewCard({
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || 'Failed to reject sprint')
-      onDone()
-      router.refresh()
+      onRefresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to reject sprint')
     } finally {
@@ -92,40 +127,58 @@ function DraftSprintReviewCard({
   }
 
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4">
+    <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h3 className="font-semibold text-amber-900">{sprint.name}</h3>
-          <p className="mt-1 text-xs text-amber-800">
-            Draft · {sprint.tasks_total} tasks · {sprint.story_points_total} story points
+          <h3 className="font-semibold text-gray-900">{sprint.name}</h3>
+          <p className="mt-1 text-xs text-gray-600">
+            {sprint.status === 'draft' ? 'Draft' : 'Planned'} · {sprint.tasks_total} tasks · {sprint.story_points_total} story points
           </p>
         </div>
-        <Badge className="bg-amber-100 text-amber-800 border-amber-200">Pending approval</Badge>
+        <Badge className="bg-gray-200 text-gray-800">Upcoming</Badge>
       </div>
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Start date</label>
-          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">End date</label>
-          <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-        </div>
-      </div>
-      {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          className="bg-green-600 hover:bg-green-700"
-          onClick={handleApprove}
-          disabled={busy !== null}
-        >
-          {busy === 'approve' ? 'Approving…' : 'Approve & start'}
-        </Button>
-        <Button size="sm" variant="outline" onClick={handleReject} disabled={busy !== null}>
-          {busy === 'reject' ? 'Rejecting…' : 'Reject'}
-        </Button>
-      </div>
+      
+      {canManageSprints && (
+        <>
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Custom Start date</label>
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={hasActiveSprint} />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Custom End date</label>
+              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} disabled={hasActiveSprint} />
+            </div>
+          </div>
+          {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
+          <div className="mt-4 flex flex-wrap gap-2 items-center">
+            <Button
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+              onClick={handleStartToday}
+              disabled={busy !== null || hasActiveSprint}
+              title={hasActiveSprint ? "Cannot start while there is an active sprint" : "Start today for 2 weeks"}
+            >
+              {busy === 'today' ? 'Starting...' : 'Start Today'}
+            </Button>
+            <Button
+              size="sm"
+              className="bg-green-600 hover:bg-green-700 disabled:opacity-50"
+              onClick={handleApprove}
+              disabled={busy !== null || hasActiveSprint}
+              title={hasActiveSprint ? "Cannot start while there is an active sprint" : "Start with custom dates"}
+            >
+              {busy === 'approve' ? 'Starting...' : 'Start (Custom Dates)'}
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleReject} disabled={busy !== null}>
+              {busy === 'reject' ? 'Rejecting...' : 'Reject / Delete'}
+            </Button>
+            {hasActiveSprint && (
+              <span className="text-xs text-red-500 font-medium ml-2">Cannot start sprint while another is active.</span>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -173,8 +226,19 @@ export function SprintsPageClient(props: {
   canManageSprints?: boolean
   sprintStartStageId?: string
 }) {
-  const draftSprints = props.sprints.filter((s) => s.status === 'draft')
-  const activeSprints = props.sprints.filter((s) => s.status === 'active' || s.status === 'planned')
+  const router = useRouter()
+  const todayStr = new Date().toISOString().split('T')[0]
+  
+  const activeSprints = props.sprints.filter(
+    (s) => s.status === 'active' && s.start_date && s.start_date <= todayStr
+  )
+  
+  const upcomingSprints = props.sprints.filter(
+    (s) =>
+      s.status === 'draft' ||
+      s.status === 'planned' ||
+      (s.status === 'active' && (!s.start_date || s.start_date > todayStr))
+  )
   const completedSprints = props.sprints.filter((s) => s.status === 'closed')
   const totalStoryPoints = props.sprints.reduce((sum, s) => sum + (s.story_points_total || 0), 0)
   const averageVelocity = props.sprints.length ? Math.round(totalStoryPoints / props.sprints.length) : 0
@@ -213,23 +277,7 @@ export function SprintsPageClient(props: {
         </div>
       </div>
 
-      {props.canManageSprints && draftSprints.length > 0 ? (
-        <Card className="border-amber-200 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg">Sprint drafts pending approval</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {draftSprints.map((sprint) => (
-              <DraftSprintReviewCard
-                key={sprint.id}
-                sprint={sprint}
-                sprintStartStageId={props.sprintStartStageId}
-                onDone={() => {}}
-              />
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
+      {/* Removed old draft section */}
 
       {!embedded ? (
         <>
@@ -412,6 +460,32 @@ export function SprintsPageClient(props: {
           </CardContent>
         </Card>
       )}
+
+      <Card className="border-gray-200 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg">Upcoming Sprints</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {upcomingSprints.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>No upcoming sprints yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {upcomingSprints.map((sprint) => (
+                <UpcomingSprintCard
+                  key={sprint.id}
+                  sprint={sprint}
+                  hasActiveSprint={activeSprints.length > 0}
+                  sprintStartStageId={props.sprintStartStageId}
+                  onRefresh={() => router.refresh()}
+                  canManageSprints={props.canManageSprints}
+                />
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="border-gray-200 shadow-sm">
         <CardHeader>
