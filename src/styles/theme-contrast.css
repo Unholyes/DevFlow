@@ -179,6 +179,45 @@
   color: var(--muted-foreground) !important;
 }
 
+/* Kanban board toolbar & backlog strip */
+[data-theme-contrast='dark'] .kanban-board-toolbar,
+[data-theme-contrast='dark'] .kanban-backlog-dropzone,
+[data-theme-contrast='dark'] .scrum-board-toolbar {
+  background-color: var(--muted);
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+[data-theme-contrast='dark'] .kanban-board-toolbar .text-muted-foreground,
+[data-theme-contrast='dark'] .kanban-backlog-dropzone .text-muted-foreground,
+[data-theme-contrast='dark'] .scrum-board-toolbar .text-muted-foreground {
+  color: var(--muted-foreground);
+}
+
+[data-theme-contrast='dark'] .scrum-board-column {
+  background-color: color-mix(in srgb, var(--muted) 70%, var(--card) 30%);
+  border-color: var(--border);
+}
+
+[data-theme-contrast='dark'] .scrum-board-column .text-muted-foreground {
+  color: var(--muted-foreground);
+}
+
+[data-theme-contrast='dark'] .text-amber-800.dark-theme-warning {
+  color: rgb(253 230 138);
+}
+
+/* Translucent light panels (legacy class names) */
+[data-theme-contrast='dark'] .bg-slate-50\/80,
+[data-theme-contrast='dark'] .bg-slate-50\/90,
+[data-theme-contrast='dark'] .bg-gray-50\/80 {
+  background-color: var(--muted) !important;
+}
+
+[data-theme-contrast='dark'] .text-gray-400 {
+  color: var(--muted-foreground);
+}
+
 /* Form controls that still use light defaults */
 [data-theme-contrast='dark'] input:not([type='checkbox']):not([type='radio']):not([type='color']):not([type='file']),
 [data-theme-contrast='dark'] textarea,

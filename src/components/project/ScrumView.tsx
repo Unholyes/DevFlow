@@ -168,13 +168,13 @@ function SortableScrumCard({
         }
       }}
       className={cn(
-        'bg-white p-4 rounded-xl border shadow-sm transition-shadow touch-none select-none text-left outline-none',
+        'bg-card text-card-foreground p-4 rounded-xl border border-border shadow-sm transition-shadow touch-none select-none text-left outline-none',
         locked
           ? 'cursor-not-allowed opacity-95'
           : 'hover:shadow-md cursor-grab active:cursor-grabbing',
-        moving ? 'opacity-60' : 'border-gray-100',
-        !locked && 'focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1',
-        task.blocked && 'border-red-200 ring-1 ring-red-100'
+        moving ? 'opacity-60' : '',
+        !locked && 'focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1',
+        task.blocked && 'border-red-300 ring-1 ring-red-200/50'
       )}
     >
       <div className="flex justify-between items-start gap-2 mb-3">
@@ -182,15 +182,15 @@ function SortableScrumCard({
           <TaskTypeIcon type={task.task_type} size="sm" />
           {task.blocked ? <BlockedTaskChip compact reason={task.blocked_reason} /> : null}
         </div>
-        <span className="text-[11px] font-medium text-gray-400 shrink-0">{task.story_points || 0} pts</span>
+        <span className="text-[11px] font-medium text-muted-foreground shrink-0">{task.story_points || 0} pts</span>
       </div>
 
-      <h4 className="text-[13px] font-semibold text-gray-900 leading-tight mb-1">{task.title}</h4>
+      <h4 className="text-[13px] font-semibold text-foreground leading-tight mb-1">{task.title}</h4>
       {task.blocked && task.blocked_reason?.trim() ? (
         <BlockedTaskChip reason={task.blocked_reason} className="mb-2" />
       ) : null}
       {teamName ? (
-        <p className="text-[11px] text-gray-500 mb-3 truncate" title={teamName}>
+        <p className="text-[11px] text-muted-foreground mb-3 truncate" title={teamName}>
           {teamName}
         </p>
       ) : (
@@ -227,13 +227,13 @@ function ScrumColumn({
   return (
     <div
       className={cn(
-        'bg-gray-50/50 rounded-2xl p-4 border min-h-[600px] space-y-4 transition-colors border-gray-100',
-        !interactionsLocked && isOver && 'border-blue-300 bg-blue-50/40'
+        'scrum-board-column bg-muted/60 rounded-2xl p-4 border min-h-[600px] space-y-4 transition-colors border-border',
+        !interactionsLocked && isOver && 'border-primary/50 bg-accent/40'
       )}
     >
       <div className="flex justify-between items-center px-1">
-        <span className="text-xs font-bold text-gray-500 uppercase tracking-wide select-none">{stage.name}</span>
-        <span className="text-[11px] font-bold bg-gray-200 text-gray-700 px-2 py-0.5 rounded-full">
+        <span className="text-xs font-bold text-foreground uppercase tracking-wide select-none">{stage.name}</span>
+        <span className="text-[11px] font-bold bg-muted text-foreground border border-border px-2 py-0.5 rounded-full">
           {stageTasks.length}
         </span>
       </div>
@@ -252,7 +252,7 @@ function ScrumColumn({
           ))}
         </SortableContext>
         {stageTasks.length === 0 ? (
-          <div className="text-xs text-gray-400 px-2 py-8 text-center border border-dashed border-gray-200 rounded-lg select-none">
+          <div className="text-xs text-muted-foreground px-2 py-8 text-center border border-dashed border-border rounded-lg bg-muted/40 select-none">
             Drop work items here
           </div>
         ) : null}
@@ -566,9 +566,9 @@ export default function ScrumView(props: {
 
   if (!props.sprint) {
     return (
-      <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">No active sprint</h2>
-        <p className="text-sm text-gray-600">Create a sprint from the Sprints page to start working on tasks in a Scrum board.</p>
+      <div className="bg-card border border-border rounded-lg p-6 text-card-foreground">
+        <h2 className="text-lg font-semibold text-foreground mb-2">No active sprint</h2>
+        <p className="text-sm text-muted-foreground">Create a sprint from the Sprints page to start working on tasks in a Scrum board.</p>
         <div className="mt-4">
           <Button
             onClick={() =>
@@ -598,11 +598,11 @@ export default function ScrumView(props: {
         flowAdvancedFields={false}
       />
 
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+      <div className="bg-card text-card-foreground p-6 rounded-2xl shadow-sm border border-border">
         <div className="flex justify-between items-center mb-1">
           <div className="flex items-center gap-3">
-            <div className="bg-blue-50 p-2.5 rounded-xl border border-blue-100">
-              <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="bg-accent p-2.5 rounded-xl border border-border">
+              <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -611,7 +611,7 @@ export default function ScrumView(props: {
                 ></path>
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-gray-900">
+            <h2 className="text-xl font-bold text-foreground">
               {props.sprint.status === 'active'
                 ? 'Active Sprint'
                 : props.sprint.status === 'planned'
@@ -649,22 +649,22 @@ export default function ScrumView(props: {
             ) : null}
           </div>
         </div>
-        <p className="text-sm text-gray-500 mt-1 max-w-4xl ml-16">
+        <p className="text-sm text-muted-foreground mt-1 max-w-4xl ml-16">
           Progress:{' '}
-          <span className="font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md">
+          <span className="font-bold text-primary bg-accent px-2.5 py-1 rounded-md">
             {donePoints}/{totalPoints} points completed
           </span>
-          {isLocked ? <span className="ml-2 text-xs text-gray-500">(Locked)</span> : null}
+          {isLocked ? <span className="ml-2 text-xs text-muted-foreground">(Locked)</span> : null}
         </p>
         {teamsList.length > 0 ? (
-          <div className="mt-4 ml-16 flex flex-wrap items-end gap-4 rounded-lg border border-gray-100 bg-slate-50/90 p-3">
+          <div className="scrum-board-toolbar mt-4 ml-16 flex flex-wrap items-end gap-4 rounded-lg border border-border bg-muted p-3">
             <div className="grid gap-1.5">
-              <Label className="text-xs font-medium text-gray-600">Filter by team</Label>
+              <Label className="text-xs font-medium text-muted-foreground">Filter by team</Label>
               <Select
                 value={teamFilterId || '__all__'}
                 onValueChange={(v) => setTeamFilter(v === '__all__' ? '' : v)}
               >
-                <SelectTrigger className="h-9 w-[220px] bg-white">
+                <SelectTrigger className="h-9 w-[220px] bg-background">
                   <SelectValue placeholder="All teams" />
                 </SelectTrigger>
                 <SelectContent>
@@ -678,7 +678,7 @@ export default function ScrumView(props: {
               </Select>
             </div>
             {teamFilterActive ? (
-              <p className="max-w-md text-xs text-amber-800">
+              <p className="max-w-md text-xs text-amber-800 dark-theme-warning">
                 Team filter is on — card drag-and-drop is disabled until you show all teams again.
               </p>
             ) : null}
@@ -722,8 +722,8 @@ export default function ScrumView(props: {
 
         <DragOverlay dropAnimation={null}>
           {activeTask ? (
-            <div className="bg-white p-4 rounded-xl border border-blue-200 shadow-lg opacity-95 max-w-xs select-none">
-              <p className="text-xs font-semibold text-gray-800">{activeTask.title}</p>
+            <div className="bg-card text-card-foreground p-4 rounded-xl border border-primary/40 shadow-lg opacity-95 max-w-xs select-none">
+              <p className="text-xs font-semibold text-foreground">{activeTask.title}</p>
             </div>
           ) : null}
         </DragOverlay>

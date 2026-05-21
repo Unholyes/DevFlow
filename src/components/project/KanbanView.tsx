@@ -628,8 +628,8 @@ function BacklogDropZone({ stageId, children }: { stageId: string; children: Rea
     <div
       ref={setNodeRef}
       className={cn(
-        'min-h-[120px] rounded-lg border border-dashed border-gray-200 bg-slate-50/80 p-3 transition-colors',
-        isOver && 'border-blue-300 bg-blue-50/60'
+        'kanban-backlog-dropzone min-h-[120px] rounded-lg border border-dashed border-border bg-muted/80 p-3 transition-colors',
+        isOver && 'border-primary/50 bg-accent/80'
       )}
     >
       {children}
@@ -1329,7 +1329,7 @@ export default function KanbanView(props: {
         flowAdvancedFields={showAdvancedFlowFields}
       />
 
-      <Card className="min-w-0 max-w-full overflow-hidden border-gray-100 shadow-sm">
+      <Card className="min-w-0 max-w-full overflow-hidden border-border shadow-sm">
         <CardHeader className="flex flex-col gap-2 pb-2">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0 flex flex-wrap items-center gap-2">
@@ -1347,24 +1347,24 @@ export default function KanbanView(props: {
                   </p>
                 </div>
               </HelpTip>
-              <Badge variant="secondary" className="text-xs font-normal text-gray-600">
+              <Badge variant="secondary" className="text-xs font-normal text-muted-foreground">
                 Kanban
               </Badge>
             </div>
           </div>
-          <p className="text-sm text-gray-500">Drag cards to move work; use column grips to reorder.</p>
+          <p className="text-sm text-muted-foreground">Drag cards to move work; use column grips to reorder.</p>
         </CardHeader>
         <CardContent className="min-w-0">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between rounded-lg border border-gray-100 bg-slate-50/90 p-3">
+          <div className="kanban-board-toolbar mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between rounded-lg border border-border bg-muted p-3">
             <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
               {teamsList.length > 0 ? (
                 <div className="grid gap-1.5">
-                  <span className="text-xs font-medium text-gray-600">Filter by team</span>
+                  <span className="text-xs font-medium text-muted-foreground">Filter by team</span>
                   <Select
                     value={teamFilterId || '__all__'}
                     onValueChange={(v) => setTeamFilter(v === '__all__' ? '' : v)}
                   >
-                    <SelectTrigger className="h-9 w-[220px] bg-white">
+                    <SelectTrigger className="h-9 w-[220px] bg-background">
                       <SelectValue placeholder="All teams" />
                     </SelectTrigger>
                     <SelectContent>
@@ -1377,14 +1377,14 @@ export default function KanbanView(props: {
                     </SelectContent>
                   </Select>
                   {teamFilterActive ? (
-                    <p className="max-w-md text-xs text-amber-800">
+                    <p className="max-w-md text-xs text-amber-800 dark-theme-warning">
                       Team filter on — card drag-and-drop is paused until you show all teams.
                     </p>
                   ) : null}
                 </div>
               ) : null}
               <div className="grid gap-1.5">
-                <span className="text-xs font-medium text-gray-600">Show</span>
+                <span className="text-xs font-medium text-muted-foreground">Show</span>
                 <Button
                   type="button"
                   size="sm"
@@ -1396,10 +1396,10 @@ export default function KanbanView(props: {
                 </Button>
               </div>
               <div className="flex items-start gap-1.5">
-                <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer select-none">
+                <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer select-none">
                   <input
                     type="checkbox"
-                    className="rounded border-gray-300"
+                    className="rounded border-border"
                     checked={wipExcludeBlocked}
                     disabled={wipExcludeSaving}
                     onChange={(e) => void persistWipExcludeBlocked(e.target.checked)}
@@ -1411,10 +1411,10 @@ export default function KanbanView(props: {
                 </HelpTip>
               </div>
               <div className="flex items-start gap-1.5">
-                <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer select-none">
+                <label className="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer select-none">
                   <input
                     type="checkbox"
-                    className="rounded border-gray-300"
+                    className="rounded border-border"
                     checked={showAdvancedFlowFields}
                     onChange={(e) => persistAdvancedFlowFields(e.target.checked)}
                   />
@@ -1427,7 +1427,7 @@ export default function KanbanView(props: {
               </div>
             </div>
             {blockedOnly ? (
-              <p className="w-full text-xs text-amber-800">
+              <p className="w-full text-xs text-amber-800 dark-theme-warning">
                 Showing blocked impediments only — clear the filter to see all cards.
               </p>
             ) : null}
@@ -1717,8 +1717,8 @@ export default function KanbanView(props: {
           </Dialog>
 
           {boardStages.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50/80 p-8 text-center space-y-3">
-              <p className="text-sm text-gray-600">
+            <div className="rounded-lg border border-dashed border-border bg-muted/80 p-8 text-center space-y-3">
+              <p className="text-sm text-muted-foreground">
                 No board columns yet — stages may be backlog-only, or none configured. Add a column to visualize flow on
                 this Kanban board.
               </p>
@@ -1781,13 +1781,13 @@ export default function KanbanView(props: {
               </SortableContext>
 
               {backlogStageId ? (
-                <div className="mt-8 border-t border-gray-100 pt-6 space-y-3">
+                <div className="mt-8 border-t border-border pt-6 space-y-3">
                   <div className="flex flex-wrap items-end justify-between gap-3">
                     <div>
-                      <h3 className="text-sm font-semibold text-gray-900">Product backlog</h3>
-                      <p className="text-xs text-gray-500 mt-0.5 inline-flex flex-wrap items-center gap-1">
+                      <h3 className="text-sm font-semibold text-foreground">Product backlog</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5 inline-flex flex-wrap items-center gap-1">
                         <span>Queued work for this process.</span>
-                        <Link href={backlogHref} className="text-blue-600 hover:underline font-medium">
+                        <Link href={backlogHref} className="text-primary hover:underline font-medium">
                           Full backlog page
                         </Link>
                         <HelpTip label="About this strip">
@@ -1834,7 +1834,7 @@ export default function KanbanView(props: {
                                 ))
                               : null}
                             {backlogTasks.length === 0 ? (
-                              <p className="text-xs text-gray-400 py-6 px-2 inline-flex flex-wrap items-center gap-1">
+                              <p className="text-xs text-muted-foreground py-6 px-2 inline-flex flex-wrap items-center gap-1">
                                 <span>Nothing here yet — add a task or drag cards from the board.</span>
                                 <HelpTip label="Backlog strip">
                                   Use <span className="font-medium">Add task</span> for a quick create, or the full
