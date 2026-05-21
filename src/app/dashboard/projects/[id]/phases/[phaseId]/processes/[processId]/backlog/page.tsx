@@ -6,6 +6,8 @@ import { KanbanProcessChrome } from '@/components/processes/kanban-process-chrom
 import { ScrumProcessChrome } from '@/components/processes/scrum-process-chrome'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { ensureKanbanPhaseWorkflowStructure } from '@/lib/kanban/ensure-default-workflow-stages'
+import { userCanManageBacklog } from '@/lib/permissions/backlog-permissions'
+import { userCanCreateSprintDraft } from '@/lib/permissions/sprint-permissions'
 
 async function ensureBacklogStageId(supabase: any, orgId: string, phaseId: string) {
   const { data: existingBacklog } = await supabase
@@ -227,6 +229,18 @@ export default async function ProcessBacklogPage({
     }
   }
 
+  const canManageBacklog = await userCanManageBacklog(supabase, {
+    organizationId: orgId,
+    userId: user.id,
+    projectId: project.id,
+  })
+
+  const canCreateSprintDraft = await userCanCreateSprintDraft(supabase, {
+    organizationId: orgId,
+    userId: user.id,
+    projectId: project.id,
+  })
+
   const backlogClient = (
     <ProductBacklogPageClient
       projectId={project.id}
@@ -240,6 +254,8 @@ export default async function ProcessBacklogPage({
       pullStageId={pullStage?.id ?? null}
       pullStageName={pullStage?.name ?? null}
       assigneeNames={assigneeNames}
+      canManageBacklog={canManageBacklog}
+      canCreateSprintDraft={canCreateSprintDraft}
     />
   )
 

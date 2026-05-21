@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Plus, Search, Users, X } from 'lucide-react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { ArrowLeft, Plus, Search, Users, X, Trash } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -74,6 +75,10 @@ export function TeamDetailPageContent({
   const [candidates, setCandidates] = useState<OrgMemberCandidate[]>([])
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isOrgAdmin, setIsOrgAdmin] = useState(false)
+
+  const router = useRouter()
 
   const currentUserRole = useMemo(
     () => members.find((m) => m.user_id === currentUserId)?.team_role,
@@ -81,6 +86,29 @@ export function TeamDetailPageContent({
   )
 
   const canInvite = currentUserRole === 'lead' || currentUserRole === 'coordinator'
+  const canDeleteTeam = currentUserRole === 'lead' || isOrgAdmin
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadOrgRole() {
+      if (!currentUserId) return
+      const { data, error } = await supabase
+        .from('organization_members')
+        .select('system_role')
+        .eq('organization_id', organizationId)
+        .eq('user_id', currentUserId)
+        .maybeSingle()
+      if (cancelled) return
+      if (error) return
+      const role = String((data as any)?.system_role ?? 'Member')
+      setIsOrgAdmin(role === 'Owner' || role === 'Admin')
+    }
+    void loadOrgRole()
+    return () => {
+      cancelled = true
+    }
+  }, [organizationId, currentUserId])
+
 
   useEffect(() => {
     let cancelled = false
@@ -208,7 +236,14 @@ export function TeamDetailPageContent({
       if (!res.ok) throw new Error(payload?.error ?? 'Failed to remove member.')
     } catch (e: any) {
       setMembers(prev)
-      setError(e?.message ?? 'Failed to remove member.')
+      const msg = String(e?.message ?? '')
+      if (msg.includes('Failed to fetch') || msg.toLowerCase().includes('network')) {
+        setError('You do not have the required permissions!')
+      } else if (msg.toLowerCase().includes('forbidden') || msg === 'Forbidden') {
+        setError('You do not have the required permissions!')
+      } else {
+        setError(msg || 'Failed to remove member.')
+      }
     }
   }
 
@@ -232,7 +267,14 @@ export function TeamDetailPageContent({
       if (!res.ok) throw new Error(payload?.error ?? 'Failed to update member role.')
     } catch (e: any) {
       setMembers(prev)
-      setError(e?.message ?? 'Failed to update member role.')
+      const msg = String(e?.message ?? '')
+      if (msg.includes('Failed to fetch') || msg.toLowerCase().includes('network')) {
+        setError('You do not have the required permissions!')
+      } else if (msg.toLowerCase().includes('forbidden') || msg === 'Forbidden') {
+        setError('You do not have the required permissions!')
+      } else {
+        setError(msg || 'Failed to update member role.')
+      }
     }
   }
 
@@ -265,16 +307,54 @@ export function TeamDetailPageContent({
             }
           }}
         >
-          <DialogTrigger asChild>
-            <Button 
-              className="bg-blue-600 text-white hover:bg-blue-700" 
-              disabled={!canInvite}
-              title={!canInvite ? 'Only leads and coordinators can invite members' : undefined}
+          <div className="flex gap-2">
+            <DialogTrigger asChild>
+              <Button 
+                className="bg-blue-600 text-white hover:bg-blue-700" 
+                disabled={!canInvite}
+                title={!canInvite ? 'Only leads and coordinators can invite members' : undefined}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add members
+              </Button>
+            </DialogTrigger>
+
+            <Button
+              variant="destructive"
+              className="h-8"
+              onClick={async () => {
+                if (!canDeleteTeam) return
+                if (!confirm('Delete this team? This action cannot be undone.')) return
+                setIsDeleting(true)
+                setError(null)
+                try {
+                  const res = await fetch(`/api/organizations/${encodeURIComponent(organizationId)}/teams`, {
+                    method: 'DELETE',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ teamId: team.id }),
+                  })
+                  const payload = await res.json().catch(() => null)
+                  if (!res.ok) throw new Error(payload?.error ?? 'Failed to delete team')
+                  // Redirect to teams list
+                  router.push('/dashboard/accounts?tab=teams')
+                } catch (e: any) {
+                  const msg = String(e?.message ?? '')
+                  if (msg.includes('Failed to fetch') || msg.toLowerCase().includes('network') || msg.toLowerCase().includes('forbidden')) {
+                    setError('You do not have the required permissions!')
+                  } else {
+                    setError(msg || 'Failed to delete team')
+                  }
+                } finally {
+                  setIsDeleting(false)
+                }
+              }}
+              disabled={!canDeleteTeam || isDeleting}
+              title={!canDeleteTeam ? 'Only leads or organization admins can delete this team' : undefined}
             >
-              <Plus className="mr-2 h-4 w-4" />
-              Add members
+              <Trash className="mr-2 h-4 w-4" />
+              Delete team
             </Button>
-          </DialogTrigger>
+          </div>
           <DialogContent className="max-w-lg p-0">
             <DialogHeader className="space-y-1 border-b border-slate-200 px-6 py-5 text-left">
               <DialogTitle className="text-lg">Add members</DialogTitle>
@@ -386,6 +466,9 @@ export function TeamDetailPageContent({
                 member: 'Member',
               }[m.team_role] || 'Member'
 
+              const isCurrentUser = m.user_id === currentUserId
+              const canChangeRole = currentUserRole === 'lead'
+
               return (
                 <div
                   key={m.user_id}
@@ -404,19 +487,25 @@ export function TeamDetailPageContent({
                   </div>
 
                   <div className="flex items-center justify-between gap-3 sm:justify-end">
-                    <Select value={m.team_role} onValueChange={(role) => handleRoleChange(m.user_id, role as TeamMemberRole)}>
-                      <SelectTrigger className="h-9 w-32">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="lead">Lead</SelectItem>
-                        <SelectItem value="coordinator">Coordinator</SelectItem>
-                        <SelectItem value="member">Member</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button variant="outline" className="h-9" onClick={() => handleRemove(m.user_id)}>
-                      Remove
-                    </Button>
+                    {canChangeRole ? (
+                      <Select value={m.team_role} onValueChange={(role) => handleRoleChange(m.user_id, role as TeamMemberRole)}>
+                        <SelectTrigger className="h-9 w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="lead">Lead</SelectItem>
+                          <SelectItem value="coordinator">Coordinator</SelectItem>
+                          <SelectItem value="member">Member</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="text-sm font-medium text-gray-600">{roleLabel}</div>
+                    )}
+                    {currentUserRole === 'lead' || (currentUserRole === 'coordinator' && !isCurrentUser) ? (
+                      <Button variant="outline" className="h-9" onClick={() => handleRemove(m.user_id)}>
+                        Remove
+                      </Button>
+                    ) : null}
                   </div>
                 </div>
               )

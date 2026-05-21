@@ -23,6 +23,7 @@ import {
   loadPhaseIdForWorkflowStage,
   normalizeTaskTitle,
 } from '@/lib/tasks/validate-task-title'
+import { userCanManageBacklog } from '@/lib/permissions/backlog-permissions'
 
 function isUniqueViolation(error: unknown) {
   return typeof error === 'object' && error !== null && (error as any).code === '23505'
@@ -215,6 +216,27 @@ export async function POST(request: Request) {
     const createPhaseId = await loadPhaseIdForWorkflowStage(supabase as any, orgId, workflow_stage_id)
     if (!createPhaseId) {
       return NextResponse.json({ error: 'Invalid workflow stage', data: null }, { status: 400 })
+    }
+
+    const { data: createStage } = await supabase
+      .from('workflow_stages')
+      .select('is_backlog')
+      .eq('id', workflow_stage_id)
+      .eq('organization_id', orgId)
+      .maybeSingle()
+
+    if (createStage?.is_backlog) {
+      const allowed = await userCanManageBacklog(supabase, {
+        organizationId: orgId,
+        userId: user.id,
+        projectId: validProjectId,
+      })
+      if (!allowed) {
+        return NextResponse.json(
+          { error: 'You do not have permission to manage the backlog', data: null },
+          { status: 403 },
+        )
+      }
     }
 
     if (bodyPhaseIdRaw != null && bodyPhaseIdRaw !== '') {

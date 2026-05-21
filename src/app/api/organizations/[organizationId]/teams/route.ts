@@ -49,6 +49,24 @@ async function assertOrgMember(admin: ReturnType<typeof createAdminClient>, orga
   return { ok: true as const }
 }
 
+async function assertTeamLead(admin: ReturnType<typeof createAdminClient>, teamId: string, userId: string) {
+  const { data: membership, error } = await admin
+    .from('team_members')
+    .select('team_role')
+    .eq('team_id', teamId)
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (error) return { ok: false as const, response: jsonError(500, 'TEAM_ROLE_LOOKUP_FAILED', error.message) }
+
+  const role = String((membership as any)?.team_role ?? 'member')
+  if (role !== 'lead') {
+    return { ok: false as const, response: jsonError(403, 'FORBIDDEN', 'Forbidden') }
+  }
+
+  return { ok: true as const }
+}
+
 export async function GET(_request: Request, context: { params: Promise<{ organizationId: string }> }) {
   const { organizationId } = await context.params
   if (!organizationId) return jsonError(400, 'MISSING_ORGANIZATION_ID', 'Missing organizationId')
@@ -143,3 +161,47 @@ export async function POST(request: Request, context: { params: Promise<{ organi
   return NextResponse.json({ ok: true, team: teamRow }, { status: 200 })
 }
 
+export async function DELETE(request: Request, context: { params: Promise<{ organizationId: string }> }) {
+  const { organizationId } = await context.params
+  if (!organizationId) return jsonError(400, 'MISSING_ORGANIZATION_ID', 'Missing organizationId')
+
+  const supabase = createClient()
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) return jsonError(401, 'UNAUTHORIZED', 'Unauthorized')
+
+  let body: any = null
+  try {
+    body = await request.json()
+  } catch {
+    return jsonError(400, 'INVALID_JSON', 'Invalid JSON')
+  }
+
+  const teamId = String(body?.teamId ?? body?.team_id ?? '').trim()
+  if (!teamId) return jsonError(400, 'MISSING_TEAM_ID', 'Missing teamId')
+
+  const admin = createAdminClient()
+
+  // Ensure team belongs to organization
+  const { data: teamRow, error: teamError } = await admin.from('teams').select('id, organization_id').eq('id', teamId).maybeSingle()
+  if (teamError) return jsonError(500, 'TEAM_LOOKUP_FAILED', teamError.message)
+  if (!teamRow) return jsonError(404, 'TEAM_NOT_FOUND', 'Team not found')
+  if (String(teamRow.organization_id) !== organizationId) return jsonError(400, 'TEAM_ORG_MISMATCH', 'Team does not belong to this organization')
+
+  // Allow deletion by org Owner/Admin or by Team Lead
+  const orgAdminCheck = await assertOrgAdmin(admin, organizationId, user.id)
+  if (orgAdminCheck.ok) {
+    // proceed
+  } else {
+    const leadCheck = await assertTeamLead(admin, teamId, user.id)
+    if (!leadCheck.ok) return leadCheck.response
+  }
+
+  const { error: delError } = await admin.from('teams').delete().eq('id', teamId)
+  if (delError) return jsonError(500, 'TEAM_DELETE_FAILED', delError.message)
+
+  return NextResponse.json({ ok: true })
+}

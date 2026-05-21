@@ -10,6 +10,7 @@ import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-
 import { ensureKanbanPhaseWorkflowStructure } from '@/lib/kanban/ensure-default-workflow-stages'
 import { loadProjectPhasesGatingContext } from '@/lib/projects/load-project-phases-gating'
 import { isPhaseLockedForProject } from '@/lib/projects/phase-gating'
+import { userCanManageBacklog } from '@/lib/permissions/backlog-permissions'
 
 export default async function ProcessBoardPage({
   params,
@@ -219,6 +220,12 @@ export default async function ProcessBoardPage({
     tasks = []
   }
 
+  const canManageBacklog = await userCanManageBacklog(supabase, {
+    organizationId: orgId,
+    userId: user.id,
+    projectId: project.id,
+  })
+
   return (
     <KanbanProcessChrome
       projectId={project.id}
@@ -236,6 +243,7 @@ export default async function ProcessBoardPage({
         stages={(stages ?? []) as any}
         tasks={(tasks ?? []) as any}
         teams={teamsForOrg}
+        canManageBacklog={canManageBacklog}
       />
     </KanbanProcessChrome>
   )

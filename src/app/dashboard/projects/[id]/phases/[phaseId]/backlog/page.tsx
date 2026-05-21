@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { ProductBacklogPageClient } from '@/components/backlog/product-backlog-page-client'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
+import { userCanManageBacklog } from '@/lib/permissions/backlog-permissions'
+import { userCanCreateSprintDraft } from '@/lib/permissions/sprint-permissions'
 
 export default async function ProductBacklogPage({
   params,
@@ -106,6 +108,18 @@ export default async function ProductBacklogPage({
     .is('sprint_id', null)
     .order('position', { ascending: true })
 
+  const canManageBacklog = await userCanManageBacklog(supabase, {
+    organizationId: orgId,
+    userId: user.id,
+    projectId: project.id,
+  })
+
+  const canCreateSprintDraft = await userCanCreateSprintDraft(supabase, {
+    organizationId: orgId,
+    userId: user.id,
+    projectId: project.id,
+  })
+
   return (
     <ProductBacklogPageClient
       projectId={project.id}
@@ -113,6 +127,8 @@ export default async function ProductBacklogPage({
       phaseTitle={phase.title}
       backlogStageId={backlogStage.id}
       tasks={(tasks ?? []) as any}
+      canManageBacklog={canManageBacklog}
+      canCreateSprintDraft={canCreateSprintDraft}
     />
   )
 }

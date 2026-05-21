@@ -217,8 +217,20 @@ export async function DELETE(request: Request, context: { params: Promise<{ team
   const teamOrg = await getTeamOrgId(admin, teamId)
   if (!teamOrg.ok) return teamOrg.response
 
-  const adminCheck = await assertOrgAdmin(admin, teamOrg.organizationId, user.id)
-  if (!adminCheck.ok) return adminCheck.response
+  // Lead or Coordinator can remove members
+  const { data: membership, error: memberError } = await admin
+    .from('team_members')
+    .select('team_role')
+    .eq('team_id', teamId)
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (memberError) return jsonError(500, 'TEAM_ROLE_LOOKUP_FAILED', memberError.message)
+
+  const userRole = String((membership as any)?.team_role ?? 'member')
+  if (userRole !== 'lead' && userRole !== 'coordinator') {
+    return jsonError(403, 'FORBIDDEN', 'Only leads and coordinators can remove members')
+  }
 
   const { error: delError } = await admin.from('team_members').delete().eq('team_id', teamId).eq('user_id', userId)
   if (delError) return jsonError(500, 'TEAM_MEMBER_REMOVE_FAILED', delError.message)

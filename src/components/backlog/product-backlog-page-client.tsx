@@ -292,6 +292,9 @@ export function ProductBacklogPageClient(props: {
   pullStageId?: string | null
   pullStageName?: string | null
   assigneeNames?: Record<string, string>
+  /** `sdlc.backlog.manage` — create and edit backlog items. */
+  canManageBacklog?: boolean
+  canCreateSprintDraft?: boolean
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -544,7 +547,13 @@ export function ProductBacklogPageClient(props: {
     })
   }
 
-  const canCreate = !!props.backlogStageId && !!props.processId
+  const canManageBacklog = props.canManageBacklog === true
+  const canCreate = canManageBacklog && !!props.backlogStageId && !!props.processId
+  const createTaskTitle = !canManageBacklog
+    ? 'You need the Backlog management permission'
+    : canCreate
+      ? 'Create a new backlog task'
+      : 'Backlog stage / process not resolved yet'
 
   const handleCreateTask = async () => {
     if (!canCreate) return
@@ -649,7 +658,7 @@ export function ProductBacklogPageClient(props: {
           <h1 className="text-2xl font-bold text-gray-900">Product Backlog</h1>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
-          {showScrumSelection && selectedTasks.size > 0 ? (
+          {showScrumSelection && selectedTasks.size > 0 && props.canCreateSprintDraft ? (
             <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleAddToSprint}>
               <Plus className="h-4 w-4 mr-2" />
               Add {selectedTasks.size} tasks to Sprint
@@ -695,9 +704,13 @@ export function ProductBacklogPageClient(props: {
           ) : null}
           <Button
             disabled={!canCreate}
-            title={canCreate ? 'Create a new backlog task' : 'Backlog stage / process not resolved yet'}
-            onClick={() => setIsCreating((v) => !v)}
+            title={createTaskTitle}
+            onClick={() => {
+              if (!canCreate) return
+              setIsCreating((v) => !v)
+            }}
             variant={isCreating ? 'default' : 'outline'}
+            className={!canCreate ? 'opacity-50' : undefined}
           >
             <Plus className="h-4 w-4 mr-2" />
             Create Task

@@ -679,11 +679,14 @@ export default function KanbanView(props: {
   teams?: { id: string; name: string }[]
   /** When true, blocked impediments are excluded from WIP counts (server + client). */
   initialWipExcludeBlocked?: boolean
+  /** `sdlc.backlog.manage` — quick-create in the board backlog strip. */
+  canManageBacklog?: boolean
 }) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const teamsList = props.teams ?? []
+  const canManageBacklog = props.canManageBacklog === true
   const [tasks, setTasks] = useState<TaskRow[]>(props.tasks)
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null)
   const [persisting, setPersisting] = useState(false)
@@ -1192,7 +1195,7 @@ export default function KanbanView(props: {
   }
 
   const handleCreateBacklogTask = async () => {
-    if (!backlogStageId) return
+    if (!canManageBacklog || !backlogStageId) return
     const title = backlogCreateTitle.trim()
     if (!title) return
 
@@ -1906,9 +1909,17 @@ export default function KanbanView(props: {
                       <Button
                         type="button"
                         size="sm"
-                        className="gap-1"
-                        onClick={() => setBacklogCreateOpen(true)}
-                        disabled={columnMutation || reorderingColumns}
+                        className={cn('gap-1', !canManageBacklog && 'opacity-50')}
+                        onClick={() => {
+                          if (!canManageBacklog) return
+                          setBacklogCreateOpen(true)
+                        }}
+                        disabled={!canManageBacklog || columnMutation || reorderingColumns}
+                        title={
+                          canManageBacklog
+                            ? 'Add a work item to the product backlog'
+                            : 'You need the Backlog management permission'
+                        }
                       >
                         <Plus className="h-4 w-4" />
                         Add task
