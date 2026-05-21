@@ -4,6 +4,13 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
+import { normalizeHexColor } from '@/lib/theme/resolve-theme-tokens'
+
+const hexColorField = z
+  .string()
+  .regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid color format')
+  .transform((value) => normalizeHexColor(value) ?? value)
+  .optional()
 
 const updateProfileSchema = z.object({
   full_name: z.string().min(1, "Full name is required").max(100, "Full name must be less than 100 characters"),
@@ -55,15 +62,15 @@ const updateOrganizationSchema = z.object({
   name: z.string().min(1, "Organization name is required").max(100, "Organization name must be less than 100 characters"),
   theme_preset: z.enum(['default', 'blue', 'green', 'purple', 'dark', 'custom']).optional(),
   icon_url: z.string().url('Invalid logo URL').optional(),
-  primary_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  secondary_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  accent_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  background_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  surface_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  sidebar_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  border_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  text_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  muted_text_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
+  primary_color: hexColorField,
+  secondary_color: hexColorField,
+  accent_color: hexColorField,
+  background_color: hexColorField,
+  surface_color: hexColorField,
+  sidebar_color: hexColorField,
+  border_color: hexColorField,
+  text_color: hexColorField,
+  muted_text_color: hexColorField,
 })
 
 export async function updateOrganization(formData: FormData) {

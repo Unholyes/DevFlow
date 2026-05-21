@@ -13,6 +13,14 @@ export function isValidHexColor(hex: string | null | undefined): hex is string {
   return typeof hex === 'string' && /^#[0-9A-F]{6}$/i.test(hex.trim())
 }
 
+/** Postgres theme columns use `^#[0-9A-F]{6}$` (uppercase only). */
+export function normalizeHexColor(hex: string | null | undefined): string | null {
+  if (hex == null || typeof hex !== 'string') return null
+  const trimmed = hex.trim()
+  if (!/^#[0-9A-Fa-f]{6}$/.test(trimmed)) return null
+  return `#${trimmed.slice(1).toUpperCase()}`
+}
+
 function relativeLuminance(hex: string): number {
   const rgb = hexToRgb(hex)
   if (!rgb) return 1
