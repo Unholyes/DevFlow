@@ -30,12 +30,12 @@ const statusColors = {
 
 export function ProjectHeader({ organizationId, canManageProjectTeam, project }: ProjectHeaderProps) {
   return (
-    <div className="bg-white overflow-hidden shadow rounded-lg">
+    <div className="bg-card text-card-foreground overflow-hidden shadow rounded-lg border border-border">
       <div className="px-4 py-5 sm:p-6">
         <div className="flex items-center justify-between">
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
+              <h1 className="text-2xl font-bold text-foreground">{project.name}</h1>
               <Badge
                 variant="secondary"
                 className={`${statusColors[project.status]} text-sm`}
@@ -43,8 +43,8 @@ export function ProjectHeader({ organizationId, canManageProjectTeam, project }:
                 {project.status}
               </Badge>
             </div>
-            <p className="text-gray-600 mb-4">{project.description}</p>
-            <div className="flex items-center gap-6 text-sm text-gray-500">
+            <p className="text-muted-foreground mb-4">{project.description}</p>
+            <div className="flex items-center gap-6 text-sm text-muted-foreground">
               <div className="flex items-center gap-1">
                 <Users className="h-4 w-4" />
                 <span>{project.teamMembers} members</span>

@@ -8,6 +8,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Save, X, Palette, Camera } from 'lucide-react'
+import {
+  settingsFormHint,
+  settingsFormLabel,
+  settingsFormSectionTitle,
+} from '@/lib/theme/settings-surface-classes'
 
 const organizationSchema = z.object({
   name: z.string().min(1, "Organization name is required").max(100, "Organization name must be less than 100 characters"),
@@ -226,17 +231,17 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {/* Organization Logo */}
       <div className="flex items-center gap-6">
-        <div className="h-20 w-20 rounded-xl border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center">
+        <div className="h-20 w-20 rounded-xl border border-border bg-muted overflow-hidden flex items-center justify-center">
           {logoSrc ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={logoSrc} alt="Organization logo" className="h-full w-full object-contain" />
           ) : (
-            <div className="text-xs text-gray-500 text-center px-2">No logo</div>
+            <div className="text-xs text-muted-foreground text-center px-2">No logo</div>
           )}
         </div>
         <div>
-          <h3 className="text-lg font-medium text-gray-900">Company logo</h3>
-          <p className="text-sm text-gray-600">Upload a logo to show in the dashboard header.</p>
+          <h3 className={settingsFormSectionTitle}>Company logo</h3>
+          <p className="text-sm text-muted-foreground">Upload a logo to show in the dashboard header.</p>
           <Button asChild variant="outline" size="sm" className="mt-2">
             <label htmlFor="org-logo-upload" className="cursor-pointer">
               <Camera className="h-4 w-4 mr-2" />
@@ -250,13 +255,13 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
             className="hidden"
             onChange={handleLogoSelection}
           />
-          <p className="text-xs text-gray-500 mt-1">JPG, PNG, or WebP up to 5MB</p>
+          <p className={`${settingsFormHint} mt-1`}>JPG, PNG, or WebP up to 5MB</p>
         </div>
       </div>
 
       {/* Organization Name Field */}
       <div className="space-y-2">
-        <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="name" className={settingsFormLabel}>
           Organization Name
         </label>
         <Input
@@ -272,41 +277,34 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
 
       {/* Organization ID (Read-only) */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
-          Organization ID
-        </label>
+        <label className={settingsFormLabel}>Organization ID</label>
         <Input
           value={organization?.id}
           disabled
-          className="w-full bg-gray-50 font-mono text-sm"
+          className="w-full bg-muted font-mono text-sm"
         />
-        <p className="text-xs text-gray-500">Unique identifier for your organization</p>
+        <p className={settingsFormHint}>Unique identifier for your organization</p>
       </div>
 
       {/* Created Date (Read-only) */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
-          Created
-        </label>
+        <label className={settingsFormLabel}>Created</label>
         <Input
           value={organization?.created_at ? new Date(organization.created_at).toLocaleDateString() : 'Unknown'}
           disabled
-          className="w-full bg-gray-50"
+          className="w-full bg-muted"
         />
       </div>
 
       {/* Theme Settings */}
-      <div className="border-t pt-6 mt-6">
+      <div className="border-t border-border pt-6 mt-6">
         <div className="flex items-center mb-4">
-          <Palette className="h-5 w-5 text-gray-600 mr-2" />
-          <h3 className="text-lg font-medium text-gray-900">Theme Customization</h3>
+          <Palette className="h-5 w-5 text-muted-foreground mr-2" />
+          <h3 className={settingsFormSectionTitle}>Theme Customization</h3>
         </div>
 
-        {/* Theme Preset */}
         <div className="space-y-2 mb-4">
-          <label className="block text-sm font-medium text-gray-700">
-            Theme Preset
-          </label>
+          <label className={settingsFormLabel}>Theme Preset</label>
           <Controller
             name="theme_preset"
             control={control}
@@ -334,7 +332,7 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Primary Color */}
               <div className="space-y-2">
-                <label htmlFor="primary_color" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="primary_color" className={settingsFormLabel}>
                   Primary Color
                 </label>
                 <div className="flex gap-2">
@@ -347,7 +345,7 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                         type="color"
                         value={field.value}
                         onChange={field.onChange}
-                        className="w-16 h-10 p-1 border border-gray-300 rounded"
+                        className="w-16 h-10 p-1 border border-input rounded"
                       />
                     )}
                   />
@@ -371,7 +369,7 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
 
               {/* Secondary Color */}
               <div className="space-y-2">
-                <label htmlFor="secondary_color" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="secondary_color" className={settingsFormLabel}>
                   Secondary Color
                 </label>
                 <div className="flex gap-2">
@@ -384,7 +382,7 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                         type="color"
                         value={field.value}
                         onChange={field.onChange}
-                        className="w-16 h-10 p-1 border border-gray-300 rounded"
+                        className="w-16 h-10 p-1 border border-input rounded"
                       />
                     )}
                   />
@@ -408,7 +406,7 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
 
               {/* Accent Color */}
               <div className="space-y-2">
-                <label htmlFor="accent_color" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="accent_color" className={settingsFormLabel}>
                   Accent Color
                 </label>
                 <div className="flex gap-2">
@@ -421,7 +419,7 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                         type="color"
                         value={field.value}
                         onChange={field.onChange}
-                        className="w-16 h-10 p-1 border border-gray-300 rounded"
+                        className="w-16 h-10 p-1 border border-input rounded"
                       />
                     )}
                   />
@@ -444,9 +442,9 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
               </div>
             </div>
 
-            <div className="mt-4 border-t pt-4">
-              <h4 className="text-sm font-semibold text-gray-900">Surfaces & layout</h4>
-              <p className="text-xs text-gray-500 mt-1">
+            <div className="mt-4 border-t border-border pt-4">
+              <h4 className="text-sm font-semibold text-foreground">Surfaces & layout</h4>
+              <p className={`${settingsFormHint} mt-1`}>
                 These control the dashboard background, cards/boxes, sidebar, and borders. Keep them subtle for a professional look.
               </p>
 
@@ -462,7 +460,7 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                   ] as const
                 ).map(({ key, label, placeholder }) => (
                   <div key={key} className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700">{label}</label>
+                    <label className={settingsFormLabel}>{label}</label>
                     <div className="flex gap-2">
                       <Controller
                         name={key}
@@ -472,7 +470,7 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                             type="color"
                             value={field.value as any}
                             onChange={field.onChange}
-                            className="w-16 h-10 p-1 border border-gray-300 rounded"
+                            className="w-16 h-10 p-1 border border-input rounded"
                           />
                         )}
                       />
@@ -497,15 +495,15 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
               </div>
             </div>
 
-            <p className="text-xs text-gray-500">
+            <p className={settingsFormHint}>
               Tip: start by adjusting surfaces first (background/cards/sidebar), then tweak accents.
             </p>
           </div>
         )}
 
         {selectedThemePreset !== 'custom' && (
-          <p className="text-sm text-gray-600">
-            Select "Custom Colors" to specify your own color scheme.
+          <p className="text-sm text-muted-foreground">
+            Select &quot;Custom Colors&quot; to specify your own color scheme.
           </p>
         )}
       </div>

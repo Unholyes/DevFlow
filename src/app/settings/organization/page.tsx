@@ -3,6 +3,16 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { updateOrganization } from '@/lib/actions/settings'
 import { OrganizationForm } from '@/components/settings/organization-form'
+import {
+  settingsCard,
+  settingsMemberRow,
+  settingsPageSubtitle,
+  settingsPageTitle,
+  settingsSectionTitle,
+  settingsStatBox,
+  settingsStatLabel,
+  settingsStatValue,
+} from '@/lib/theme/settings-surface-classes'
 
 export default async function OrganizationPage() {
   const supabase = createClient()
@@ -13,7 +23,6 @@ export default async function OrganizationPage() {
     redirect('/auth/login')
   }
 
-  // Get user profile to verify they are a tenant admin
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
@@ -24,7 +33,6 @@ export default async function OrganizationPage() {
     redirect('/settings')
   }
 
-  // Get user's organization (owner first, otherwise membership)
   let organizationId: string | null = null
 
   const { data: ownedOrg } = await admin
@@ -51,7 +59,6 @@ export default async function OrganizationPage() {
     ? await admin.from('organizations').select('*').eq('id', organizationId).single()
     : { data: null }
 
-  // Get owner profile (display info) - uses the org owner_id when available
   const ownerId = organization?.owner_id ?? user.id
   const { data: ownerProfile } = await admin
     .from('profiles')
@@ -59,7 +66,6 @@ export default async function OrganizationPage() {
     .eq('id', ownerId)
     .single()
 
-  // Get organization members
   const { data: members } = await admin
     .from('organization_members')
     .select(`
@@ -73,11 +79,9 @@ export default async function OrganizationPage() {
 
   if (!organization) {
     return (
-      <div className="max-w-2xl mx-auto p-6">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Organization Not Found</h1>
-          <p className="text-gray-600">Unable to find your organization. Please contact support.</p>
-        </div>
+      <div className="max-w-2xl mx-auto p-6 text-center">
+        <h1 className="text-2xl font-bold text-foreground mb-4">Organization Not Found</h1>
+        <p className="text-muted-foreground">Unable to find your organization. Please contact support.</p>
       </div>
     )
   }
@@ -85,71 +89,67 @@ export default async function OrganizationPage() {
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Organization Settings</h1>
-        <p className="text-gray-600 mt-2">Manage your organization settings and team members.</p>
+        <h1 className={settingsPageTitle}>Organization Settings</h1>
+        <p className={settingsPageSubtitle}>Manage your organization settings and team members.</p>
       </div>
 
       <div className="space-y-8">
-        {/* Organization Overview */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Overview</h2>
+        <div className={settingsCard}>
+          <h2 className={settingsSectionTitle}>Overview</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="rounded-lg bg-gray-50 border border-gray-200 p-4">
-              <p className="text-xs font-medium text-gray-500">Organization</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">{organization.name}</p>
+            <div className={settingsStatBox}>
+              <p className={settingsStatLabel}>Organization</p>
+              <p className={settingsStatValue}>{organization.name}</p>
             </div>
-            <div className="rounded-lg bg-gray-50 border border-gray-200 p-4">
-              <p className="text-xs font-medium text-gray-500">Owner</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">{ownerProfile?.full_name || 'You'}</p>
+            <div className={settingsStatBox}>
+              <p className={settingsStatLabel}>Owner</p>
+              <p className={settingsStatValue}>{ownerProfile?.full_name || 'You'}</p>
             </div>
-            <div className="rounded-lg bg-gray-50 border border-gray-200 p-4">
-              <p className="text-xs font-medium text-gray-500">Members</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">{members?.length ?? 0}</p>
+            <div className={settingsStatBox}>
+              <p className={settingsStatLabel}>Members</p>
+              <p className={settingsStatValue}>{members?.length ?? 0}</p>
             </div>
-            <div className="rounded-lg bg-gray-50 border border-gray-200 p-4">
-              <p className="text-xs font-medium text-gray-500">Created</p>
-              <p className="mt-1 text-sm font-semibold text-gray-900">
+            <div className={settingsStatBox}>
+              <p className={settingsStatLabel}>Created</p>
+              <p className={settingsStatValue}>
                 {organization.created_at ? new Date(organization.created_at).toLocaleDateString() : 'Unknown'}
               </p>
             </div>
-            <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 sm:col-span-2">
-              <p className="text-xs font-medium text-gray-500">Organization ID</p>
-              <p className="mt-1 text-sm font-mono text-gray-900 break-all">{organization.id}</p>
+            <div className={`${settingsStatBox} sm:col-span-2`}>
+              <p className={settingsStatLabel}>Organization ID</p>
+              <p className={`${settingsStatValue} font-mono break-all`}>{organization.id}</p>
             </div>
           </div>
         </div>
 
-        {/* Organization Settings */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Organization Details</h2>
-          <OrganizationForm
-            organization={organization}
-            updateOrganization={updateOrganization}
-          />
+        <div className={settingsCard}>
+          <h2 className={settingsSectionTitle}>Organization Details</h2>
+          <OrganizationForm organization={organization} updateOrganization={updateOrganization} />
         </div>
 
-        {/* Team Members */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Team Members</h2>
+        <div className={settingsCard}>
+          <h2 className={settingsSectionTitle}>Team Members</h2>
           <div className="mt-4">
             {members && members.length > 0 ? (
               <div className="space-y-3">
-                {members.map((member: any) => (
-                  <div key={member.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                {members.map((member: { id: string; role: string; joined_at: string; profiles?: { full_name?: string } }) => (
+                  <div key={member.id} className={settingsMemberRow}>
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--theme-primary)' }}>
-                        <span className="text-white font-medium text-sm">
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center"
+                        style={{ backgroundColor: 'var(--theme-primary)' }}
+                      >
+                        <span className="text-primary-foreground font-medium text-sm">
                           {member.profiles?.full_name
                             ? member.profiles.full_name.split(' ').map((n: string) => n[0]).join('').toUpperCase()
-                            : 'U'
-                          }
+                            : 'U'}
                         </span>
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900">
+                        <p className="font-medium text-foreground">
                           {member.profiles?.full_name || 'Unknown User'}
                         </p>
-                        <p className="text-sm text-gray-600 capitalize">
+                        <p className="text-sm text-muted-foreground capitalize">
                           {member.role} • Joined {new Date(member.joined_at).toLocaleDateString()}
                         </p>
                       </div>
@@ -158,7 +158,7 @@ export default async function OrganizationPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-gray-600">No team members found.</p>
+              <p className="text-muted-foreground">No team members found.</p>
             )}
           </div>
         </div>

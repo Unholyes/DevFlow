@@ -12,6 +12,11 @@ import { userCanManageProjectMembers } from '@/lib/permissions/project-members-p
 import type { ProjectStatus } from '@/types'
 import { computePhaseProgressPercent } from '@/lib/projects/compute-phase-progress'
 import { isPhaseCompleteForGating, isPhaseLockedByGating } from '@/lib/projects/phase-gating'
+import {
+  phaseTimelineCardClass,
+  phaseTimelineProgressBarClass,
+  phaseTimelineStatusTextClass,
+} from '@/lib/theme/phase-timeline-classes'
 
 const sdlcBadgeColors = {
   Scrum: 'bg-blue-100 text-blue-700 border-blue-200',
@@ -297,7 +302,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       {/* Back Button */}
       <Link 
         href="/dashboard/projects"
-        className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors"
+        className="inline-flex items-center text-sm font-medium text-muted-foreground hover:text-primary transition-colors"
       >
         <ArrowLeft className="h-4 w-4 mr-1" />
         Back to Projects
@@ -335,9 +340,9 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         }}
       />
 
-      <Card className="border-gray-200 shadow-sm">
+      <Card className="border-border shadow-sm">
         <CardHeader>
-          <CardTitle className="text-lg text-gray-900">Project Phases Timeline</CardTitle>
+          <CardTitle className="text-lg">Project Phases Timeline</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -353,31 +358,15 @@ export default async function ProjectPage({ params }: { params: { id: string } }
               const isInProgress = !locked && !isCompleted
               const statusLabel = locked ? 'Locked' : isCompleted ? 'Completed' : 'Active'
               const progress = locked ? 0 : phase.progress
-
-              const statusBg = isCompleted 
-                ? 'bg-green-50 border-green-200' 
-                : isInProgress 
-                  ? 'bg-blue-50 border-blue-200' 
-                  : 'bg-gray-50 border-gray-200';
-              
-              const statusTextColor = isCompleted 
-                ? 'text-green-700' 
-                : isInProgress 
-                  ? 'text-blue-700' 
-                  : 'text-gray-500';
-              
-              const progressColor = isCompleted 
-                ? 'bg-green-500' 
-                : isInProgress 
-                  ? 'bg-blue-600' 
-                  : 'bg-gray-300';
-
-              const StatusIcon = isCompleted ? CheckCircle2 : isInProgress ? Clock : Circle;
+              const timelineState = isCompleted ? 'completed' : isInProgress ? 'active' : 'locked'
+              const statusTextColor = phaseTimelineStatusTextClass(timelineState, locked)
+              const progressColor = phaseTimelineProgressBarClass(timelineState, locked)
+              const StatusIcon = isCompleted ? CheckCircle2 : isInProgress ? Clock : Circle
 
               return (
                 <div
                   key={phase.id}
-                  className={`group relative p-4 rounded-lg border-2 transition-all ${locked ? 'cursor-not-allowed opacity-70' : 'hover:shadow-md hover:border-blue-300'} ${statusBg}`}
+                  className={`${phaseTimelineCardClass(timelineState, locked)} ${locked ? 'cursor-not-allowed opacity-70' : 'hover:shadow-md hover:border-primary/50'}`}
                 >
                   {!locked ? (
                     <Link
@@ -389,11 +378,11 @@ export default async function ProjectPage({ params }: { params: { id: string } }
                   <div className="relative z-20 pointer-events-none flex items-start justify-between mb-3">
                     <div className="flex items-center gap-2 flex-1">
                       <StatusIcon className={`h-5 w-5 flex-shrink-0 ${statusTextColor}`} />
-                      <h3 className="font-semibold text-sm text-gray-900 line-clamp-1">{phase.name}</h3>
+                      <h3 className="phase-timeline-card__title font-semibold text-sm text-foreground line-clamp-1">{phase.name}</h3>
                     </div>
                     <div className="flex items-center gap-2">
                       {locked && (
-                        <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 bg-white border border-gray-200 px-2 py-1 rounded">
+                        <span className="phase-timeline-locked-badge inline-flex items-center gap-1 text-xs font-medium text-muted-foreground bg-card border border-border px-2 py-1 rounded">
                           <Lock className="h-3 w-3" />
                           Locked
                         </span>
@@ -412,7 +401,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
                   </div>
 
                   <div className="relative z-20 mb-3 space-y-1">
-                    <p className="text-[11px] uppercase tracking-wide text-gray-500 pointer-events-none">Processes</p>
+                    <p className="phase-timeline-card__label text-[11px] uppercase tracking-wide text-muted-foreground pointer-events-none">Processes</p>
                     {phase.processes.length > 0 ? (
                       <div className={`flex flex-wrap gap-1 ${locked ? 'pointer-events-none' : 'pointer-events-auto'}`}>
                         {phase.processes.map((process, processIndex) => (
@@ -423,23 +412,23 @@ export default async function ProjectPage({ params }: { params: { id: string } }
                                 ? `/dashboard/projects/${project.id}/phases/${phase.id}/processes/${process.id}/sprints`
                                 : `/dashboard/projects/${project.id}/phases/${phase.id}/processes/${process.id}/board`
                             }
-                            className="inline-flex items-center rounded border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-700"
+                            className="phase-timeline-process-chip inline-flex items-center rounded border border-border bg-card px-2 py-0.5 text-[11px] text-foreground"
                           >
                             {process.name} ({process.methodology})
                           </Link>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-gray-500 pointer-events-none">No processes configured yet.</p>
+                      <p className="text-xs text-muted-foreground pointer-events-none">No processes configured yet.</p>
                     )}
                   </div>
 
                   <div className="relative z-20 pointer-events-none space-y-2">
-                    <div className="flex justify-between text-xs text-gray-600">
-                      <span>Progress</span>
-                      <span className="font-semibold text-gray-900">{progress}%</span>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span className="phase-timeline-card__label">Progress</span>
+                      <span className="phase-timeline-card__progress-value font-semibold text-foreground">{progress}%</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                    <div className="phase-timeline-card__track w-full bg-gray-200 rounded-full h-2 overflow-hidden">
                       <div 
                         className={`h-2 rounded-full transition-all duration-300 ${progressColor}`} 
                         style={{ width: `${progress}%` }}
@@ -448,7 +437,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
                   </div>
 
                   {!locked && (
-                    <ArrowRight className="absolute right-3 bottom-3 h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <ArrowRight className="absolute right-3 bottom-3 h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                   )}
                 </div>
               );

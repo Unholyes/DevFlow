@@ -198,7 +198,7 @@ export function OrganizationTeamRolesSettings({
 
   if (!canEdit) {
     return (
-      <Card className="border-gray-200 shadow-sm">
+      <Card className="border-border shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg">Team roles</CardTitle>
           <CardDescription>Default delivery roles for all projects in this workspace.</CardDescription>
@@ -206,8 +206,8 @@ export function OrganizationTeamRolesSettings({
         <CardContent>
           <div className="flex min-h-[200px] flex-col items-center justify-center rounded-lg border border-amber-200 bg-amber-50/80 px-6 py-10 text-center">
             <Shield className="h-8 w-8 text-amber-800" />
-            <p className="mt-4 font-semibold text-slate-900">Access restricted</p>
-            <p className="mt-2 text-sm text-slate-600">You need permission to manage workspace roles.</p>
+            <p className="mt-4 font-semibold text-foreground">Access restricted</p>
+            <p className="mt-2 text-sm text-muted-foreground">You need permission to manage workspace roles.</p>
           </div>
         </CardContent>
       </Card>
@@ -215,7 +215,7 @@ export function OrganizationTeamRolesSettings({
   }
 
   return (
-    <Card className="border-gray-200 shadow-sm">
+    <Card className="border-border shadow-sm">
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
         <div>
           <CardTitle>Team roles</CardTitle>
@@ -241,10 +241,10 @@ export function OrganizationTeamRolesSettings({
                 <label className="text-sm font-medium">Name</label>
                 <Input className="mt-1" value={newName} onChange={(e) => setNewName(e.target.value)} />
               </div>
-              <div className="max-h-48 overflow-auto rounded border border-slate-200 p-2">
+              <div className="max-h-48 overflow-auto rounded border border-border p-2">
                 {ORDERED_PROJECT_TEMPLATE_GROUPS.map(([category, perms]) => (
                   <div key={category} className="mb-2">
-                    <p className="text-xs font-semibold text-slate-600">{category}</p>
+                    <p className="text-xs font-semibold text-muted-foreground">{category}</p>
                     {perms.map((p) => (
                       <label key={p.id} className="flex items-center gap-2 py-1 text-sm">
                         <input
@@ -270,7 +270,7 @@ export function OrganizationTeamRolesSettings({
       <CardContent>
         {error ? <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div> : null}
         {roles.length === 0 && !isLoading ? (
-          <p className="text-sm text-slate-500">No team roles yet. Create one to get started.</p>
+          <p className="text-sm text-muted-foreground">No team roles yet. Create one to get started.</p>
         ) : (
           <div className="grid gap-6 md:grid-cols-[220px_1fr]">
             <div className="space-y-1">
@@ -281,7 +281,7 @@ export function OrganizationTeamRolesSettings({
                     onClick={() => setSelectedId(role.id)}
                     className={[
                       'min-w-0 flex-1 rounded-md px-3 py-2 text-left text-sm',
-                      selectedId === role.id ? 'bg-blue-50 text-slate-900' : 'hover:bg-slate-50',
+                      selectedId === role.id ? 'bg-accent text-foreground' : 'hover:bg-muted',
                     ].join(' ')}
                   >
                     {role.name}
@@ -289,7 +289,7 @@ export function OrganizationTeamRolesSettings({
                   <button
                     type="button"
                     aria-label={`Delete ${role.name}`}
-                    className="rounded p-2 text-slate-500 hover:text-red-600"
+                    className="rounded p-2 text-muted-foreground hover:text-red-600"
                     disabled={deletingId === role.id}
                     onClick={() => void deleteRole(role.id)}
                   >
@@ -307,10 +307,10 @@ export function OrganizationTeamRolesSettings({
                   placeholder="Description (optional)"
                   className="mb-4"
                 />
-                <div className="max-h-[400px] overflow-auto rounded border border-slate-200">
+                <div className="max-h-[400px] overflow-auto rounded border border-border">
                   {ORDERED_PROJECT_TEMPLATE_GROUPS.map(([category, perms]) => (
                     <div key={category}>
-                      <div className="bg-slate-50 px-3 py-2 text-sm font-semibold">{category}</div>
+                      <div className="bg-muted px-3 py-2 text-sm font-semibold">{category}</div>
                       {perms.map((p) => (
                         <label key={p.id} className="flex items-center gap-2 border-t px-3 py-2 text-sm">
                           <input
@@ -338,7 +338,7 @@ export function OrganizationTeamRolesSettings({
             ) : null}
           </div>
         )}
-        {isLoading ? <p className="mt-2 text-sm text-slate-500">Loading…</p> : null}
+        {isLoading ? <p className="mt-2 text-sm text-muted-foreground">Loading…</p> : null}
       </CardContent>
     </Card>
   )

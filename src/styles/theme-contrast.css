@@ -1,0 +1,217 @@
+/**
+ * Maps legacy hardcoded Tailwind grays/slates to org theme tokens when surfaces are dark.
+ * Scoped via html[data-theme-contrast="dark"] set by ThemeProvider.
+ */
+
+[data-theme-contrast='dark'] {
+  color-scheme: dark;
+}
+
+/* Primary readable text */
+[data-theme-contrast='dark'] .text-gray-900,
+[data-theme-contrast='dark'] .text-gray-800,
+[data-theme-contrast='dark'] .text-gray-700,
+[data-theme-contrast='dark'] .text-slate-900,
+[data-theme-contrast='dark'] .text-slate-800,
+[data-theme-contrast='dark'] .text-slate-700,
+[data-theme-contrast='dark'] .text-black {
+  color: var(--foreground);
+}
+
+/* Muted / secondary text */
+[data-theme-contrast='dark'] .text-gray-600,
+[data-theme-contrast='dark'] .text-gray-500,
+[data-theme-contrast='dark'] .text-gray-400,
+[data-theme-contrast='dark'] .text-slate-600,
+[data-theme-contrast='dark'] .text-slate-500,
+[data-theme-contrast='dark'] .text-slate-400 {
+  color: var(--muted-foreground);
+}
+
+/* Surfaces */
+[data-theme-contrast='dark'] .bg-white {
+  background-color: var(--card);
+  color: var(--card-foreground);
+}
+
+[data-theme-contrast='dark'] .bg-gray-50,
+[data-theme-contrast='dark'] .bg-gray-100,
+[data-theme-contrast='dark'] .bg-slate-50,
+[data-theme-contrast='dark'] .bg-slate-100 {
+  background-color: var(--muted);
+}
+
+[data-theme-contrast='dark'] .bg-gray-200,
+[data-theme-contrast='dark'] .bg-slate-200 {
+  background-color: color-mix(in srgb, var(--muted) 85%, var(--foreground) 15%);
+}
+
+/* Borders & dividers */
+[data-theme-contrast='dark'] .border-gray-100,
+[data-theme-contrast='dark'] .border-gray-200,
+[data-theme-contrast='dark'] .border-gray-300,
+[data-theme-contrast='dark'] .border-slate-100,
+[data-theme-contrast='dark'] .border-slate-200,
+[data-theme-contrast='dark'] .border-slate-300 {
+  border-color: var(--border);
+}
+
+[data-theme-contrast='dark'] .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+[data-theme-contrast='dark'] .divide-gray-200 > :not([hidden]) ~ :not([hidden]),
+[data-theme-contrast='dark'] .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+[data-theme-contrast='dark'] .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--border);
+}
+
+/* Hover states */
+[data-theme-contrast='dark'] .hover\:bg-gray-50:hover,
+[data-theme-contrast='dark'] .hover\:bg-gray-100:hover,
+[data-theme-contrast='dark'] .hover\:bg-slate-50:hover,
+[data-theme-contrast='dark'] .hover\:bg-slate-100:hover,
+[data-theme-contrast='dark'] .hover\:bg-white:hover {
+  background-color: var(--muted);
+}
+
+[data-theme-contrast='dark'] .hover\:bg-black\/5:hover {
+  background-color: rgb(255 255 255 / 0.06);
+}
+
+[data-theme-contrast='dark'] .hover\:text-gray-900:hover,
+[data-theme-contrast='dark'] .hover\:text-slate-900:hover,
+[data-theme-contrast='dark'] .hover\:text-gray-800:hover,
+[data-theme-contrast='dark'] .hover\:text-slate-800:hover {
+  color: var(--foreground);
+}
+
+[data-theme-contrast='dark'] .hover\:text-gray-600:hover,
+[data-theme-contrast='dark'] .hover\:text-slate-600:hover {
+  color: var(--muted-foreground);
+}
+
+/* Status tint surfaces (phase timeline, badges, KPI chips) */
+[data-theme-contrast='dark'] .bg-green-50,
+[data-theme-contrast='dark'] .bg-green-100 {
+  background-color: color-mix(in srgb, var(--card) 45%, rgb(22 101 52) 55%);
+}
+
+[data-theme-contrast='dark'] .border-green-200 {
+  border-color: color-mix(in srgb, var(--border) 30%, rgb(34 197 94) 70%);
+}
+
+[data-theme-contrast='dark'] .text-green-700,
+[data-theme-contrast='dark'] .text-green-800 {
+  color: rgb(134 239 172);
+}
+
+[data-theme-contrast='dark'] .bg-blue-50,
+[data-theme-contrast='dark'] .bg-blue-100 {
+  background-color: color-mix(in srgb, var(--card) 45%, rgb(30 58 138) 55%);
+}
+
+[data-theme-contrast='dark'] .border-blue-200 {
+  border-color: color-mix(in srgb, var(--border) 30%, rgb(59 130 246) 70%);
+}
+
+[data-theme-contrast='dark'] .text-blue-600,
+[data-theme-contrast='dark'] .text-blue-700 {
+  color: rgb(147 197 253);
+}
+
+[data-theme-contrast='dark'] .bg-emerald-50,
+[data-theme-contrast='dark'] .bg-emerald-100 {
+  background-color: color-mix(in srgb, var(--card) 50%, rgb(6 78 59) 50%);
+}
+
+[data-theme-contrast='dark'] .text-emerald-700 {
+  color: rgb(110 231 183);
+}
+
+[data-theme-contrast='dark'] .border-emerald-200 {
+  border-color: color-mix(in srgb, var(--border) 30%, rgb(16 185 129) 70%);
+}
+
+[data-theme-contrast='dark'] .bg-orange-50,
+[data-theme-contrast='dark'] .bg-orange-100 {
+  background-color: color-mix(in srgb, var(--card) 55%, rgb(124 45 18) 45%);
+}
+
+[data-theme-contrast='dark'] .text-orange-700 {
+  color: rgb(253 186 116);
+}
+
+[data-theme-contrast='dark'] .border-orange-200 {
+  border-color: color-mix(in srgb, var(--border) 30%, rgb(249 115 22) 70%);
+}
+
+[data-theme-contrast='dark'] .bg-purple-50,
+[data-theme-contrast='dark'] .bg-purple-100 {
+  background-color: color-mix(in srgb, var(--card) 50%, rgb(88 28 135) 50%);
+}
+
+[data-theme-contrast='dark'] .text-purple-700 {
+  color: rgb(216 180 254);
+}
+
+[data-theme-contrast='dark'] .border-purple-200 {
+  border-color: color-mix(in srgb, var(--border) 30%, rgb(168 85 247) 70%);
+}
+
+/* Phase timeline cards — keep text aligned with tinted surfaces */
+[data-theme-contrast='dark'] .phase-timeline-card--completed,
+[data-theme-contrast='dark'] .phase-timeline-card--active,
+[data-theme-contrast='dark'] .phase-timeline-card--locked {
+  color: var(--foreground);
+}
+
+[data-theme-contrast='dark'] .phase-timeline-card .phase-timeline-card__track {
+  background-color: color-mix(in srgb, var(--muted) 75%, var(--foreground) 25%);
+}
+
+[data-theme-contrast='dark'] .phase-timeline-process-chip {
+  background-color: var(--card) !important;
+  border-color: var(--border) !important;
+  color: var(--foreground) !important;
+}
+
+[data-theme-contrast='dark'] .phase-timeline-locked-badge {
+  background-color: var(--card) !important;
+  border-color: var(--border) !important;
+  color: var(--muted-foreground) !important;
+}
+
+/* Form controls that still use light defaults */
+[data-theme-contrast='dark'] input:not([type='checkbox']):not([type='radio']):not([type='color']):not([type='file']),
+[data-theme-contrast='dark'] textarea,
+[data-theme-contrast='dark'] select {
+  color: var(--foreground);
+}
+
+[data-theme-contrast='dark'] input::placeholder,
+[data-theme-contrast='dark'] textarea::placeholder {
+  color: var(--muted-foreground);
+}
+
+/* Tables */
+[data-theme-contrast='dark'] thead.bg-gray-50,
+[data-theme-contrast='dark'] tr.bg-gray-50 {
+  background-color: var(--muted);
+}
+
+/* Shadow cards on dark surfaces */
+[data-theme-contrast='dark'] .shadow-sm,
+[data-theme-contrast='dark'] .shadow {
+  --tw-shadow-color: rgb(0 0 0 / 0.35);
+}
+
+/* Workspace shell: ensure main content inherits theme text */
+.themed-workspace {
+  color: var(--foreground);
+}
+
+.themed-workspace :where(h1, h2, h3, h4, h5, h6):not([class*='text-']) {
+  color: var(--foreground);
+}
+
+.themed-workspace :where(p, li, dt, dd):not([class*='text-']) {
+  color: inherit;
+}

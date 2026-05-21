@@ -1,6 +1,15 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
+import {
+  blendHex,
+  hexToRgb,
+  isDarkThemeSurface,
+  isValidHexColor,
+  readableForegroundForBackground,
+  readableMutedForBackground,
+  readableOnPrimary,
+} from '@/lib/theme/resolve-theme-tokens'
 
 interface ThemeColors {
   primary: string
@@ -36,35 +45,6 @@ export function useTheme() {
   return useContext(ThemeContext)
 }
 
-// Helper function to convert hex color to RGB
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
-  return result ? {
-    r: parseInt(result[1], 16),
-    g: parseInt(result[2], 16),
-    b: parseInt(result[3], 16)
-  } : null
-}
-
-function clamp01(n: number) {
-  return Math.max(0, Math.min(1, n))
-}
-
-function blendHex(a: string, b: string, t: number) {
-  const ar = hexToRgb(a)
-  const br = hexToRgb(b)
-  if (!ar || !br) return a
-  const k = clamp01(t)
-  const r = Math.round(ar.r + (br.r - ar.r) * k)
-  const g = Math.round(ar.g + (br.g - ar.g) * k)
-  const b2 = Math.round(ar.b + (br.b - ar.b) * k)
-  return `#${[r, g, b2].map((x) => x.toString(16).padStart(2, '0')).join('')}`
-}
-
-function isValidHexColor(hex: string | null | undefined) {
-  return typeof hex === 'string' && /^#[0-9A-F]{6}$/i.test(hex.trim())
-}
-
 interface ThemeProviderProps {
   children: ReactNode
   organizationTheme?: Partial<OrganizationTheme>
@@ -89,18 +69,15 @@ export function ThemeProvider({ children, organizationTheme }: ThemeProviderProp
   }, [organizationTheme])
 
   useEffect(() => {
-    // Apply theme colors to CSS variables
     const root = document.documentElement
     root.style.setProperty('--theme-primary', theme.colors.primary)
     root.style.setProperty('--theme-secondary', theme.colors.secondary)
     root.style.setProperty('--theme-accent', theme.colors.accent)
 
-    // Apply theme colors to Tailwind CSS variables for broader usage
     root.style.setProperty('--tw-ring-color', theme.colors.primary)
     root.style.setProperty('--tw-primary', theme.colors.primary)
-    root.style.setProperty('--tw-primary-foreground', '#ffffff')
+    root.style.setProperty('--tw-primary-foreground', readableOnPrimary(theme.colors.primary))
 
-    // Create derived tokens for professional surfaces.
     const presetBase =
       theme.preset === 'dark'
         ? {
@@ -110,7 +87,6 @@ export function ThemeProvider({ children, organizationTheme }: ThemeProviderProp
             border: '#1F2A3D',
             foreground: '#E5E7EB',
             mutedForeground: '#9CA3AF',
-            popover: '#111C33',
           }
         : theme.preset === 'purple'
           ? {
@@ -120,7 +96,6 @@ export function ThemeProvider({ children, organizationTheme }: ThemeProviderProp
               border: '#E5E7EB',
               foreground: '#0F172A',
               mutedForeground: '#475569',
-              popover: '#FFFFFF',
             }
           : theme.preset === 'green'
             ? {
@@ -130,7 +105,6 @@ export function ThemeProvider({ children, organizationTheme }: ThemeProviderProp
                 border: '#E5E7EB',
                 foreground: '#0F172A',
                 mutedForeground: '#475569',
-                popover: '#FFFFFF',
               }
             : theme.preset === 'blue'
               ? {
@@ -140,7 +114,6 @@ export function ThemeProvider({ children, organizationTheme }: ThemeProviderProp
                   border: '#E5E7EB',
                   foreground: '#0F172A',
                   mutedForeground: '#475569',
-                  popover: '#FFFFFF',
                 }
               : {
                   background: '#F8FAFC',
@@ -149,24 +122,37 @@ export function ThemeProvider({ children, organizationTheme }: ThemeProviderProp
                   border: '#E5E7EB',
                   foreground: '#0F172A',
                   mutedForeground: '#475569',
-                  popover: '#FFFFFF',
                 }
 
     const customTokens = theme.preset === 'custom' ? theme.tokens : undefined
-    const background = isValidHexColor(customTokens?.background) ? (customTokens?.background as string) : presetBase.background
-    const surface = isValidHexColor(customTokens?.surface) ? (customTokens?.surface as string) : presetBase.surface
-    const sidebar = isValidHexColor(customTokens?.sidebar) ? (customTokens?.sidebar as string) : presetBase.sidebar
-    const border = isValidHexColor(customTokens?.border) ? (customTokens?.border as string) : presetBase.border
-    const foreground = isValidHexColor(customTokens?.foreground) ? (customTokens?.foreground as string) : presetBase.foreground
-    const mutedForeground = isValidHexColor(customTokens?.mutedForeground)
-      ? (customTokens?.mutedForeground as string)
-      : presetBase.mutedForeground
+    const background = isValidHexColor(customTokens?.background)
+      ? customTokens.background
+      : presetBase.background
+    const surface = isValidHexColor(customTokens?.surface) ? customTokens.surface : presetBase.surface
+    const sidebar = isValidHexColor(customTokens?.sidebar) ? customTokens.sidebar : presetBase.sidebar
+    const border = isValidHexColor(customTokens?.border) ? customTokens.border : presetBase.border
 
-    // Subtle tint for light presets based on primary, but never for surfaces unless user explicitly sets them.
+    const textReference = surface
+    const foreground = readableForegroundForBackground(
+      textReference,
+      isValidHexColor(customTokens?.foreground) ? customTokens.foreground : presetBase.foreground,
+    )
+    const mutedForeground = readableMutedForBackground(
+      textReference,
+      isValidHexColor(customTokens?.mutedForeground)
+        ? customTokens.mutedForeground
+        : presetBase.mutedForeground,
+    )
+
     const tintedBackground =
       theme.preset !== 'dark' && theme.preset !== 'custom'
         ? blendHex(background, theme.colors.primary, 0.03)
         : background
+
+    const mutedSurface = blendHex(surface, foreground, 0.06)
+    const secondarySurface = blendHex(surface, foreground, 0.04)
+    const primaryForeground = readableOnPrimary(theme.colors.primary)
+    const accentForeground = readableOnPrimary(theme.colors.accent)
 
     root.style.setProperty('--theme-background', tintedBackground)
     root.style.setProperty('--theme-surface', surface)
@@ -175,32 +161,36 @@ export function ThemeProvider({ children, organizationTheme }: ThemeProviderProp
     root.style.setProperty('--theme-foreground', foreground)
     root.style.setProperty('--theme-muted-foreground', mutedForeground)
 
-    // Map into shadcn/radix tokens used by UI components.
     root.style.setProperty('--background', tintedBackground)
     root.style.setProperty('--foreground', foreground)
     root.style.setProperty('--card', surface)
     root.style.setProperty('--card-foreground', foreground)
-    root.style.setProperty('--popover', presetBase.popover)
+    root.style.setProperty('--popover', surface)
     root.style.setProperty('--popover-foreground', foreground)
     root.style.setProperty('--border', border)
     root.style.setProperty('--input', border)
+    root.style.setProperty('--muted', mutedSurface)
     root.style.setProperty('--muted-foreground', mutedForeground)
+    root.style.setProperty('--secondary', secondarySurface)
+    root.style.setProperty('--secondary-foreground', foreground)
+    root.style.setProperty('--accent', blendHex(surface, theme.colors.accent, 0.12))
+    root.style.setProperty('--accent-foreground', accentForeground)
+    root.style.setProperty('--primary', theme.colors.primary)
+    root.style.setProperty('--primary-foreground', primaryForeground)
+    root.style.setProperty('--ring', theme.colors.primary)
 
     const primaryRgb = hexToRgb(theme.colors.primary)
     const secondaryRgb = hexToRgb(theme.colors.secondary)
     const accentRgb = hexToRgb(theme.colors.accent)
     if (primaryRgb) root.style.setProperty('--theme-primary-rgb', `${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}`)
-    if (secondaryRgb) root.style.setProperty('--theme-secondary-rgb', `${secondaryRgb.r}, ${secondaryRgb.g}, ${secondaryRgb.b}`)
+    if (secondaryRgb)
+      root.style.setProperty('--theme-secondary-rgb', `${secondaryRgb.r}, ${secondaryRgb.g}, ${secondaryRgb.b}`)
     if (accentRgb) root.style.setProperty('--theme-accent-rgb', `${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}`)
 
-    // Apply preset-specific classes
     root.classList.remove('theme-default', 'theme-blue', 'theme-green', 'theme-purple', 'theme-dark', 'theme-custom')
     root.classList.add(`theme-${theme.preset}`)
+    root.dataset.themeContrast = isDarkThemeSurface(tintedBackground, surface) ? 'dark' : 'light'
   }, [theme])
 
-  return (
-    <ThemeContext.Provider value={theme}>
-      {children}
-    </ThemeContext.Provider>
-  )
+  return <ThemeContext.Provider value={theme}>{children}</ThemeContext.Provider>
 }

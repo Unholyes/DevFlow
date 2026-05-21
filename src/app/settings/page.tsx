@@ -3,6 +3,13 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { User, Building, Settings as SettingsIcon, Shield } from 'lucide-react'
 import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
+import {
+  settingsCard,
+  settingsPageSubtitle,
+  settingsPageTitle,
+  settingsSectionHeading,
+  settingsSectionTitle,
+} from '@/lib/theme/settings-surface-classes'
 
 export default async function SettingsPage() {
   const supabase = createClient()
@@ -29,18 +36,18 @@ export default async function SettingsPage() {
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
-        <p className="text-gray-600 mt-2">Manage your account and organization settings</p>
+        <h1 className={settingsPageTitle}>Settings</h1>
+        <p className={settingsPageSubtitle}>Manage your account and organization settings</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* Profile Settings */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className={settingsCard}>
           <div className="flex items-center mb-4">
-            <User className="h-6 w-6 text-blue-600 mr-3" />
-            <h2 className="text-xl font-semibold text-gray-900">Profile</h2>
+            <User className="h-6 w-6 text-primary mr-3" />
+            <h2 className={settingsSectionHeading}>Profile</h2>
           </div>
-          <p className="text-gray-600 mb-4">
+          <p className="text-muted-foreground mb-4">
             Update your personal information and profile picture.
           </p>
           <Link
@@ -55,12 +62,12 @@ export default async function SettingsPage() {
         {/* Organization Settings - Only for tenant admins */}
         {isTenantAdmin && (
           <>
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className={settingsCard}>
               <div className="flex items-center mb-4">
-                <Building className="h-6 w-6 text-green-600 mr-3" />
-                <h2 className="text-xl font-semibold text-gray-900">Organization</h2>
+                <Building className="h-6 w-6 text-[var(--theme-accent)] mr-3" />
+                <h2 className={settingsSectionHeading}>Organization</h2>
               </div>
-              <p className="text-gray-600 mb-4">
+              <p className="text-muted-foreground mb-4">
                 Manage your organization settings and team members.
               </p>
               <Link
@@ -72,12 +79,12 @@ export default async function SettingsPage() {
               </Link>
             </div>
 
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <div className={settingsCard}>
               <div className="flex items-center mb-4">
-                <Shield className="h-6 w-6 text-blue-600 mr-3" />
-                <h2 className="text-xl font-semibold text-gray-900">Permissions</h2>
+                <Shield className="h-6 w-6 text-primary mr-3" />
+                <h2 className={settingsSectionHeading}>Permissions</h2>
               </div>
-              <p className="text-gray-600 mb-4">
+              <p className="text-muted-foreground mb-4">
                 Define account-level permissions for default and custom roles.
               </p>
               <Link
@@ -93,19 +100,19 @@ export default async function SettingsPage() {
       </div>
 
       {/* Account Information */}
-      <div className="mt-8 bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Account Information</h2>
+      <div className={`mt-8 ${settingsCard}`}>
+        <h2 className={settingsSectionTitle}>Account Information</h2>
         <div className="space-y-3">
           <div className="flex justify-between">
-            <span className="text-gray-600">Email:</span>
-            <span className="font-medium">{user.email}</span>
+            <span className="text-muted-foreground">Email:</span>
+            <span className="font-medium text-foreground">{user.email}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Role:</span>
-            <span className="font-medium capitalize">{ws.role.replace('_', ' ')}</span>
+            <span className="text-muted-foreground">Role:</span>
+            <span className="font-medium text-foreground capitalize">{ws.role.replace('_', ' ')}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-gray-600">Member since:</span>
+            <span className="text-muted-foreground">Member since:</span>
             <span className="font-medium">{new Date(user.created_at).toLocaleDateString()}</span>
           </div>
         </div>

@@ -1,0 +1,13 @@
+/** Shared Tailwind classes for tenant settings panels (theme-aware). */
+export const settingsPageTitle = 'text-3xl font-bold text-foreground'
+export const settingsPageSubtitle = 'text-muted-foreground mt-2'
+export const settingsSectionTitle = 'text-xl font-semibold text-foreground mb-4'
+export const settingsSectionHeading = 'text-xl font-semibold text-foreground'
+export const settingsCard = 'rounded-lg border border-border bg-card p-6 text-card-foreground'
+export const settingsStatBox = 'rounded-lg border border-border bg-muted p-4'
+export const settingsStatLabel = 'text-xs font-medium text-muted-foreground'
+export const settingsStatValue = 'mt-1 text-sm font-semibold text-foreground'
+export const settingsFormLabel = 'block text-sm font-medium text-foreground'
+export const settingsFormHint = 'text-xs text-muted-foreground'
+export const settingsFormSectionTitle = 'text-lg font-medium text-foreground'
+export const settingsMemberRow = 'flex items-center justify-between rounded-lg bg-muted p-3'

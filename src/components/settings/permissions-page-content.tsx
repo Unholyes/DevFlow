@@ -488,9 +488,9 @@ export function PermissionsPageContent({
   if (!isLoading && accessDenied) {
     return (
       <div className={embedded ? 'w-full' : 'mx-auto w-full max-w-6xl px-6 py-6'}>
-        <Card className="border-slate-200 shadow-sm">
+        <Card className="border-border shadow-sm">
           <CardHeader className="pb-4">
-            <CardTitle className={embedded ? 'text-lg text-slate-900' : 'text-xl text-slate-900'}>
+            <CardTitle className={embedded ? 'text-lg text-foreground' : 'text-xl text-foreground'}>
               {embedded ? 'Roles & permissions' : 'Permissions'}
             </CardTitle>
             <CardDescription>
@@ -502,8 +502,8 @@ export function PermissionsPageContent({
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
                 <Shield className="h-6 w-6 text-amber-800" />
               </div>
-              <p className="mt-4 text-base font-semibold text-slate-900">Access restricted</p>
-              <p className="mt-2 max-w-md text-sm text-slate-600">
+              <p className="mt-4 text-base font-semibold text-foreground">Access restricted</p>
+              <p className="mt-2 max-w-md text-sm text-muted-foreground">
                 You need the <span className="font-medium">Invite users</span> or <span className="font-medium">Remove users</span> permission (or the Owner/Admin workspace role) to change role definitions. Ask an administrator if you need access.
               </p>
             </div>
@@ -517,10 +517,10 @@ export function PermissionsPageContent({
     <div className={embedded ? 'w-full' : 'mx-auto w-full max-w-6xl px-6 py-6'}>
       <div className="flex items-start justify-between gap-6">
         <div>
-          <h1 className={embedded ? 'text-lg font-semibold text-slate-900' : 'text-2xl font-semibold text-slate-900'}>
+          <h1 className={embedded ? 'text-lg font-semibold text-foreground' : 'text-2xl font-semibold text-foreground'}>
             {embedded ? 'Roles & permissions' : 'Permissions'}
           </h1>
-          <p className={embedded ? 'mt-1 text-sm text-slate-500' : 'mt-1 text-sm text-slate-500'}>
+          <p className={embedded ? 'mt-1 text-sm text-muted-foreground' : 'mt-1 text-sm text-muted-foreground'}>
             {embedded
               ? 'Manage default account roles and custom account roles. Account-level permissions are global; project capabilities are chosen per project assignment.'
               : 'Configure workspace-wide (account-level) permissions for default roles and custom roles. Project-specific actions are controlled separately when you assign someone to a project.'}
@@ -530,10 +530,10 @@ export function PermissionsPageContent({
         <div className="flex items-center gap-3">
           {embedded ? null : (
             <>
-              <a href="#" className="text-sm text-slate-500 hover:text-slate-700">
+              <a href="#" className="text-sm text-muted-foreground hover:text-foreground">
                 Documentation
               </a>
-              <a href="#" className="text-sm text-slate-500 hover:text-slate-700">
+              <a href="#" className="text-sm text-muted-foreground hover:text-foreground">
                 Feedback
               </a>
             </>
@@ -547,7 +547,7 @@ export function PermissionsPageContent({
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-3xl p-0">
-              <DialogHeader className="space-y-1 border-b border-slate-200 px-6 py-5 text-left">
+              <DialogHeader className="space-y-1 border-b border-border px-6 py-5 text-left">
                 <div className="flex items-start justify-between gap-6">
                   <div className="min-w-0">
                     <DialogTitle className="text-xl">Create custom role</DialogTitle>
@@ -555,7 +555,7 @@ export function PermissionsPageContent({
                       Define a role name and select the permissions you want this custom role to have.
                     </DialogDescription>
                   </div>
-                  <div className="shrink-0 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                  <div className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
                     {newRolePerms.length} selected
                   </div>
                 </div>
@@ -563,7 +563,7 @@ export function PermissionsPageContent({
 
               <div className="space-y-5 px-6 py-5">
                 <div>
-                  <label className="text-sm font-medium text-slate-700">Role name</label>
+                  <label className="text-sm font-medium text-foreground">Role name</label>
                   <Input
                     className="mt-1"
                     value={newRoleName}
@@ -575,11 +575,11 @@ export function PermissionsPageContent({
 
                 <div>
                   <div className="flex items-center justify-between gap-4">
-                    <label className="text-sm font-medium text-slate-700">Permissions</label>
+                    <label className="text-sm font-medium text-foreground">Permissions</label>
                     <Button
                       type="button"
                       variant="ghost"
-                      className="h-8 px-2 text-xs text-slate-600 hover:text-slate-900"
+                      className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
                       disabled={isCreating || newRolePerms.length === 0}
                       onClick={() => setNewRolePerms([])}
                     >
@@ -589,7 +589,7 @@ export function PermissionsPageContent({
 
                   <div className="mt-2">
                     <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
                         value={newRolePermissionQuery}
                         onChange={(e) => setNewRolePermissionQuery(e.target.value)}
@@ -599,7 +599,7 @@ export function PermissionsPageContent({
                       />
                     </div>
 
-                    <div className="mt-3 max-h-[420px] overflow-auto rounded-md border border-slate-200 bg-white">
+                    <div className="mt-3 max-h-[420px] overflow-auto rounded-md border border-border bg-card">
                       {ORDERED_GLOBAL_PERMISSION_GROUPS.map(([category, perms]) => {
                         const q = newRolePermissionQuery.trim().toLowerCase()
                         const visiblePerms = q ? perms.filter((p) => p.label.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)) : perms
@@ -610,13 +610,13 @@ export function PermissionsPageContent({
                         const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length
 
                         return (
-                          <div key={category} className="border-b border-slate-200 last:border-b-0">
-                            <div className="flex items-center justify-between gap-3 bg-white px-4 py-3">
-                              <div className="text-sm font-semibold text-slate-700">{category}</div>
+                          <div key={category} className="border-b border-border last:border-b-0">
+                            <div className="flex items-center justify-between gap-3 bg-card px-4 py-3">
+                              <div className="text-sm font-semibold text-foreground">{category}</div>
                               <Button
                                 type="button"
                                 variant="ghost"
-                                className="h-8 px-2 text-xs text-slate-600 hover:text-slate-900"
+                                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
                                 disabled={isCreating}
                                 onClick={() => {
                                   setNewRolePerms((cur) => {
@@ -629,14 +629,14 @@ export function PermissionsPageContent({
                               </Button>
                             </div>
 
-                            <div className="divide-y divide-slate-200">
+                            <div className="divide-y divide-border">
                               {visiblePerms.map((p) => {
                                 const checked = newRolePerms.includes(p.id)
                                 return (
-                                  <label key={p.id} className="flex items-start gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                                  <label key={p.id} className="flex items-start gap-3 px-4 py-3 text-sm text-foreground hover:bg-muted">
                                     <input
                                       type="checkbox"
-                                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-blue-600"
+                                      className="mt-0.5 h-4 w-4 rounded border-border text-blue-600"
                                       checked={checked}
                                       onChange={(e) => {
                                         setNewRolePerms((cur) =>
@@ -648,8 +648,8 @@ export function PermissionsPageContent({
                                       disabled={isCreating}
                                     />
                                     <span className="min-w-0">
-                                      <span className="block font-medium text-slate-900">{p.label}</span>
-                                      <span className="block text-xs text-slate-500">{p.id}</span>
+                                      <span className="block font-medium text-foreground">{p.label}</span>
+                                      <span className="block text-xs text-muted-foreground">{p.id}</span>
                                     </span>
                                   </label>
                                 )
@@ -663,7 +663,7 @@ export function PermissionsPageContent({
                 </div>
               </div>
 
-              <DialogFooter className="border-t border-slate-200 px-6 py-4">
+              <DialogFooter className="border-t border-border px-6 py-4">
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -693,10 +693,10 @@ export function PermissionsPageContent({
         <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
       ) : null}
 
-      <div className="mt-6 grid grid-cols-1 gap-0 rounded-lg border border-slate-200 bg-white md:grid-cols-[280px_1fr]">
+      <div className="mt-6 grid grid-cols-1 gap-0 rounded-lg border border-border bg-card md:grid-cols-[280px_1fr]">
         {/* Sidebar */}
-        <div className="border-b border-slate-200 p-4 md:border-b-0 md:border-r">
-          <div className="text-xs font-semibold text-slate-600">Default account roles</div>
+        <div className="border-b border-border p-4 md:border-b-0 md:border-r">
+          <div className="text-xs font-semibold text-muted-foreground">Default account roles</div>
           <div className="mt-3 space-y-1">
             {DEFAULT_ROLES.map((r) => {
               const isActive = selected.kind === 'default' && selected.role === r.role
@@ -707,7 +707,7 @@ export function PermissionsPageContent({
                   onClick={() => setSelected({ kind: 'default', role: r.role, label: r.label })}
                   className={[
                     'w-full rounded-md px-3 py-2 text-left text-sm',
-                    isActive ? 'bg-blue-50 text-slate-900' : 'text-slate-700 hover:bg-slate-50',
+                    isActive ? 'bg-accent text-foreground' : 'text-foreground hover:bg-muted',
                   ].join(' ')}
                 >
                   {r.label}
@@ -716,13 +716,13 @@ export function PermissionsPageContent({
             })}
           </div>
 
-          <div className="mt-6 text-xs font-semibold text-slate-600">Custom account roles</div>
-          <div className="mt-2 text-xs text-slate-500">
+          <div className="mt-6 text-xs font-semibold text-muted-foreground">Custom account roles</div>
+          <div className="mt-2 text-xs text-muted-foreground">
             These roles are based on the default roles. <span className="text-blue-600">Read more</span>
           </div>
           <div className="mt-3 space-y-1">
             {visibleCustomRoles.length === 0 ? (
-              <div className="rounded-md px-3 py-2 text-sm text-slate-500">No custom roles yet.</div>
+              <div className="rounded-md px-3 py-2 text-sm text-muted-foreground">No custom roles yet.</div>
             ) : (
               visibleCustomRoles.map((r) => {
                 const isActive = selected.kind === 'custom' && selected.id === r.id
@@ -731,13 +731,13 @@ export function PermissionsPageContent({
                     key={r.id}
                     className={[
                       'flex w-full items-center gap-2 rounded-md px-1 py-1',
-                      isActive ? 'bg-blue-50' : 'hover:bg-slate-50',
+                      isActive ? 'bg-accent' : 'hover:bg-muted',
                     ].join(' ')}
                   >
                     <button
                       type="button"
                       onClick={() => setSelected({ kind: 'custom', id: r.id, label: r.name })}
-                      className={['min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm', isActive ? 'text-slate-900' : 'text-slate-700'].join(' ')}
+                      className={['min-w-0 flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm', isActive ? 'text-foreground' : 'text-foreground'].join(' ')}
                     >
                       {r.name}
                     </button>
@@ -752,8 +752,8 @@ export function PermissionsPageContent({
                       }}
                       disabled={isLoading || deletingRoleId === r.id}
                       className={[
-                        'inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-slate-500',
-                        'hover:bg-white hover:text-red-600',
+                        'inline-flex h-8 w-8 items-center justify-center rounded-md border border-transparent text-muted-foreground',
+                        'hover:bg-card hover:text-red-600',
                         'disabled:cursor-not-allowed disabled:opacity-50',
                       ].join(' ')}
                     >
@@ -765,8 +765,8 @@ export function PermissionsPageContent({
             )}
           </div>
 
-          <div className="mt-6 text-xs font-semibold text-slate-600">Project access templates</div>
-          <p className="mt-2 text-xs text-slate-500">
+          <div className="mt-6 text-xs font-semibold text-muted-foreground">Project access templates</div>
+          <p className="mt-2 text-xs text-muted-foreground">
             Default permission sets for <span className="font-medium">Admin</span>, <span className="font-medium">Editor</span>, and{' '}
             <span className="font-medium">Viewer</span> when someone is assigned to a project.
           </p>
@@ -780,7 +780,7 @@ export function PermissionsPageContent({
                   onClick={() => setSelected({ kind: 'project_template', level, label: level })}
                   className={[
                     'w-full rounded-md px-3 py-2 text-left text-sm',
-                    isActive ? 'bg-blue-50 text-slate-900' : 'text-slate-700 hover:bg-slate-50',
+                    isActive ? 'bg-accent text-foreground' : 'text-foreground hover:bg-muted',
                   ].join(' ')}
                 >
                   {level}
@@ -793,27 +793,27 @@ export function PermissionsPageContent({
 
         {/* Main */}
         <div className="p-4 md:p-6">
-          <div className="text-base font-semibold text-slate-900">{selectedTitle}</div>
+          <div className="text-base font-semibold text-foreground">{selectedTitle}</div>
           {isProjectTemplateSelected ? (
             <>
-              <p className="mt-2 text-sm text-slate-600">
+              <p className="mt-2 text-sm text-muted-foreground">
                 Choose which <span className="font-medium">Project Management</span>,{' '}
                 <span className="font-medium">SDLC Management</span>, and <span className="font-medium">Development</span>{' '}
                 permissions are included by default for this access level when someone is assigned to a project.
                 Account and system permissions are configured separately under default or custom account roles.
               </p>
-              <div className="mt-4 max-h-[520px] overflow-auto rounded-md border border-slate-200">
+              <div className="mt-4 max-h-[520px] overflow-auto rounded-md border border-border">
                 {ORDERED_PROJECT_TEMPLATE_GROUPS.map(([category, perms]) => (
-                  <div key={category} className="border-b border-slate-200 last:border-b-0">
-                    <div className="bg-white px-4 py-3 text-sm font-semibold text-slate-700">{category}</div>
-                    <div className="divide-y divide-slate-200">
+                  <div key={category} className="border-b border-border last:border-b-0">
+                    <div className="bg-card px-4 py-3 text-sm font-semibold text-foreground">{category}</div>
+                    <div className="divide-y divide-border">
                       {perms.map((p) => {
                         const checked = draftPermissions.some((x) => x.toLowerCase() === p.id.toLowerCase())
                         return (
-                          <label key={p.id} className="flex items-center gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                          <label key={p.id} className="flex items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-muted">
                             <input
                               type="checkbox"
-                              className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                              className="h-4 w-4 rounded border-border text-blue-600"
                               checked={checked}
                               onChange={(e) => toggleProjectTemplatePermission(p.id, e.target.checked)}
                               disabled={isLoading}
@@ -831,25 +831,25 @@ export function PermissionsPageContent({
             </>
           ) : (
             <>
-              <p className="mt-2 text-sm text-slate-600">
+              <p className="mt-2 text-sm text-muted-foreground">
                 Toggles below are <span className="font-medium">account-level (global)</span> only. They do not grant
                 project-specific capabilities such as sprint management or repository access — configure those under{' '}
                 <span className="font-medium">Project access templates</span>.
               </p>
-              <div className="mt-4 max-h-[520px] overflow-auto rounded-md border border-slate-200">
+              <div className="mt-4 max-h-[520px] overflow-auto rounded-md border border-border">
                 {ORDERED_GLOBAL_PERMISSION_GROUPS.map(([category, perms]) => (
-                  <div key={category} className="border-b border-slate-200 last:border-b-0">
-                    <div className="bg-white px-4 py-3 text-sm font-semibold text-slate-700">{category}</div>
-                    <div className="divide-y divide-slate-200">
+                  <div key={category} className="border-b border-border last:border-b-0">
+                    <div className="bg-card px-4 py-3 text-sm font-semibold text-foreground">{category}</div>
+                    <div className="divide-y divide-border">
                       {perms.map((p) => {
                         const checked = draftPermissions.some((x) => x.toLowerCase() === p.id.toLowerCase())
                         const isInviteUsers = p.id === 'account.users.invite'
                         const isRemoveUsers = p.id === 'account.users.remove'
                         return (
-                          <label key={p.id} className="flex items-center gap-3 px-4 py-3 text-sm text-slate-700 hover:bg-slate-50">
+                          <label key={p.id} className="flex items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-muted">
                             <input
                               type="checkbox"
-                              className="h-4 w-4 rounded border-slate-300 text-blue-600"
+                              className="h-4 w-4 rounded border-border text-blue-600"
                               checked={checked}
                               onChange={(e) => toggleAccountPermission(p.id, e.target.checked)}
                               disabled={isLoading || isReadOnlySelection}
@@ -862,7 +862,7 @@ export function PermissionsPageContent({
                                     <TooltipTrigger asChild>
                                       <button
                                         type="button"
-                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-slate-400 hover:text-slate-600"
+                                        className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground hover:text-muted-foreground"
                                         onClick={(e) => {
                                           e.preventDefault()
                                           e.stopPropagation()
@@ -896,16 +896,16 @@ export function PermissionsPageContent({
               isDirty ? (
                 <p className="text-sm text-amber-800">You have unsaved changes for this template.</p>
               ) : (
-                <p className="text-sm text-slate-500">Click Save to persist this template to the database.</p>
+                <p className="text-sm text-muted-foreground">Click Save to persist this template to the database.</p>
               )
             ) : isOwnerSelected ? (
-              <p className="text-sm text-slate-500">The Owner role always includes every account-level permission.</p>
+              <p className="text-sm text-muted-foreground">The Owner role always includes every account-level permission.</p>
             ) : isAdminAccountSelected && !canEditAdmin ? (
-              <p className="text-sm text-slate-500">Only Owners can edit Admin account-role permissions.</p>
+              <p className="text-sm text-muted-foreground">Only Owners can edit Admin account-role permissions.</p>
             ) : isDirty ? (
               <p className="text-sm text-amber-800">You have unsaved changes for this role.</p>
             ) : (
-              <p className="text-sm text-slate-500">Click Save to persist changes to the database.</p>
+              <p className="text-sm text-muted-foreground">Click Save to persist changes to the database.</p>
             )}
             {!isReadOnlySelection ? (
               <Button
@@ -919,7 +919,7 @@ export function PermissionsPageContent({
             ) : null}
           </div>
 
-          {isLoading ? <div className="mt-3 text-sm text-slate-500">Loading…</div> : null}
+          {isLoading ? <div className="mt-3 text-sm text-muted-foreground">Loading…</div> : null}
         </div>
       </div>
     </div>

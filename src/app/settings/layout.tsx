@@ -2,7 +2,8 @@ import { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
-import { ThemeProvider, type OrganizationTheme } from '@/components/theme/theme-provider'
+import { ThemeProvider } from '@/components/theme/theme-provider'
+import { buildOrganizationTheme, ORGANIZATION_THEME_COLUMNS } from '@/lib/theme/load-organization-theme'
 import type { UserRole } from '@/types'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
@@ -59,7 +60,7 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
   }
 
   let sidebarProjects: { id: string; name: string }[] = []
-  let organizationTheme: Partial<OrganizationTheme> | undefined = undefined
+  let organizationTheme = undefined
 
   if (ws.organizationId) {
     const { data: projectRows } = await supabase
@@ -70,31 +71,13 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
       .limit(4)
     sidebarProjects = projectRows ?? []
 
-    // Fetch organization theme
     const { data: orgData } = await supabase
       .from('organizations')
-      .select('theme_preset, primary_color, secondary_color, accent_color, background_color, surface_color, sidebar_color, border_color, text_color, muted_text_color')
+      .select(ORGANIZATION_THEME_COLUMNS)
       .eq('id', ws.organizationId)
       .single()
 
-    if (orgData) {
-      organizationTheme = {
-        preset: orgData.theme_preset || 'default',
-        colors: {
-          primary: orgData.primary_color || '#3B82F6',
-          secondary: orgData.secondary_color || '#64748B',
-          accent: orgData.accent_color || '#10B981',
-        },
-        tokens: {
-          background: (orgData as any).background_color ?? undefined,
-          surface: (orgData as any).surface_color ?? undefined,
-          sidebar: (orgData as any).sidebar_color ?? undefined,
-          border: (orgData as any).border_color ?? undefined,
-          foreground: (orgData as any).text_color ?? undefined,
-          mutedForeground: (orgData as any).muted_text_color ?? undefined,
-        },
-      }
-    }
+    organizationTheme = buildOrganizationTheme(orgData)
   }
 
   return (

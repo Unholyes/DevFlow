@@ -4,6 +4,7 @@
 
 @import "../components/react-bits/ScrollStack/ScrollStack.css";
 @import "../components/react-bits/Stepper/Stepper.css";
+@import "../styles/theme-contrast.css";
 
 :root {
   --background: hsl(0 0% 100%);

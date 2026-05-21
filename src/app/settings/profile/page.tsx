@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { updateProfile } from '@/lib/actions/settings'
 import { ProfileForm } from '@/components/settings/profile-form'
+import { settingsCard, settingsPageSubtitle, settingsPageTitle } from '@/lib/theme/settings-surface-classes'
 
 export default async function ProfilePage() {
   const supabase = createClient()
@@ -25,11 +26,11 @@ export default async function ProfilePage() {
   return (
     <div className="max-w-2xl mx-auto p-6">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Profile Settings</h1>
-        <p className="text-gray-600 mt-2">Update your personal information and profile picture.</p>
+        <h1 className={settingsPageTitle}>Profile Settings</h1>
+        <p className={settingsPageSubtitle}>Update your personal information and profile picture.</p>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <div className={settingsCard}>
         <ProfileForm
           user={user}
           profile={profile}

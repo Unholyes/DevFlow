@@ -156,8 +156,8 @@ export function ProfileForm({ user, profile, updateProfile }: ProfileFormProps) 
           </AvatarFallback>
         </Avatar>
         <div>
-          <h3 className="text-lg font-medium text-gray-900">Profile Picture</h3>
-          <p className="text-sm text-gray-600">Upload a new profile picture.</p>
+          <h3 className="text-lg font-medium text-foreground">Profile Picture</h3>
+          <p className="text-sm text-muted-foreground">Upload a new profile picture.</p>
           <Button
             asChild
             variant="outline"
@@ -176,7 +176,7 @@ export function ProfileForm({ user, profile, updateProfile }: ProfileFormProps) 
             className="hidden"
             onChange={handleImageSelection}
           />
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             JPG, PNG, or WebP up to 5MB
           </p>
         </div>
@@ -184,7 +184,7 @@ export function ProfileForm({ user, profile, updateProfile }: ProfileFormProps) 
 
       {/* Full Name Field */}
       <div className="space-y-2">
-        <label htmlFor="full_name" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="full_name" className="block text-sm font-medium text-foreground">
           Full Name
         </label>
         <Input
@@ -200,28 +200,28 @@ export function ProfileForm({ user, profile, updateProfile }: ProfileFormProps) 
 
       {/* Email Field (Read-only) */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-foreground">
           Email Address
         </label>
         <Input
           value={user.email ?? ''}
           disabled
-          className="w-full bg-gray-50"
+          className="w-full bg-muted"
         />
-        <p className="text-xs text-gray-500">Email cannot be changed</p>
+        <p className="text-xs text-muted-foreground">Email cannot be changed</p>
       </div>
 
       {/* Role Field (Read-only) */}
       <div className="space-y-2">
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-foreground">
           Role
         </label>
         <Input
           value={profile?.role?.replace('_', ' ').replace(/\b\w/g, (letter: string) => letter.toUpperCase()) || 'Team Member'}
           disabled
-          className="w-full bg-gray-50"
+          className="w-full bg-muted"
         />
-        <p className="text-xs text-gray-500">Role is managed by your organization</p>
+        <p className="text-xs text-muted-foreground">Role is managed by your organization</p>
       </div>
 
       {/* Message */}
@@ -266,14 +266,14 @@ export function ProfileForm({ user, profile, updateProfile }: ProfileFormProps) 
       {/* Danger Zone */}
       <div className="pt-6 border-t border-red-100">
         <h3 className="text-lg font-semibold text-red-700">Danger zone</h3>
-        <p className="text-sm text-gray-600 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           Deleting your account is permanent and will remove your profile and memberships. If you own an organization,
           it may also be deleted.
         </p>
 
         <div className="mt-4 space-y-3">
           <div className="space-y-2">
-            <label htmlFor="delete-confirm" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="delete-confirm" className="block text-sm font-medium text-foreground">
               Type <span className="font-semibold">DELETE</span> to confirm
             </label>
             <Input

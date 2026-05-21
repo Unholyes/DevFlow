@@ -40,7 +40,7 @@ export function DashboardLayout({
         </div>
 
         <main
-          className={`min-w-0 flex-1 overflow-x-hidden p-6 pt-8 transition-all duration-300 ${isSidebarCollapsed ? 'ml-16' : 'ml-64'}`}
+          className={`themed-workspace min-w-0 flex-1 overflow-x-hidden p-6 pt-8 transition-all duration-300 ${isSidebarCollapsed ? 'ml-16' : 'ml-64'}`}
         >
           {children}
         </main>
