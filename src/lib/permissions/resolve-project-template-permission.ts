@@ -179,24 +179,42 @@ export async function resolveProjectPermissionsForUser(
       .eq('user_id', userId)
       .maybeSingle()
 
-    const projectTeamRoleId = String((member as { project_team_role_id?: unknown })?.project_team_role_id ?? '').trim()
-    if (projectTeamRoleId) {
-      const fromTeamRole = await resolvePermissionsForProjectTeamRoleId(
-        supabase,
-        projectTeamRoleId,
-        organizationId,
-      )
-      if (fromTeamRole.length > 0 || projectTeamRoleId) return fromTeamRole
-    }
+    if (member) {
+      const permissions = new Set<string>()
+      let hasSpecificRole = false
 
-    const functionalRole = parseFunctionalRole((member as { functional_role?: unknown })?.functional_role)
-    if (functionalRole) {
-      return loadProjectFunctionalRolePermissions(supabase, projectId, functionalRole)
-    }
+      // 1. Base permissions from Project Access Template (Admin / Editor / Viewer)
+      const level = parseProjectAccessLevel((member as { project_access_level?: unknown })?.project_access_level)
+      if (level) {
+        hasSpecificRole = true
+        const templatePerms = await loadTemplatePermissions(supabase, organizationId, level)
+        for (const p of templatePerms) permissions.add(p)
+      }
 
-    const level = parseProjectAccessLevel((member as { project_access_level?: unknown })?.project_access_level)
-    if (level) {
-      return loadTemplatePermissions(supabase, organizationId, level)
+      // 2. Additional permissions from Team Role
+      const projectTeamRoleId = String((member as { project_team_role_id?: unknown })?.project_team_role_id ?? '').trim()
+      if (projectTeamRoleId) {
+        hasSpecificRole = true
+        const fromTeamRole = await resolvePermissionsForProjectTeamRoleId(
+          supabase,
+          projectTeamRoleId,
+          organizationId,
+        )
+        for (const p of fromTeamRole) permissions.add(p)
+      } 
+      // 3. Fallback to older Functional Role if no Team Role
+      else {
+        const functionalRole = parseFunctionalRole((member as { functional_role?: unknown })?.functional_role)
+        if (functionalRole) {
+          hasSpecificRole = true
+          const fromFuncRole = await loadProjectFunctionalRolePermissions(supabase, projectId, functionalRole)
+          for (const p of fromFuncRole) permissions.add(p)
+        }
+      }
+
+      if (hasSpecificRole) {
+        return Array.from(permissions)
+      }
     }
   }
 
