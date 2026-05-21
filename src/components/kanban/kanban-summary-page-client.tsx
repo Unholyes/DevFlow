@@ -185,14 +185,6 @@ export function KanbanSummaryPageClient(props: {
             activity unless noted.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link href={boardHref}>Open board</Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href={blockedBoardHref}>Blocked on board</Link>
-          </Button>
-        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

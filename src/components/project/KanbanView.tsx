@@ -420,30 +420,73 @@ function KanbanColumn({
   const ids = tasksInColumn.map((t) => t.id)
 
   return (
-    <div className="flex w-[280px] shrink-0 flex-col gap-4">
-      <div className="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex justify-between items-center gap-2">
-        <div className="min-w-0 flex-1 flex items-center gap-1.5">
-          {columnDragHandleProps ? (
-            <button
-              type="button"
-              title="Drag to reorder column"
-              disabled={disabled}
-              className={cn(
-                'shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 touch-none select-none',
-                'cursor-grab active:cursor-grabbing disabled:opacity-40 disabled:cursor-not-allowed'
-              )}
-              {...columnDragHandleProps}
-            >
-              <GripVertical className="h-4 w-4" aria-hidden />
-            </button>
-          ) : null}
-          <span className="font-bold text-gray-800 text-sm">{stage.name}</span>
-          <span className="ml-2 text-xs text-gray-400 font-medium">{tasksInColumn.length} tasks</span>
+    <div className="flex w-[300px] shrink-0 flex-col gap-4">
+      <div className="space-y-2 rounded-xl border border-gray-100 bg-white p-3 shadow-sm">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-1 items-start gap-1.5">
+            {columnDragHandleProps ? (
+              <button
+                type="button"
+                title="Drag to reorder column"
+                disabled={disabled}
+                className={cn(
+                  'mt-0.5 shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700 touch-none select-none',
+                  'cursor-grab active:cursor-grabbing disabled:opacity-40 disabled:cursor-not-allowed'
+                )}
+                {...columnDragHandleProps}
+              >
+                <GripVertical className="h-4 w-4" aria-hidden />
+              </button>
+            ) : null}
+            <span className="min-w-0 break-words text-sm font-bold leading-snug text-gray-800">
+              {stage.name}
+            </span>
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5">
+            {onEditWip && wipAppliesToStage(stage) ? (
+              <button
+                type="button"
+                title="Edit WIP limit"
+                disabled={disabled}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onEditWip()
+                }}
+                className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+            {onRequestDelete ? (
+              <button
+                type="button"
+                title="Remove column"
+                disabled={disabled}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onRequestDelete()
+                }}
+                className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-x-2 gap-y-1',
+            columnDragHandleProps ? 'pl-7' : undefined
+          )}
+        >
+          <span className="shrink-0 text-xs font-medium text-gray-400">
+            {tasksInColumn.length} {tasksInColumn.length === 1 ? 'task' : 'tasks'}
+          </span>
           {!wipAppliesToStage(stage) ? (
             <span
-              className="text-[10px] font-medium bg-gray-50 text-gray-500 px-2 py-0.5 rounded border border-gray-100"
+              className="shrink-0 whitespace-nowrap rounded border border-gray-100 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500"
               title={
                 stage.is_done
                   ? 'Done/complete columns hold finished work. WIP limits apply to in-flow columns (e.g. To Do, In Progress) only.'
@@ -454,7 +497,7 @@ function KanbanColumn({
             </span>
           ) : stage.wip_limit != null ? (
             <span
-              className="text-[10px] font-bold bg-green-50 text-green-600 px-2 py-0.5 rounded border border-green-100 uppercase"
+              className="shrink-0 whitespace-nowrap rounded border border-green-100 bg-green-50 px-2 py-0.5 text-[10px] font-bold uppercase text-green-600"
               title={
                 wipExcludeBlocked
                   ? 'Open WIP count — blocked impediments are excluded from this limit.'
@@ -469,40 +512,10 @@ function KanbanColumn({
               {wipExcludeBlocked ? ' *' : ''}
             </span>
           ) : (
-            <span className="text-[10px] font-bold bg-gray-50 text-gray-500 px-2 py-0.5 rounded border border-gray-100 uppercase">
+            <span className="shrink-0 whitespace-nowrap rounded border border-gray-100 bg-gray-50 px-2 py-0.5 text-[10px] font-bold uppercase text-gray-500">
               No WIP cap
             </span>
           )}
-          {onEditWip && wipAppliesToStage(stage) ? (
-            <button
-              type="button"
-              title="Edit WIP limit"
-              disabled={disabled}
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                onEditWip()
-              }}
-              className="rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-40"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
-          {onRequestDelete ? (
-            <button
-              type="button"
-              title="Remove column"
-              disabled={disabled}
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                onRequestDelete()
-              }}
-              className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          ) : null}
         </div>
       </div>
 
@@ -1338,27 +1351,6 @@ export default function KanbanView(props: {
                 Kanban
               </Badge>
             </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <Link
-                href={summaryHref}
-                className="inline-flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors"
-              >
-                <BarChart3 className="h-3.5 w-3.5" />
-                Summary &amp; metrics
-              </Link>
-              {persisting ? (
-                <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Saving…
-                </span>
-              ) : null}
-              {reorderingColumns ? (
-                <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Reordering columns…
-                </span>
-              ) : null}
-            </div>
           </div>
           <p className="text-sm text-gray-500">Drag cards to move work; use column grips to reorder.</p>
         </CardHeader>
@@ -1865,7 +1857,7 @@ export default function KanbanView(props: {
 
               <DragOverlay dropAnimation={null}>
                 {draggingColumn ? (
-                  <div className="min-w-[280px] bg-white p-3 rounded-xl border border-indigo-200 shadow-lg opacity-95">
+                  <div className="min-w-[300px] bg-white p-3 rounded-xl border border-indigo-200 shadow-lg opacity-95">
                     <div className="flex items-center gap-2 text-sm font-bold text-gray-800">
                       <GripVertical className="h-4 w-4 text-gray-400 shrink-0" aria-hidden />
                       {draggingColumn.name}

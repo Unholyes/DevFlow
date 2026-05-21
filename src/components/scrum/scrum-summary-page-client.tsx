@@ -113,17 +113,6 @@ export function ScrumSummaryPageClient(props: {
             noted.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link href={activeBoardHref}>Open board</Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href={sprintsHref}>All sprints</Link>
-          </Button>
-          <Button size="sm" asChild>
-            <Link href={planHref}>Plan sprint</Link>
-          </Button>
-        </div>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
