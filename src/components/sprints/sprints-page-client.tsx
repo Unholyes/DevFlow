@@ -203,14 +203,6 @@ export function SprintsPageClient(props: {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {embedded && summaryHref ? (
-            <Link
-              href={summaryHref}
-              className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-            >
-              Summary & metrics
-            </Link>
-          ) : null}
           <Link
             href={planHref}
             className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
@@ -305,24 +297,6 @@ export function SprintsPageClient(props: {
               <p className="mt-1 text-sm text-gray-600">
                 Tasks ready to be pulled into a sprint for this process.
               </p>
-            </div>
-            <div className="flex items-center gap-2">
-              {props.processId && backlogHref ? (
-                <>
-                  <Link
-                    href={backlogHref}
-                    className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    View backlog
-                  </Link>
-                  <Link
-                    href={planHref}
-                    className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
-                  >
-                    Plan sprint
-                  </Link>
-                </>
-              ) : null}
             </div>
           </div>
         </CardHeader>

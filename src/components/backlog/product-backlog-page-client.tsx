@@ -644,33 +644,9 @@ export function ProductBacklogPageClient(props: {
         flowAdvancedFields={isKanban}
       />
 
-      <div className="flex flex-wrap items-center gap-4 mb-4">
-        <Link
-          href={`/dashboard/projects/${props.projectId}/phases/${props.phaseId}`}
-          className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Phase Overview
-        </Link>
-        {boardHref ? (
-          <Link
-            href={boardHref}
-            className="inline-flex items-center text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
-          >
-            <LayoutGrid className="h-4 w-4 mr-1" />
-            View board
-          </Link>
-        ) : null}
-      </div>
-
       <div className="flex flex-wrap justify-between items-start gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Product Backlog</h1>
-          <p className="text-gray-600 mt-1 max-w-2xl">
-            {isKanban
-              ? `Options queue for “${props.phaseTitle}” — refine with clear titles and descriptions, then pull work onto the board when capacity allows.`
-              : `Backlog items for “${props.phaseTitle}” (Scrum)`}
-          </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
           {showScrumSelection && selectedTasks.size > 0 ? (

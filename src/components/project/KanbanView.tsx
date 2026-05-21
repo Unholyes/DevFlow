@@ -1431,14 +1431,6 @@ export default function KanbanView(props: {
                 Showing blocked impediments only — clear the filter to see all cards.
               </p>
             ) : null}
-            <div className="flex items-center gap-2 shrink-0 sm:ml-auto">
-              <Button variant="outline" size="sm" asChild>
-                <Link href={backlogHref} className="inline-flex items-center gap-1">
-                  <LayoutList className="h-4 w-4" />
-                  Backlog
-                </Link>
-              </Button>
-            </div>
           </div>
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogContent className="sm:max-w-md">
@@ -1609,11 +1601,13 @@ export default function KanbanView(props: {
           <Dialog open={backlogCreateOpen} onOpenChange={setBacklogCreateOpen}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>Add work item to backlog</DialogTitle>
-                <DialogDescription>
-                  Capture what needs doing and any context. Pull the card onto the board when you start the work — Kanban
-                  uses flow and WIP limits, not sprint estimates.
-                </DialogDescription>
+                <div className="flex items-start gap-1.5">
+                  <DialogTitle>Add work item to backlog</DialogTitle>
+                  <HelpTip label="Adding backlog work">
+                    Capture what needs doing and any context. Pull the card onto the board when you start the work —
+                    Kanban uses flow and WIP limits, not sprint estimates.
+                  </HelpTip>
+                </div>
               </DialogHeader>
               <div className="grid gap-3 py-2">
                 <div className="grid gap-2">
@@ -1685,7 +1679,14 @@ export default function KanbanView(props: {
                       </select>
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="bl-svc">Class of service</Label>
+                      <div className="flex items-center gap-1.5">
+                        <Label htmlFor="bl-svc">Class of service</Label>
+                        <HelpTip label="Class of service">
+                          Used when the card is on the board: standard work vs deadline-sensitive (fixed date) vs
+                          expedite (team policy—often “interrupt” lanes). It does not bypass WIP limits unless you
+                          configure rules that do.
+                        </HelpTip>
+                      </div>
                       <select
                         id="bl-svc"
                         className="h-10 w-full rounded-md border border-gray-200 bg-white px-3 text-sm"
@@ -1696,11 +1697,6 @@ export default function KanbanView(props: {
                         <option value="fixed_date">Fixed date</option>
                         <option value="expedite">Expedite</option>
                       </select>
-                      <p className="text-xs text-gray-500 leading-relaxed">
-                        Used when the card is on the board: standard work vs deadline-sensitive (fixed date) vs expedite
-                        (team policy—often “interrupt” lanes). It does not bypass WIP limits unless you configure rules
-                        that do.
-                      </p>
                     </div>
                   </div>
                 ) : null}
