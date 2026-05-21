@@ -15,6 +15,7 @@ export type ProjectTemplatePermissionId =
   | 'pm.issues.assign_transition'
   | 'sdlc.sprints.create'
   | 'sdlc.backlog.manage'
+  | 'sdlc.tasks.archive'
   | 'dev.repo.access'
   | 'dev.cicd.trigger'
   | 'dev.env.manage'
@@ -38,6 +39,7 @@ export const PROJECT_TEMPLATE_PERMISSIONS: Array<{
   { id: 'pm.issues.assign_transition', category: 'Project Management', label: 'Assign and transition issue tickets' },
   { id: 'sdlc.sprints.create', category: 'SDLC Management', label: 'Create sprints' },
   { id: 'sdlc.backlog.manage', category: 'SDLC Management', label: 'Backlog management' },
+  { id: 'sdlc.tasks.archive', category: 'SDLC Management', label: 'Archive tasks' },
   { id: 'dev.repo.access', category: 'Development', label: 'Repository access' },
   { id: 'dev.cicd.trigger', category: 'Development', label: 'Trigger CI/CD pipelines' },
   { id: 'dev.env.manage', category: 'Development', label: 'Manage environment variables' },
@@ -91,6 +93,7 @@ export const PM_PHASE_GATES_APPROVE = 'pm.phase_gates.approve' as const satisfie
 export const PM_PROJECT_MEMBERS_MANAGE = 'pm.project_members.manage' as const satisfies ProjectTemplatePermissionId
 export const SDLC_SPRINTS_CREATE = 'sdlc.sprints.create' as const satisfies ProjectTemplatePermissionId
 export const SDLC_BACKLOG_MANAGE = 'sdlc.backlog.manage' as const satisfies ProjectTemplatePermissionId
+export const SDLC_TASKS_ARCHIVE = 'sdlc.tasks.archive' as const satisfies ProjectTemplatePermissionId
 
 export const PROJECT_ACCESS_LEVELS = ['Admin', 'Editor', 'Viewer'] as const
 export type ProjectAccessLevel = (typeof PROJECT_ACCESS_LEVELS)[number]
@@ -191,6 +194,7 @@ export const DEFAULT_PROJECT_TEMPLATE_PERMISSIONS: Record<ProjectAccessLevel, re
     'pm.issues.assign_transition',
     'sdlc.sprints.create',
     'sdlc.backlog.manage',
+    'sdlc.tasks.archive',
     'dev.repo.access',
     'dev.cicd.trigger',
     'dev.env.manage',

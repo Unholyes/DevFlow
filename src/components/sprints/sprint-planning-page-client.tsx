@@ -77,7 +77,7 @@ export function SprintPlanningPageClient(props: {
   const [startDate, setStartDate] = useState(props.draftSprint?.start_date || '')
   const [endDate, setEndDate] = useState(props.draftSprint?.end_date || '')
   const [formError, setFormError] = useState<string | null>(null)
-  
+
   // Combine backlogTasks and draftTasks if draftTasks exist, but only initialize selectedTasks with draftTasks ids.
   const allInitialTasks = useMemo(() => {
     const combined = [...props.backlogTasks, ...(props.draftTasks || [])]
@@ -90,7 +90,7 @@ export function SprintPlanningPageClient(props: {
     }
     return new Set()
   })
-  
+
   // The UI displays all tasks in backlogTasks except those in sprintTasks
   const [backlogTasks, setBacklogTasks] = useState<Task[]>(allInitialTasks)
   const [sprintTasks, setSprintTasks] = useState<Task[]>(props.draftTasks || [])
@@ -574,34 +574,31 @@ export function SprintPlanningPageClient(props: {
       </Card>
 
       <Card
-        className={`border-2 shadow-sm ${
-          capacityStatus === 'over'
+        className={`border-2 shadow-sm ${capacityStatus === 'over'
             ? 'border-red-200 bg-red-50/30'
             : capacityStatus === 'under'
               ? 'border-yellow-200 bg-yellow-50/30'
               : 'border-green-200 bg-green-50/30'
-        }`}
+          }`}
       >
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div
-                className={`p-3 rounded-lg ${
-                  capacityStatus === 'over'
+                className={`p-3 rounded-lg ${capacityStatus === 'over'
                     ? 'bg-red-100'
                     : capacityStatus === 'under'
                       ? 'bg-yellow-100'
                       : 'bg-green-100'
-                }`}
+                  }`}
               >
                 <Target
-                  className={`h-6 w-6 ${
-                    capacityStatus === 'over'
+                  className={`h-6 w-6 ${capacityStatus === 'over'
                       ? 'text-red-600'
                       : capacityStatus === 'under'
                         ? 'text-yellow-600'
                         : 'text-green-600'
-                  }`}
+                    }`}
                 />
               </div>
               <div>
@@ -661,7 +658,7 @@ export function SprintPlanningPageClient(props: {
         <Card className="border-gray-200 shadow-sm">
           <CardHeader>
             <div className="flex justify-between items-center">
-              <CardTitle className="text-lg">Product Backlog</CardTitle>
+              <CardTitle className="text-lg">Product Bascklog</CardTitle>
               <div className="flex items-center gap-2">
                 <Badge variant="outline">{remainingBacklog.length} tasks</Badge>
                 <Button
@@ -793,7 +790,7 @@ export function SprintPlanningPageClient(props: {
                       position: task.position || 0,
                     }}
                     isSelected={false}
-                    onSelect={() => {}}
+                    onSelect={() => { }}
                     showCheckbox={false}
                     onEdit={() => openTaskEdit(task.id)}
                     onDelete={() => handleRemoveFromSprint(task.id)}

@@ -413,6 +413,7 @@ function KanbanColumn({
   wipExcludeBlocked,
   columnDragHandleProps,
   onArchiveColumn,
+  canArchiveTasks,
 }: {
   stage: Stage
   tasksInColumn: TaskRow[]
@@ -424,6 +425,7 @@ function KanbanColumn({
   onRequestDelete?: () => void
   onEditWip?: () => void
   onArchiveColumn?: () => void
+  canArchiveTasks?: boolean
   onOpenTask: (task: TaskRow) => void
   teamsList: { id: string; name: string }[]
   showFlowAdvanced: boolean
@@ -460,14 +462,14 @@ function KanbanColumn({
             {onArchiveColumn && stage.is_done ? (
               <button
                 type="button"
-                title="Archive completed tasks in this column"
-                disabled={disabled || tasksInColumn.length === 0}
+                title={canArchiveTasks !== false ? "Archive completed tasks in this column" : "You need the Archive tasks permission"}
+                disabled={disabled || tasksInColumn.length === 0 || canArchiveTasks === false}
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
                   onArchiveColumn()
                 }}
-                className="rounded-md p-1.5 text-gray-400 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-40"
+                className={cn("h-6 w-6 rounded-md hover:bg-muted-foreground/10 text-muted-foreground/60 hover:text-foreground inline-flex items-center justify-center transition-colors shrink-0", canArchiveTasks === false && "opacity-50 cursor-not-allowed hover:bg-transparent hover:text-muted-foreground/60")}
               >
                 <Archive className="h-3.5 w-3.5" />
               </button>
@@ -590,6 +592,7 @@ function SortableKanbanColumn({
   wipCountTasks,
   wipExcludeBlocked,
   onArchiveColumn,
+  canArchiveTasks,
 }: {
   stage: Stage
   tasksInColumn: TaskRow[]
@@ -600,6 +603,7 @@ function SortableKanbanColumn({
   onRequestDelete?: () => void
   onEditWip?: () => void
   onArchiveColumn?: () => void
+  canArchiveTasks?: boolean
   onOpenTask: (task: TaskRow) => void
   teamsList: { id: string; name: string }[]
   showFlowAdvanced: boolean
@@ -627,6 +631,7 @@ function SortableKanbanColumn({
         onRequestDelete={onRequestDelete}
         onEditWip={onEditWip}
         onArchiveColumn={onArchiveColumn}
+        canArchiveTasks={canArchiveTasks}
         onOpenTask={onOpenTask}
         teamsList={teamsList}
         showFlowAdvanced={showFlowAdvanced}
@@ -681,6 +686,7 @@ export default function KanbanView(props: {
   initialWipExcludeBlocked?: boolean
   /** `sdlc.backlog.manage` — quick-create in the board backlog strip. */
   canManageBacklog?: boolean
+  canArchiveTasks?: boolean
 }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -1875,6 +1881,7 @@ export default function KanbanView(props: {
                             ? () => setArchiveConfirmStage(stage)
                             : undefined
                         }
+                        canArchiveTasks={props.canArchiveTasks}
                         onOpenTask={openTaskDetail}
                         teamsList={teamsList}
                         showFlowAdvanced={showAdvancedFlowFields}
@@ -1922,7 +1929,7 @@ export default function KanbanView(props: {
                         }
                       >
                         <Plus className="h-4 w-4" />
-                        Add task
+                        Create Task
                       </Button>
                     </div>
                   </div>

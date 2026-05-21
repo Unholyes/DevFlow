@@ -127,6 +127,7 @@ type RolePermission =
   | 'account.users.remove'
   | 'sdlc.sprints.create'
   | 'sdlc.backlog.manage'
+  | 'sdlc.tasks.archive'
   | 'projects.archive'
   | 'dev.repo.access'
   | 'dev.cicd.trigger'
@@ -158,6 +159,11 @@ const ROLE_PERMISSION_CATALOG: Array<{
     id: 'sdlc.backlog.manage',
     label: 'Backlog management',
     description: 'Can create, edit, and prioritize backlog items.',
+  },
+  {
+    id: 'sdlc.tasks.archive',
+    label: 'Archive tasks',
+    description: 'Can archive completed tasks on Kanban boards.',
   },
   {
     id: 'projects.archive',

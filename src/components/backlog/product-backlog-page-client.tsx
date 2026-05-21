@@ -436,20 +436,20 @@ export function ProductBacklogPageClient(props: {
         prev.map((t) =>
           t.id === row.id
             ? {
-                ...t,
-                title: row.title,
-                description: row.description ?? null,
-                priority: row.priority,
-                story_points: row.story_points,
-                assignee_id: row.assignee_id ?? t.assignee_id,
-                team_id: row.team_id ?? t.team_id,
-                size_band: row.size_band ?? t.size_band,
-                service_class: row.service_class ?? t.service_class,
-                workflow_stage_id: row.workflow_stage_id,
-                blocked: row.blocked ?? t.blocked,
-                blocked_reason: row.blocked_reason ?? t.blocked_reason,
-                task_type: row.task_type ?? t.task_type,
-              }
+              ...t,
+              title: row.title,
+              description: row.description ?? null,
+              priority: row.priority,
+              story_points: row.story_points,
+              assignee_id: row.assignee_id ?? t.assignee_id,
+              team_id: row.team_id ?? t.team_id,
+              size_band: row.size_band ?? t.size_band,
+              service_class: row.service_class ?? t.service_class,
+              workflow_stage_id: row.workflow_stage_id,
+              blocked: row.blocked ?? t.blocked,
+              blocked_reason: row.blocked_reason ?? t.blocked_reason,
+              task_type: row.task_type ?? t.task_type,
+            }
             : t
         )
       )
