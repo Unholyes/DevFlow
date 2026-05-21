@@ -188,8 +188,8 @@ export default async function ProcessBacklogPage({
     isMissingTaskColumnError,
   } = await import('@/lib/tasks/kanban-task-columns')
 
-  const backlogQuery = (cols: string) =>
-    supabase
+  const backlogQuery = (cols: string) => {
+    let q = supabase
       .from('tasks')
       .select(cols)
       .eq('project_id', project.id)
@@ -197,7 +197,11 @@ export default async function ProcessBacklogPage({
       .eq('process_id', process.id)
       .eq('workflow_stage_id', backlogStageId)
       .is('sprint_id', null)
-      .order('position', { ascending: true })
+    if (cols.includes('archived_at')) {
+      q = q.is('archived_at', null)
+    }
+    return q.order('position', { ascending: true })
+  }
 
   let resTasks = await backlogQuery(BACKLOG_TASK_COLUMNS_FULL)
   if (resTasks.error && isMissingTaskColumnError(String(resTasks.error.message ?? ''), (resTasks.error as { code?: string }).code)) {

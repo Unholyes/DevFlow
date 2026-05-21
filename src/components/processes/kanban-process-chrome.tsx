@@ -4,13 +4,14 @@ import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
+  processArchivePath,
   processBacklogPath,
   processBoardPath,
   processSummaryPath,
   processSwitcherPath,
 } from '@/lib/processes/process-workspace-routes'
 
-export type KanbanProcessTab = 'summary' | 'board' | 'backlog'
+export type KanbanProcessTab = 'summary' | 'board' | 'backlog' | 'archive'
 
 export function KanbanProcessChrome(props: {
   projectId: string
@@ -26,6 +27,7 @@ export function KanbanProcessChrome(props: {
     { id: 'summary', label: 'Summary', href: processSummaryPath(props.projectId, props.phaseId, props.processId) },
     { id: 'board', label: 'Board', href: processBoardPath(props.projectId, props.phaseId, props.processId) },
     { id: 'backlog', label: 'Backlog', href: processBacklogPath(props.projectId, props.phaseId, props.processId) },
+    { id: 'archive', label: 'Archive', href: processArchivePath(props.projectId, props.phaseId, props.processId) },
   ]
 
   return (

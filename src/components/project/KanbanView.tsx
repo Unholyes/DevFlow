@@ -60,8 +60,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { BarChart3, GripVertical, HelpCircle, LayoutList, Loader2, Pencil, Plus, Trash2 } from 'lucide-react'
-import { processSummaryPath } from '@/lib/processes/process-workspace-routes'
+import {
+  Archive,
+  BarChart3,
+  GripVertical,
+  HelpCircle,
+  LayoutList,
+  Loader2,
+  Pencil,
+  Plus,
+  Trash2,
+} from 'lucide-react'
+import { processArchivePath, processSummaryPath } from '@/lib/processes/process-workspace-routes'
+import { filterActiveTasks } from '@/lib/tasks/task-archive'
 import { KanbanTaskDetailModal, type TaskRowLite } from '@/components/project/KanbanTaskDetailModal'
 import { TaskMessageDialog, taskErrorDialogFromUnknown } from '@/components/tasks/task-message-dialog'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
@@ -92,6 +103,7 @@ type TaskRow = {
   blocked?: boolean
   blocked_reason?: string | null
   task_type?: string | null
+  archived_at?: string | null
 }
 
 const KANBAN_FLOW_ADVANCED_STORAGE_KEY = 'devflow:kanban-flow-advanced-fields'
@@ -400,6 +412,7 @@ function KanbanColumn({
   wipCountTasks,
   wipExcludeBlocked,
   columnDragHandleProps,
+  onArchiveColumn,
 }: {
   stage: Stage
   tasksInColumn: TaskRow[]
@@ -410,6 +423,7 @@ function KanbanColumn({
   disabled: boolean
   onRequestDelete?: () => void
   onEditWip?: () => void
+  onArchiveColumn?: () => void
   onOpenTask: (task: TaskRow) => void
   teamsList: { id: string; name: string }[]
   showFlowAdvanced: boolean
@@ -443,6 +457,21 @@ function KanbanColumn({
             </span>
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
+            {onArchiveColumn && stage.is_done ? (
+              <button
+                type="button"
+                title="Archive completed tasks in this column"
+                disabled={disabled || tasksInColumn.length === 0}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onArchiveColumn()
+                }}
+                className="rounded-md p-1.5 text-gray-400 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-40"
+              >
+                <Archive className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
             {onEditWip && wipAppliesToStage(stage) ? (
               <button
                 type="button"
@@ -560,6 +589,7 @@ function SortableKanbanColumn({
   showFlowAdvanced,
   wipCountTasks,
   wipExcludeBlocked,
+  onArchiveColumn,
 }: {
   stage: Stage
   tasksInColumn: TaskRow[]
@@ -569,6 +599,7 @@ function SortableKanbanColumn({
   disabled: boolean
   onRequestDelete?: () => void
   onEditWip?: () => void
+  onArchiveColumn?: () => void
   onOpenTask: (task: TaskRow) => void
   teamsList: { id: string; name: string }[]
   showFlowAdvanced: boolean
@@ -595,6 +626,7 @@ function SortableKanbanColumn({
         disabled={disabled}
         onRequestDelete={onRequestDelete}
         onEditWip={onEditWip}
+        onArchiveColumn={onArchiveColumn}
         onOpenTask={onOpenTask}
         teamsList={teamsList}
         showFlowAdvanced={showFlowAdvanced}
@@ -684,6 +716,8 @@ export default function KanbanView(props: {
   const [backlogCreateSize, setBacklogCreateSize] = useState<string>('')
   const [backlogCreateService, setBacklogCreateService] = useState<string>('standard')
   const [backlogCreateTaskType, setBacklogCreateTaskType] = useState<string>('task')
+  const [archiveConfirmStage, setArchiveConfirmStage] = useState<Stage | null>(null)
+  const [archiveLoading, setArchiveLoading] = useState(false)
   const [createErrorDialog, setCreateErrorDialog] = useState<{ title: string; message: string } | null>(null)
   const [showAdvancedFlowFields, setShowAdvancedFlowFields] = useState(false)
   const [wipExcludeBlocked, setWipExcludeBlocked] = useState(props.initialWipExcludeBlocked === true)
@@ -778,7 +812,7 @@ export default function KanbanView(props: {
   }, [tasks])
 
   const tasksForBoard = useMemo(() => {
-    let list = tasks
+    let list = filterActiveTasks(tasks)
     if (teamFilterActive) list = list.filter((t) => t.team_id === teamFilterId)
     if (blockedOnly) list = list.filter((t) => t.blocked)
     return list
@@ -1125,11 +1159,37 @@ export default function KanbanView(props: {
   const activeTask = activeId ? tasks.find((t) => t.id === String(activeId)) : null
 
   const backlogHref = `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/backlog`
+  const archiveHref = processArchivePath(props.projectId, props.phaseId, props.processId)
 
   const tasksInStage = useCallback(
     (stageId: string) => tasks.filter((t) => t.workflow_stage_id === stageId).length,
     [tasks]
   )
+
+  const handleConfirmArchiveColumn = async () => {
+    if (!archiveConfirmStage) return
+    setArchiveLoading(true)
+    try {
+      const res = await fetch('/api/tasks/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'archive',
+          project_id: props.projectId,
+          process_id: props.processId,
+          stage_id: archiveConfirmStage.id,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json?.error || 'Failed to archive tasks')
+      setArchiveConfirmStage(null)
+      router.refresh()
+    } catch (e) {
+      setCreateErrorDialog(taskErrorDialogFromUnknown(e, 'Failed to archive tasks'))
+    } finally {
+      setArchiveLoading(false)
+    }
+  }
 
   const handleCreateBacklogTask = async () => {
     if (!backlogStageId) return
@@ -1425,6 +1485,14 @@ export default function KanbanView(props: {
                   saved when hidden.
                 </HelpTip>
               </div>
+              <div className="flex items-center gap-2 shrink-0 sm:ml-auto">
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={archiveHref} className="inline-flex items-center gap-1.5">
+                    <Archive className="h-4 w-4" />
+                    Archive
+                  </Link>
+                </Button>
+              </div>
             </div>
             {blockedOnly ? (
               <p className="w-full text-xs text-amber-800 dark-theme-warning">
@@ -1432,6 +1500,46 @@ export default function KanbanView(props: {
               </p>
             ) : null}
           </div>
+
+          <Dialog
+            open={archiveConfirmStage !== null}
+            onOpenChange={(open) => {
+              if (!open) setArchiveConfirmStage(null)
+            }}
+          >
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Archive completed tasks</DialogTitle>
+                <DialogDescription>
+                  {archiveConfirmStage ? (
+                    <>
+                      Move all {tasksForBoard.filter((t) => t.workflow_stage_id === archiveConfirmStage.id).length}{' '}
+                      task(s) from <span className="font-medium text-gray-900">{archiveConfirmStage.name}</span> to the
+                      process archive. They leave the board but can be restored from the Archive tab.
+                    </>
+                  ) : null}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={() => setArchiveConfirmStage(null)}
+                  disabled={archiveLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => void handleConfirmArchiveColumn()}
+                  disabled={archiveLoading || !archiveConfirmStage}
+                >
+                  {archiveLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Archive tasks'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
@@ -1745,8 +1853,9 @@ export default function KanbanView(props: {
                     const colTasks = tasksForBoard
                       .filter((t) => t.workflow_stage_id === stage.id && boardStageIds.has(stage.id))
                       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-                    const colTasksForWip = tasks
-                      .filter((t) => t.workflow_stage_id === stage.id && boardStageIds.has(stage.id))
+                    const colTasksForWip = filterActiveTasks(tasks).filter(
+                      (t) => t.workflow_stage_id === stage.id && boardStageIds.has(stage.id)
+                    )
 
                     return (
                       <SortableKanbanColumn
@@ -1756,7 +1865,7 @@ export default function KanbanView(props: {
                         wipCountTasks={colTasksForWip}
                         wipExcludeBlocked={wipExcludeBlocked}
                         stageById={stageById}
-                        disabled={columnMutation || reorderingColumns || teamFilterActive}
+                        disabled={columnMutation || reorderingColumns || teamFilterActive || archiveLoading}
                         onRequestDelete={() => setDeleteStage(stage)}
                         onEditWip={
                           wipAppliesToStage(stage)
@@ -1764,6 +1873,11 @@ export default function KanbanView(props: {
                                 setWipEditStage(stage)
                                 setWipEditValue(stage.wip_limit != null ? String(stage.wip_limit) : '')
                               }
+                            : undefined
+                        }
+                        onArchiveColumn={
+                          stage.is_done && colTasks.length > 0
+                            ? () => setArchiveConfirmStage(stage)
                             : undefined
                         }
                         onOpenTask={openTaskDetail}

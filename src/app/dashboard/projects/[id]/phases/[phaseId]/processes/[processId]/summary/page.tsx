@@ -13,6 +13,7 @@ import { ScrumSummaryPageClient } from '@/components/scrum/scrum-summary-page-cl
 import { computeScrumProcessSummary } from '@/lib/scrum/compute-process-summary'
 import { computeSprintBurndown } from '@/lib/scrum/compute-sprint-burndown'
 import { processWorkspacePath } from '@/lib/processes/process-workspace-routes'
+import { filterActiveTasks } from '@/lib/tasks/task-archive'
 import { loadProjectPhasesGatingContext } from '@/lib/projects/load-project-phases-gating'
 import { isPhaseLockedForProject } from '@/lib/projects/phase-gating'
 
@@ -285,6 +286,8 @@ export default async function KanbanProcessSummaryPage({
     }
     if (!res.error) tasks = (res.data ?? []) as unknown as Record<string, unknown>[]
   }
+
+  tasks = filterActiveTasks(tasks as { archived_at?: string | null }[]) as Record<string, unknown>[]
 
   const wipExcludeBlocked = (process as { wip_exclude_blocked?: boolean }).wip_exclude_blocked === true
 

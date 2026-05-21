@@ -25,6 +25,10 @@ export function processBacklogPath(projectId: string, phaseId: string, processId
   return `/dashboard/projects/${projectId}/phases/${phaseId}/processes/${processId}/backlog`
 }
 
+export function processArchivePath(projectId: string, phaseId: string, processId: string) {
+  return `/dashboard/projects/${projectId}/phases/${phaseId}/processes/${processId}/archive`
+}
+
 export function processSprintsPath(projectId: string, phaseId: string, processId: string) {
   return `/dashboard/projects/${projectId}/phases/${phaseId}/processes/${processId}/sprints`
 }

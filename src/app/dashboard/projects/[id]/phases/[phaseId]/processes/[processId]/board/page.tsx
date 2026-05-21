@@ -187,15 +187,19 @@ export default async function ProcessBoardPage({
       isMissingTaskColumnError,
     } = await import('@/lib/tasks/kanban-task-columns')
 
-    const baseQuery = (cols: string) =>
-      supabase
+    const baseQuery = (cols: string) => {
+      let q = supabase
         .from('tasks')
         .select(cols)
         .eq('project_id', project.id)
         .eq('organization_id', orgId)
         .eq('process_id', process.id)
         .in('workflow_stage_id', stageIds)
-        .order('position', { ascending: true })
+      if (cols.includes('archived_at')) {
+        q = q.is('archived_at', null)
+      }
+      return q.order('position', { ascending: true })
+    }
 
     let resFinal = await baseQuery(KANBAN_TASK_COLUMNS_FULL)
     if (resFinal.error && isMissingTaskColumnError(String(resFinal.error.message ?? ''), (resFinal.error as { code?: string }).code)) {
