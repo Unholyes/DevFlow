@@ -7,7 +7,7 @@ function jsonError(status: number, code: string, error: string) {
   return NextResponse.json({ ok: false, code, error }, { status })
 }
 
-type TeamRole = 'lead' | 'member'
+type TeamRole = 'lead' | 'coordinator' | 'member'
 
 function normalizeUserIds(input: unknown): string[] {
   if (Array.isArray(input)) {
@@ -18,7 +18,7 @@ function normalizeUserIds(input: unknown): string[] {
 }
 
 function isTeamRole(v: unknown): v is TeamRole {
-  return v === 'lead' || v === 'member'
+  return v === 'lead' || v === 'coordinator' || v === 'member'
 }
 
 async function getTeamOrgId(admin: ReturnType<typeof createAdminClient>, teamId: string) {
@@ -41,6 +41,24 @@ async function assertOrgAdmin(admin: ReturnType<typeof createAdminClient>, organ
   const role = String((membership as any)?.system_role ?? 'Member')
   if (role !== 'Owner' && role !== 'Admin') {
     return { ok: false as const, response: jsonError(403, 'FORBIDDEN', 'Forbidden') }
+  }
+
+  return { ok: true as const }
+}
+
+async function assertTeamLead(admin: ReturnType<typeof createAdminClient>, teamId: string, userId: string) {
+  const { data: membership, error } = await admin
+    .from('team_members')
+    .select('team_role')
+    .eq('team_id', teamId)
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (error) return { ok: false as const, response: jsonError(500, 'TEAM_ROLE_LOOKUP_FAILED', error.message) }
+
+  const role = String((membership as any)?.team_role ?? 'member')
+  if (role !== 'lead') {
+    return { ok: false as const, response: jsonError(403, 'FORBIDDEN', 'Only team leads can manage roles') }
   }
 
   return { ok: true as const }
@@ -208,3 +226,46 @@ export async function DELETE(request: Request, context: { params: Promise<{ team
   return NextResponse.json({ ok: true })
 }
 
+export async function PATCH(request: Request, context: { params: Promise<{ teamId: string }> }) {
+  const { teamId } = await context.params
+  if (!teamId) return jsonError(400, 'MISSING_TEAM_ID', 'Missing teamId')
+
+  const supabase = createClient()
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) return jsonError(401, 'UNAUTHORIZED', 'Unauthorized')
+
+  let body: any = null
+  try {
+    body = await request.json()
+  } catch {
+    return jsonError(400, 'INVALID_JSON', 'Invalid JSON')
+  }
+
+  const userId = String(body?.userId ?? body?.user_id ?? '').trim()
+  if (!userId) return jsonError(400, 'MISSING_USER_ID', 'Missing userId')
+
+  const teamRoleRaw = body?.team_role ?? body?.teamRole
+  if (!isTeamRole(teamRoleRaw)) return jsonError(400, 'INVALID_ROLE', 'Invalid team role')
+
+  const admin = createAdminClient()
+  const teamOrg = await getTeamOrgId(admin, teamId)
+  if (!teamOrg.ok) return teamOrg.response
+
+  // Only team leads can update roles
+  const leadCheck = await assertTeamLead(admin, teamId, user.id)
+  if (!leadCheck.ok) return leadCheck.response
+
+  const { error: updateError } = await admin
+    .from('team_members')
+    .update({ team_role: teamRoleRaw })
+    .eq('team_id', teamId)
+    .eq('user_id', userId)
+
+  if (updateError) return jsonError(500, 'TEAM_MEMBER_UPDATE_FAILED', updateError.message)
+
+  return NextResponse.json({ ok: true })
+}

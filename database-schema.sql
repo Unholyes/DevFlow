@@ -1463,3 +1463,46 @@ CREATE TRIGGER trg_sprints_on_close_return_unfinished
 AFTER UPDATE ON public.sprints
 FOR EACH ROW
 EXECUTE FUNCTION public.scrum_sprint_on_close_return_unfinished();
+
+-- -----------------------------------------
+-- DEMO TABLE (Sandbox for testing)
+-- -----------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.demo (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  description TEXT,
+  category TEXT,
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'archived')),
+  test_value INTEGER,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE public.demo ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Demo: anyone can view" ON public.demo
+  FOR SELECT USING (true);
+
+CREATE POLICY "Demo: authenticated can insert" ON public.demo
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
+CREATE POLICY "Demo: authenticated can update" ON public.demo
+  FOR UPDATE USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Demo: authenticated can delete" ON public.demo
+  FOR DELETE USING (auth.role() = 'authenticated');
+
+DROP TRIGGER IF EXISTS trg_demo_set_updated_at ON public.demo;
+CREATE TRIGGER trg_demo_set_updated_at
+BEFORE UPDATE ON public.demo
+FOR EACH ROW
+EXECUTE FUNCTION public.set_updated_at();
+
+-- Demo data (for testing purposes)
+INSERT INTO public.demo (title, description, category, status, test_value, metadata) VALUES
+  ('Demo Item 1', 'First demo record for testing', 'example', 'active', 100, '{"type": "test", "version": 1}'::jsonb),
+  ('Demo Item 2', 'Second demo record for sandbox', 'example', 'active', 200, '{"type": "test", "version": 2}'::jsonb),
+  ('Demo Item 3', 'Third demo record archived', 'archived_example', 'archived', 300, '{"type": "archived_test"}'::jsonb)
+ON CONFLICT DO NOTHING;

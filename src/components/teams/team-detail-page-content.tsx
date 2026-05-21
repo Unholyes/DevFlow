@@ -16,6 +16,13 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { supabase } from '@/lib/supabase/client'
 
 type TeamRow = {
@@ -27,10 +34,12 @@ type TeamRow = {
   created_by: string | null
 }
 
+type TeamMemberRole = 'lead' | 'coordinator' | 'member'
+
 type TeamMemberRow = {
   team_id: string
   user_id: string
-  team_role: 'lead' | 'member'
+  team_role: TeamMemberRole
   created_at: string
   profiles?: { id: string; full_name: string | null; email: string | null } | null
 }
@@ -50,6 +59,7 @@ function initials(name: string) {
 export function TeamDetailPageContent({
   organizationId,
   team,
+  currentUserId,
 }: {
   organizationId: string
   currentUserId: string
@@ -64,6 +74,13 @@ export function TeamDetailPageContent({
   const [candidates, setCandidates] = useState<OrgMemberCandidate[]>([])
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const currentUserRole = useMemo(
+    () => members.find((m) => m.user_id === currentUserId)?.team_role,
+    [members, currentUserId]
+  )
+
+  const canInvite = currentUserRole === 'lead' || currentUserRole === 'coordinator'
 
   useEffect(() => {
     let cancelled = false
@@ -195,6 +212,30 @@ export function TeamDetailPageContent({
     }
   }
 
+  async function handleRoleChange(userId: string, newRole: TeamMemberRole) {
+    setError(null)
+
+    const prev = members
+    setMembers((cur) =>
+      cur.map((m) =>
+        m.user_id === userId ? { ...m, team_role: newRole } : m
+      )
+    )
+
+    try {
+      const res = await fetch(`/api/teams/${encodeURIComponent(team.id)}/members`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ userId, team_role: newRole }),
+      })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(payload?.error ?? 'Failed to update member role.')
+    } catch (e: any) {
+      setMembers(prev)
+      setError(e?.message ?? 'Failed to update member role.')
+    }
+  }
+
   return (
     <div className="space-y-6 pt-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -225,7 +266,11 @@ export function TeamDetailPageContent({
           }}
         >
           <DialogTrigger asChild>
-            <Button className="bg-blue-600 text-white hover:bg-blue-700">
+            <Button 
+              className="bg-blue-600 text-white hover:bg-blue-700" 
+              disabled={!canInvite}
+              title={!canInvite ? 'Only leads and coordinators can invite members' : undefined}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Add members
             </Button>
@@ -335,6 +380,12 @@ export function TeamDetailPageContent({
             members.map((m) => {
               const name = String(m.profiles?.full_name ?? 'Unknown User')
               const email = String(m.profiles?.email ?? '—')
+              const roleLabel = {
+                lead: 'Lead',
+                coordinator: 'Coordinator',
+                member: 'Member',
+              }[m.team_role] || 'Member'
+
               return (
                 <div
                   key={m.user_id}
@@ -353,7 +404,16 @@ export function TeamDetailPageContent({
                   </div>
 
                   <div className="flex items-center justify-between gap-3 sm:justify-end">
-                    <div className="text-xs font-medium text-gray-500">{m.team_role === 'lead' ? 'Lead' : 'Member'}</div>
+                    <Select value={m.team_role} onValueChange={(role) => handleRoleChange(m.user_id, role as TeamMemberRole)}>
+                      <SelectTrigger className="h-9 w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="lead">Lead</SelectItem>
+                        <SelectItem value="coordinator">Coordinator</SelectItem>
+                        <SelectItem value="member">Member</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <Button variant="outline" className="h-9" onClick={() => handleRemove(m.user_id)}>
                       Remove
                     </Button>
