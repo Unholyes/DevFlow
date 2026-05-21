@@ -1485,14 +1485,6 @@ export default function KanbanView(props: {
                   saved when hidden.
                 </HelpTip>
               </div>
-              <div className="flex items-center gap-2 shrink-0 sm:ml-auto">
-                <Button variant="outline" size="sm" asChild>
-                  <Link href={archiveHref} className="inline-flex items-center gap-1.5">
-                    <Archive className="h-4 w-4" />
-                    Archive
-                  </Link>
-                </Button>
-              </div>
             </div>
             {blockedOnly ? (
               <p className="w-full text-xs text-amber-800 dark-theme-warning">

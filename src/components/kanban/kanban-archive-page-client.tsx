@@ -11,6 +11,8 @@ import { processBoardPath } from '@/lib/processes/process-workspace-routes'
 import { TaskMessageDialog, taskErrorDialogFromUnknown } from '@/components/tasks/task-message-dialog'
 import { TaskTypeIcon } from '@/components/tasks/task-type-icon'
 import { TASK_TYPE_META } from '@/lib/tasks/task-type'
+import { KanbanTaskDetailModal } from '@/components/project/KanbanTaskDetailModal'
+import { cn } from '@/lib/utils'
 
 export type ArchivedTaskRow = {
   id: string
@@ -43,6 +45,7 @@ export function KanbanArchivePageClient(props: {
 }) {
   const router = useRouter()
   const [restoringId, setRestoringId] = useState<string | null>(null)
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
   const [errorDialog, setErrorDialog] = useState<{ title: string; message: string } | null>(null)
 
   const boardHref = processBoardPath(props.projectId, props.phaseId, props.processId)
@@ -83,6 +86,17 @@ export function KanbanArchivePageClient(props: {
         variant="error"
       />
 
+      <KanbanTaskDetailModal
+        taskId={detailTaskId}
+        open={detailTaskId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetailTaskId(null)
+        }}
+        onTaskSaved={() => {}}
+        flowAdvancedFields
+        readOnly
+      />
+
       <Card className="border-gray-100 shadow-sm">
         <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -115,7 +129,14 @@ export function KanbanArchivePageClient(props: {
                     key={task.id}
                     className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-white px-4 py-3"
                   >
-                    <div className="min-w-0 flex-1 space-y-1">
+                    <button
+                      type="button"
+                      className={cn(
+                        'min-w-0 flex-1 space-y-1 text-left rounded-md -mx-1 px-1 py-0.5',
+                        'hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-1'
+                      )}
+                      onClick={() => setDetailTaskId(task.id)}
+                    >
                       <div className="flex flex-wrap items-center gap-2">
                         <TaskTypeIcon type={taskType} className="h-4 w-4 shrink-0 text-gray-500" />
                         <span className="font-medium text-gray-900 truncate">{task.title}</span>
@@ -137,14 +158,17 @@ export function KanbanArchivePageClient(props: {
                           </>
                         ) : null}
                       </p>
-                    </div>
+                    </button>
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
                       className="shrink-0 gap-1.5"
                       disabled={restoringId !== null}
-                      onClick={() => void restoreTask(task.id)}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void restoreTask(task.id)
+                      }}
                     >
                       {restoringId === task.id ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />

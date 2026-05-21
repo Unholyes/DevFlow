@@ -123,6 +123,7 @@ export function KanbanTaskDetailModal({
   onOpenChange,
   onTaskSaved,
   flowAdvancedFields = false,
+  readOnly = false,
 }: {
   taskId: string | null
   open: boolean
@@ -130,6 +131,8 @@ export function KanbanTaskDetailModal({
   onTaskSaved: (row: TaskRowLite) => void
   /** When true, show and edit T‑shirt size and class of service (Kanban). When false, omit from save payload. */
   flowAdvancedFields?: boolean
+  /** View-only mode (e.g. archived tasks) — no edits or new comments. */
+  readOnly?: boolean
 }) {
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -188,7 +191,7 @@ export function KanbanTaskDetailModal({
   }, [taskId])
 
   useEffect(() => {
-    if (!open || !detail?.task?.organization_id) return
+    if (!open || readOnly || !detail?.task?.organization_id) return
     const orgId = detail.task.organization_id
     let cancelled = false
 
@@ -232,7 +235,7 @@ export function KanbanTaskDetailModal({
     return () => {
       cancelled = true
     }
-  }, [open, detail?.task?.organization_id])
+  }, [open, detail?.task?.organization_id, readOnly])
 
   useEffect(() => {
     if (open && taskId) void load()
@@ -246,7 +249,7 @@ export function KanbanTaskDetailModal({
   }, [open])
 
   const handleSave = async () => {
-    if (!taskId || !detail) return
+    if (readOnly || !taskId || !detail) return
 
     setSaveLoading(true)
     try {
@@ -319,7 +322,7 @@ export function KanbanTaskDetailModal({
   }
 
   const handleAddComment = async () => {
-    if (!taskId || !commentText.trim()) return
+    if (readOnly || !taskId || !commentText.trim()) return
     setCommentLoading(true)
     try {
       const res = await fetch(`/api/tasks/${taskId}/comments`, {
@@ -357,7 +360,9 @@ export function KanbanTaskDetailModal({
         <DialogHeader>
           <DialogTitle className="pr-8">Task details</DialogTitle>
           <DialogDescription>
-            {flowAdvancedFields ? (
+            {readOnly ? (
+              <>Archived task — view only. Restore from the archive list to edit on the board.</>
+            ) : flowAdvancedFields ? (
               <>
                 Kanban work item — optional size and class of service replace story points. Stage moves stay on the
                 board. Metrics use dates, not estimates.
@@ -394,8 +399,8 @@ export function KanbanTaskDetailModal({
 
             <div className="grid gap-2">
               <Label>Work type</Label>
-              <Select value={taskType} onValueChange={(v) => setTaskType(v as TaskType)}>
-                <SelectTrigger>
+              <Select value={taskType} onValueChange={(v) => setTaskType(v as TaskType)} disabled={readOnly}>
+                <SelectTrigger disabled={readOnly}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -413,7 +418,13 @@ export function KanbanTaskDetailModal({
 
             <div className="grid gap-2">
               <Label htmlFor="task-title">Title</Label>
-              <Input id="task-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+              <Input
+                id="task-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                readOnly={readOnly}
+                disabled={readOnly}
+              />
             </div>
 
             <div className="grid gap-2">
@@ -424,6 +435,8 @@ export function KanbanTaskDetailModal({
                 onChange={(e) => setDescription(e.target.value)}
                 className="min-h-[100px] resize-y"
                 placeholder="Acceptance criteria, context, links…"
+                readOnly={readOnly}
+                disabled={readOnly}
               />
             </div>
 
@@ -431,8 +444,12 @@ export function KanbanTaskDetailModal({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label>Priority</Label>
-                  <Select value={priority} onValueChange={(v) => setPriority(v as TaskRowLite['priority'])}>
-                    <SelectTrigger>
+                  <Select
+                    value={priority}
+                    onValueChange={(v) => setPriority(v as TaskRowLite['priority'])}
+                    disabled={readOnly}
+                  >
+                    <SelectTrigger disabled={readOnly}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -445,8 +462,8 @@ export function KanbanTaskDetailModal({
                 </div>
                 <div className="grid gap-2">
                   <Label>Size (T‑shirt)</Label>
-                  <Select value={sizeBand} onValueChange={setSizeBand}>
-                    <SelectTrigger>
+                  <Select value={sizeBand} onValueChange={setSizeBand} disabled={readOnly}>
+                    <SelectTrigger disabled={readOnly}>
                       <SelectValue placeholder="Optional" />
                     </SelectTrigger>
                     <SelectContent>
@@ -463,8 +480,12 @@ export function KanbanTaskDetailModal({
             ) : (
               <div className="grid gap-2">
                 <Label>Priority</Label>
-                <Select value={priority} onValueChange={(v) => setPriority(v as TaskRowLite['priority'])}>
-                  <SelectTrigger>
+                <Select
+                  value={priority}
+                  onValueChange={(v) => setPriority(v as TaskRowLite['priority'])}
+                  disabled={readOnly}
+                >
+                  <SelectTrigger disabled={readOnly}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -480,8 +501,8 @@ export function KanbanTaskDetailModal({
             {flowAdvancedFields ? (
               <div className="grid gap-2">
                 <Label>Class of service</Label>
-                <Select value={serviceClass} onValueChange={setServiceClass}>
-                  <SelectTrigger>
+                <Select value={serviceClass} onValueChange={setServiceClass} disabled={readOnly}>
+                  <SelectTrigger disabled={readOnly}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -495,7 +516,14 @@ export function KanbanTaskDetailModal({
 
             <div className="grid gap-2">
               <Label htmlFor="task-due">Due date</Label>
-              <Input id="task-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <Input
+                id="task-due"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                readOnly={readOnly}
+                disabled={readOnly}
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -504,8 +532,9 @@ export function KanbanTaskDetailModal({
                 <Select
                   value={assignmentTeamId ?? UNASSIGNED}
                   onValueChange={(v) => setAssignmentTeamId(v === UNASSIGNED ? null : v)}
+                  disabled={readOnly}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger disabled={readOnly}>
                     <SelectValue placeholder="Unassigned" />
                   </SelectTrigger>
                   <SelectContent>
@@ -523,8 +552,9 @@ export function KanbanTaskDetailModal({
                 <Select
                   value={assignmentAssigneeId ?? UNASSIGNED}
                   onValueChange={(v) => setAssignmentAssigneeId(v === UNASSIGNED ? null : v)}
+                  disabled={readOnly}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger disabled={readOnly}>
                     <SelectValue placeholder="Unassigned" />
                   </SelectTrigger>
                   <SelectContent>
@@ -539,25 +569,31 @@ export function KanbanTaskDetailModal({
               </div>
             </div>
 
-            <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4 space-y-3">
-              <label className="flex items-center gap-2 text-sm font-medium text-gray-900 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={blocked}
-                  onChange={(e) => setBlocked(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                Blocked (impediment)
-              </label>
-              {blocked ? (
-                <Textarea
-                  value={blockedReason}
-                  onChange={(e) => setBlockedReason(e.target.value)}
-                  placeholder="What is blocking progress?"
-                  className="min-h-[72px] resize-y bg-white"
-                />
-              ) : null}
-            </div>
+            {!readOnly ? (
+              <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4 space-y-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-900 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={blocked}
+                    onChange={(e) => setBlocked(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  Blocked (impediment)
+                </label>
+                {blocked ? (
+                  <Textarea
+                    value={blockedReason}
+                    onChange={(e) => setBlockedReason(e.target.value)}
+                    placeholder="What is blocking progress?"
+                    className="min-h-[72px] resize-y bg-white"
+                  />
+                ) : null}
+              </div>
+            ) : blocked ? (
+              <div className="rounded-lg border border-gray-100 bg-gray-50/80 p-4">
+                <BlockedTaskChip reason={blockedReason} />
+              </div>
+            ) : null}
 
             <div className="rounded-lg border border-gray-100 bg-slate-50/90 p-4 space-y-2 text-xs text-gray-600">
               <p className="font-semibold text-gray-800 text-sm">Flow signals (observed)</p>
@@ -607,25 +643,27 @@ export function KanbanTaskDetailModal({
                   ))
                 )}
               </ul>
-              <div className="grid gap-2">
-                <Label htmlFor="task-comment">Add comment</Label>
-                <Textarea
-                  id="task-comment"
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  placeholder="Discuss progress, blockers, or handoff notes…"
-                  className="min-h-[80px] resize-y"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  className="w-fit"
-                  disabled={commentLoading || !commentText.trim()}
-                  onClick={() => void handleAddComment()}
-                >
-                  {commentLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Post comment'}
-                </Button>
-              </div>
+              {!readOnly ? (
+                <div className="grid gap-2">
+                  <Label htmlFor="task-comment">Add comment</Label>
+                  <Textarea
+                    id="task-comment"
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    placeholder="Discuss progress, blockers, or handoff notes…"
+                    className="min-h-[80px] resize-y"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-fit"
+                    disabled={commentLoading || !commentText.trim()}
+                    onClick={() => void handleAddComment()}
+                  >
+                    {commentLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Post comment'}
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}
@@ -634,9 +672,11 @@ export function KanbanTaskDetailModal({
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
-          <Button type="button" onClick={() => void handleSave()} disabled={saveLoading || loading || !detail}>
-            {saveLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save changes'}
-          </Button>
+          {!readOnly ? (
+            <Button type="button" onClick={() => void handleSave()} disabled={saveLoading || loading || !detail}>
+              {saveLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save changes'}
+            </Button>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>
