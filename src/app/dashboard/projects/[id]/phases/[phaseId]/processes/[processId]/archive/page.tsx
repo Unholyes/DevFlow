@@ -132,7 +132,7 @@ export default async function ProcessArchivePage({
   ) {
     tasks = []
   } else if (!archiveRes.error) {
-    tasks = (archiveRes.data ?? []) as ArchivedTaskRow[]
+    tasks = (archiveRes.data ?? []) as unknown as ArchivedTaskRow[]
   }
 
   return (
