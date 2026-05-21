@@ -55,6 +55,9 @@ const updateOrganizationSchema = z.object({
   name: z.string().min(1, "Organization name is required").max(100, "Organization name must be less than 100 characters"),
   theme_preset: z.enum(['default', 'blue', 'green', 'purple', 'dark', 'custom']).optional(),
   icon_url: z.string().url('Invalid logo URL').optional(),
+  primary_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
+  secondary_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
+  accent_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
   background_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
   surface_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
   sidebar_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
@@ -105,6 +108,9 @@ export async function updateOrganization(formData: FormData) {
       name: formData.get('name'),
       theme_preset: formData.get('theme_preset') || undefined,
       icon_url: formData.get('icon_url') || undefined,
+      primary_color: formData.get('primary_color') || undefined,
+      secondary_color: formData.get('secondary_color') || undefined,
+      accent_color: formData.get('accent_color') || undefined,
       background_color: formData.get('background_color') || undefined,
       surface_color: formData.get('surface_color') || undefined,
       sidebar_color: formData.get('sidebar_color') || undefined,
@@ -121,6 +127,9 @@ export async function updateOrganization(formData: FormData) {
 
     if (validatedData.theme_preset) updateData.theme_preset = validatedData.theme_preset
     if (validatedData.icon_url) updateData.icon_url = validatedData.icon_url
+    if (validatedData.primary_color) updateData.primary_color = validatedData.primary_color
+    if (validatedData.secondary_color) updateData.secondary_color = validatedData.secondary_color
+    if (validatedData.accent_color) updateData.accent_color = validatedData.accent_color
     if (validatedData.background_color) updateData.background_color = validatedData.background_color
     if (validatedData.surface_color) updateData.surface_color = validatedData.surface_color
     if (validatedData.sidebar_color) updateData.sidebar_color = validatedData.sidebar_color
@@ -140,6 +149,8 @@ export async function updateOrganization(formData: FormData) {
     }
 
     revalidatePath('/settings/organization')
+    revalidatePath('/settings')
+    revalidatePath('/dashboard')
     return { success: true }
   } catch (error) {
     console.error('Error updating organization:', error)

@@ -13,6 +13,8 @@ import {
   settingsFormLabel,
   settingsFormSectionTitle,
 } from '@/lib/theme/settings-surface-classes'
+import { applyPresetToFormValues, isBuiltInPreset } from '@/lib/theme/organization-theme-presets'
+import { resolveOrganizationTheme } from '@/lib/theme/resolve-organization-theme'
 
 const organizationSchema = z.object({
   name: z.string().min(1, "Organization name is required").max(100, "Organization name must be less than 100 characters"),
@@ -52,78 +54,34 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
     setValue,
   } = useForm<OrganizationFormData>({
     resolver: zodResolver(organizationSchema),
-    defaultValues: {
-      name: organization?.name || '',
-      theme_preset: organization?.theme_preset || 'default',
-      primary_color: organization?.primary_color || '#3B82F6',
-      secondary_color: organization?.secondary_color || '#64748B',
-      accent_color: organization?.accent_color || '#10B981',
-      background_color: organization?.background_color || '#F8FAFC',
-      surface_color: organization?.surface_color || '#FFFFFF',
-      sidebar_color: organization?.sidebar_color || '#FFFFFF',
-      border_color: organization?.border_color || '#E5E7EB',
-      text_color: organization?.text_color || '#0F172A',
-      muted_text_color: organization?.muted_text_color || '#475569',
-    },
+    defaultValues: (() => {
+      const resolved = resolveOrganizationTheme(organization)
+      const tokens = resolved?.tokens ?? {}
+      return {
+        name: organization?.name || '',
+        theme_preset: resolved?.preset || 'default',
+        primary_color: resolved?.colors.primary || '#2563EB',
+        secondary_color: resolved?.colors.secondary || '#64748B',
+        accent_color: resolved?.colors.accent || '#0EA5E9',
+        background_color: tokens.background || '#F8FAFC',
+        surface_color: tokens.surface || '#FFFFFF',
+        sidebar_color: tokens.sidebar || '#FFFFFF',
+        border_color: tokens.border || '#E5E7EB',
+        text_color: tokens.foreground || '#0F172A',
+        muted_text_color: tokens.mutedForeground || '#475569',
+      }
+    })(),
   })
 
   const selectedThemePreset = watch('theme_preset')
 
-  // Update layout tokens when preset changes (only for non-custom presets)
-  useEffect(() => {
-    if (selectedThemePreset !== 'custom') {
-      const presetTokens = {
-        default: {
-          background_color: '#F8FAFC',
-          surface_color: '#FFFFFF',
-          sidebar_color: '#FFFFFF',
-          border_color: '#E5E7EB',
-          text_color: '#0F172A',
-          muted_text_color: '#475569',
-        },
-        blue: {
-          background_color: '#F4F8FF',
-          surface_color: '#FFFFFF',
-          sidebar_color: '#FFFFFF',
-          border_color: '#E5E7EB',
-          text_color: '#0F172A',
-          muted_text_color: '#475569',
-        },
-        green: {
-          background_color: '#F4FBF8',
-          surface_color: '#FFFFFF',
-          sidebar_color: '#FFFFFF',
-          border_color: '#E5E7EB',
-          text_color: '#0F172A',
-          muted_text_color: '#475569',
-        },
-        purple: {
-          background_color: '#F7F5FF',
-          surface_color: '#FFFFFF',
-          sidebar_color: '#FFFFFF',
-          border_color: '#E5E7EB',
-          text_color: '#0F172A',
-          muted_text_color: '#475569',
-        },
-        dark: {
-          background_color: '#0B1220',
-          surface_color: '#0F172A',
-          sidebar_color: '#0F172A',
-          border_color: '#1F2A3D',
-          text_color: '#E5E7EB',
-          muted_text_color: '#9CA3AF',
-        },
-      } as const
-
-      const tokens = presetTokens[(selectedThemePreset || 'default') as keyof typeof presetTokens]
-      setValue('background_color', tokens.background_color, { shouldDirty: true })
-      setValue('surface_color', tokens.surface_color, { shouldDirty: true })
-      setValue('sidebar_color', tokens.sidebar_color, { shouldDirty: true })
-      setValue('border_color', tokens.border_color, { shouldDirty: true })
-      setValue('text_color', tokens.text_color, { shouldDirty: true })
-      setValue('muted_text_color', tokens.muted_text_color, { shouldDirty: true })
-    }
-  }, [selectedThemePreset, setValue])
+  const applyBuiltInPreset = (preset: Exclude<OrganizationFormData['theme_preset'], 'custom' | undefined>) => {
+    if (!isBuiltInPreset(preset)) return
+    const values = applyPresetToFormValues(preset)
+    ;(Object.entries(values) as [keyof OrganizationFormData, string][]).forEach(([key, value]) => {
+      setValue(key, value, { shouldDirty: true })
+    })
+  }
 
   const onSubmit = async (data: OrganizationFormData) => {
     setIsLoading(true)
@@ -309,7 +267,13 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
             name="theme_preset"
             control={control}
             render={({ field }) => (
-              <Select value={field.value} onValueChange={field.onChange}>
+              <Select
+                value={field.value}
+                onValueChange={(value) => {
+                  field.onChange(value)
+                  if (isBuiltInPreset(value)) applyBuiltInPreset(value)
+                }}
+              >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select theme preset" />
                 </SelectTrigger>
@@ -501,9 +465,35 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
           </div>
         )}
 
-        {selectedThemePreset !== 'custom' && (
-          <p className="text-sm text-muted-foreground">
-            Select &quot;Custom Colors&quot; to specify your own color scheme.
+        {isBuiltInPreset(selectedThemePreset) ? (
+          <div className="rounded-lg border border-border bg-muted/40 p-4 space-y-3">
+            <p className={settingsFormHint}>
+              This preset updates primary, accent, background, cards, sidebar, borders, and text. Save to apply
+              across the workspace.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {(
+                [
+                  ['Primary', watch('primary_color')],
+                  ['Accent', watch('accent_color')],
+                  ['Background', watch('background_color')],
+                  ['Cards', watch('surface_color')],
+                ] as const
+              ).map(([label, color]) => (
+                <div key={label} className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span
+                    className="h-6 w-6 rounded border border-border shrink-0"
+                    style={{ backgroundColor: color }}
+                    aria-hidden
+                  />
+                  {label}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className={settingsFormHint}>
+            Custom mode lets you tune brand colors and every surface. Presets apply a coordinated palette in one step.
           </p>
         )}
       </div>

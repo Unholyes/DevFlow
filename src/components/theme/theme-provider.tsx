@@ -3,15 +3,16 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import {
   blendHex,
-  hexToRgb,
   isDarkThemeSurface,
   isValidHexColor,
   readableForegroundForBackground,
   readableMutedForBackground,
   readableOnPrimary,
 } from '@/lib/theme/resolve-theme-tokens'
+import { resolveOrganizationTheme } from '@/lib/theme/resolve-organization-theme'
+import type { OrganizationThemeRow } from '@/lib/theme/load-organization-theme'
 
-interface ThemeColors {
+export interface ThemeColors {
   primary: string
   secondary: string
   accent: string
@@ -33,9 +34,9 @@ export interface OrganizationTheme {
 const defaultTheme: OrganizationTheme = {
   preset: 'default',
   colors: {
-    primary: '#3B82F6',
+    primary: '#2563EB',
     secondary: '#64748B',
-    accent: '#10B981',
+    accent: '#0EA5E9',
   },
 }
 
@@ -50,109 +51,63 @@ interface ThemeProviderProps {
   organizationTheme?: Partial<OrganizationTheme>
 }
 
+function mergeTheme(input?: Partial<OrganizationTheme>): OrganizationTheme {
+  if (!input) return defaultTheme
+  return {
+    preset: input.preset || 'default',
+    colors: {
+      primary: input.colors?.primary || defaultTheme.colors.primary,
+      secondary: input.colors?.secondary || defaultTheme.colors.secondary,
+      accent: input.colors?.accent || defaultTheme.colors.accent,
+    },
+    tokens: input.tokens,
+  }
+}
+
 export function ThemeProvider({ children, organizationTheme }: ThemeProviderProps) {
   const [theme, setTheme] = useState<OrganizationTheme>(defaultTheme)
 
   useEffect(() => {
-    if (organizationTheme) {
-      const mergedTheme = {
-        preset: organizationTheme.preset || 'default',
-        colors: {
-          primary: organizationTheme.colors?.primary || defaultTheme.colors.primary,
-          secondary: organizationTheme.colors?.secondary || defaultTheme.colors.secondary,
-          accent: organizationTheme.colors?.accent || defaultTheme.colors.accent,
-        },
-        tokens: organizationTheme.tokens ?? undefined,
-      }
-      setTheme(mergedTheme)
-    }
+    setTheme(mergeTheme(organizationTheme))
   }, [organizationTheme])
 
   useEffect(() => {
     const root = document.documentElement
-    root.style.setProperty('--theme-primary', theme.colors.primary)
-    root.style.setProperty('--theme-secondary', theme.colors.secondary)
-    root.style.setProperty('--theme-accent', theme.colors.accent)
+    const { colors } = theme
+    const tokens = theme.tokens ?? {}
 
-    root.style.setProperty('--tw-ring-color', theme.colors.primary)
-    root.style.setProperty('--tw-primary', theme.colors.primary)
-    root.style.setProperty('--tw-primary-foreground', readableOnPrimary(theme.colors.primary))
+    root.style.setProperty('--theme-primary', colors.primary)
+    root.style.setProperty('--theme-secondary', colors.secondary)
+    root.style.setProperty('--theme-accent', colors.accent)
 
-    const presetBase =
-      theme.preset === 'dark'
-        ? {
-            background: '#0B1220',
-            surface: '#0F172A',
-            sidebar: '#0F172A',
-            border: '#1F2A3D',
-            foreground: '#E5E7EB',
-            mutedForeground: '#9CA3AF',
-          }
-        : theme.preset === 'purple'
-          ? {
-              background: '#F7F5FF',
-              surface: '#FFFFFF',
-              sidebar: '#FFFFFF',
-              border: '#E5E7EB',
-              foreground: '#0F172A',
-              mutedForeground: '#475569',
-            }
-          : theme.preset === 'green'
-            ? {
-                background: '#F4FBF8',
-                surface: '#FFFFFF',
-                sidebar: '#FFFFFF',
-                border: '#E5E7EB',
-                foreground: '#0F172A',
-                mutedForeground: '#475569',
-              }
-            : theme.preset === 'blue'
-              ? {
-                  background: '#F4F8FF',
-                  surface: '#FFFFFF',
-                  sidebar: '#FFFFFF',
-                  border: '#E5E7EB',
-                  foreground: '#0F172A',
-                  mutedForeground: '#475569',
-                }
-              : {
-                  background: '#F8FAFC',
-                  surface: '#FFFFFF',
-                  sidebar: '#FFFFFF',
-                  border: '#E5E7EB',
-                  foreground: '#0F172A',
-                  mutedForeground: '#475569',
-                }
+    root.style.setProperty('--tw-ring-color', colors.primary)
+    root.style.setProperty('--tw-primary', colors.primary)
+    root.style.setProperty('--tw-primary-foreground', readableOnPrimary(colors.primary))
 
-    const customTokens = theme.preset === 'custom' ? theme.tokens : undefined
-    const background = isValidHexColor(customTokens?.background)
-      ? customTokens.background
-      : presetBase.background
-    const surface = isValidHexColor(customTokens?.surface) ? customTokens.surface : presetBase.surface
-    const sidebar = isValidHexColor(customTokens?.sidebar) ? customTokens.sidebar : presetBase.sidebar
-    const border = isValidHexColor(customTokens?.border) ? customTokens.border : presetBase.border
+    const background = isValidHexColor(tokens.background) ? tokens.background : '#F8FAFC'
+    const surface = isValidHexColor(tokens.surface) ? tokens.surface : '#FFFFFF'
+    const sidebar = isValidHexColor(tokens.sidebar) ? tokens.sidebar : surface
+    const border = isValidHexColor(tokens.border) ? tokens.border : '#E5E7EB'
 
-    const textReference = surface
     const foreground = readableForegroundForBackground(
-      textReference,
-      isValidHexColor(customTokens?.foreground) ? customTokens.foreground : presetBase.foreground,
+      surface,
+      isValidHexColor(tokens.foreground) ? tokens.foreground : undefined,
     )
     const mutedForeground = readableMutedForBackground(
-      textReference,
-      isValidHexColor(customTokens?.mutedForeground)
-        ? customTokens.mutedForeground
-        : presetBase.mutedForeground,
+      surface,
+      isValidHexColor(tokens.mutedForeground) ? tokens.mutedForeground : undefined,
     )
 
     const tintedBackground =
       theme.preset !== 'dark' && theme.preset !== 'custom'
-        ? blendHex(background, theme.colors.primary, 0.03)
+        ? blendHex(background, colors.primary, 0.04)
         : background
 
     const mutedSurface = blendHex(surface, foreground, 0.06)
     const secondarySurface = blendHex(surface, foreground, 0.04)
-    const primaryForeground = readableOnPrimary(theme.colors.primary)
-    const accentForeground = readableOnPrimary(theme.colors.accent)
+    const accentSurface = blendHex(surface, colors.accent, 0.14)
+    const primaryForeground = readableOnPrimary(colors.primary)
+    const accentForeground = readableForegroundForBackground(accentSurface)
 
     root.style.setProperty('--theme-background', tintedBackground)
     root.style.setProperty('--theme-surface', surface)
@@ -173,19 +128,11 @@ export function ThemeProvider({ children, organizationTheme }: ThemeProviderProp
     root.style.setProperty('--muted-foreground', mutedForeground)
     root.style.setProperty('--secondary', secondarySurface)
     root.style.setProperty('--secondary-foreground', foreground)
-    root.style.setProperty('--accent', blendHex(surface, theme.colors.accent, 0.12))
+    root.style.setProperty('--accent', accentSurface)
     root.style.setProperty('--accent-foreground', accentForeground)
-    root.style.setProperty('--primary', theme.colors.primary)
+    root.style.setProperty('--primary', colors.primary)
     root.style.setProperty('--primary-foreground', primaryForeground)
-    root.style.setProperty('--ring', theme.colors.primary)
-
-    const primaryRgb = hexToRgb(theme.colors.primary)
-    const secondaryRgb = hexToRgb(theme.colors.secondary)
-    const accentRgb = hexToRgb(theme.colors.accent)
-    if (primaryRgb) root.style.setProperty('--theme-primary-rgb', `${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}`)
-    if (secondaryRgb)
-      root.style.setProperty('--theme-secondary-rgb', `${secondaryRgb.r}, ${secondaryRgb.g}, ${secondaryRgb.b}`)
-    if (accentRgb) root.style.setProperty('--theme-accent-rgb', `${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}`)
+    root.style.setProperty('--ring', colors.primary)
 
     root.classList.remove('theme-default', 'theme-blue', 'theme-green', 'theme-purple', 'theme-dark', 'theme-custom')
     root.classList.add(`theme-${theme.preset}`)
@@ -193,4 +140,20 @@ export function ThemeProvider({ children, organizationTheme }: ThemeProviderProp
   }, [theme])
 
   return <ThemeContext.Provider value={theme}>{children}</ThemeContext.Provider>
+}
+
+/** For client previews in organization settings form */
+export function themeFromFormValues(values: {
+  theme_preset?: string
+  primary_color?: string
+  secondary_color?: string
+  accent_color?: string
+  background_color?: string
+  surface_color?: string
+  sidebar_color?: string
+  border_color?: string
+  text_color?: string
+  muted_text_color?: string
+}): OrganizationTheme {
+  return resolveOrganizationTheme(values as OrganizationThemeRow) ?? defaultTheme
 }

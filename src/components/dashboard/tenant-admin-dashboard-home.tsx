@@ -100,13 +100,13 @@ export function TenantAdminDashboardHome({ stats }: TenantAdminDashboardHomeProp
             <CardDescription>Common workspace management actions</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button asChild className="w-full bg-blue-600 hover:bg-blue-700 text-white">
+            <Button asChild className="w-full">
               <Link href="/dashboard/accounts">Manage accounts</Link>
             </Button>
-            <Button asChild variant="outline" className="w-full border-gray-200">
+            <Button asChild variant="outline" className="w-full">
               <Link href="/dashboard/projects">View projects</Link>
             </Button>
-            <Button asChild variant="outline" className="w-full border-gray-200">
+            <Button asChild variant="outline" className="w-full">
               <Link href="/dashboard/reports">Reports &amp; analytics</Link>
             </Button>
           </CardContent>
