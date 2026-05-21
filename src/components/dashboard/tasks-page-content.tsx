@@ -476,13 +476,6 @@ export function TasksPageContent() {
                     </div>
                   </CardContent>
                 </Card>
-
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="border-gray-200 flex-1" type="button" onClick={() => void copyTaskLink()}>
-                    <Link2 className="h-3.5 w-3.5 mr-1.5" />
-                    Copy link
-                  </Button>
-                </div>
               </div>
             </>
           ) : selected && !selectedInView ? (
