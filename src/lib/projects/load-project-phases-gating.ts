@@ -81,14 +81,6 @@ export async function loadProjectPhasesGatingContext(
     process_id: string | null
   }[]
 
-  let phaseProcesses: { id: string; phase_id: string }[] = []
-  {
-    const attempt = await supabase.from('phase_processes').select('id,phase_id').in('phase_id', phaseIds)
-    if (attempt.error?.code !== 'PGRST204') {
-      phaseProcesses = (attempt.data as { id: string; phase_id: string }[]) ?? []
-    }
-  }
-
   const snapshots: PhaseGatingSnapshot[] = phases.map((p) => ({
     id: p.id,
     status: p.status as PhaseGatingSnapshot['status'],
@@ -96,7 +88,6 @@ export async function loadProjectPhasesGatingContext(
     progress: computePhaseProgressPercent({
       phaseId: p.id,
       phaseStatus: p.status,
-      processes: phaseProcesses,
       tasks: progressTasks,
       stageIdToPhaseId,
       doneStageIds,

@@ -144,8 +144,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     }
   }
 
-  // Per-phase progress for timeline cards: % of processes fully complete (see compute-phase-progress).
-  // Project header stats below still use task totals across all phases.
+  // Per-phase and project progress: % of tasks done (completed_at or is_done stage).
   // Done semantics match the phase page: completed_at OR stage marked is_done.
   const phaseIdsForProgress = (phases ?? []).map((phase) => phase.id)
   const { data: workflowStagesForProgress } =
@@ -276,7 +275,6 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       progress: computePhaseProgressPercent({
         phaseId: p.id,
         phaseStatus: p.status,
-        processes: phaseProcesses ?? [],
         tasks: progressTasks,
         stageIdToPhaseId,
         doneStageIds,
@@ -352,9 +350,8 @@ export default async function ProjectPage({ params }: { params: { id: string } }
                 phaseGatingSnapshots,
                 !!project.phase_gating_enabled
               )
-              const isCompleted = project.phase_gating_enabled
-                ? isPhaseCompleteForGating(phaseGatingSnapshots[index]!)
-                : phase.dbStatus === 'completed'
+              // Timeline status must match progress % (see isPhaseCompleteForGating).
+              const isCompleted = isPhaseCompleteForGating(phaseGatingSnapshots[index]!)
               const isInProgress = !locked && !isCompleted
               const statusLabel = locked ? 'Locked' : isCompleted ? 'Completed' : 'Active'
               const progress = locked ? 0 : phase.progress

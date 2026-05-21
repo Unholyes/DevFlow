@@ -7,7 +7,7 @@ export type PhaseGatingSnapshot = {
 
 /**
  * A prior phase is satisfied for waterfall gating when it was gate-approved
- * and all configured processes (timeline %) are complete.
+ * and all phase tasks are done (timeline % is 100).
  */
 export function isPhaseCompleteForGating(phase: PhaseGatingSnapshot): boolean {
   return phase.status === 'completed' && phase.progress >= 100
