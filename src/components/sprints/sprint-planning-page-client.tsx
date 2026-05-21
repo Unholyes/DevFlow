@@ -50,6 +50,8 @@ export function SprintPlanningPageClient(props: {
   canCreateSprintDraft?: boolean
   /** `pm.sprints.manage` — set dates, start sprints, approve drafts. */
   canManageSprints?: boolean
+  draftSprint?: { id: string; name: string; start_date?: string | null; end_date?: string | null } | null
+  draftTasks?: Task[]
 }) {
   const canCreateSprintDraft = props.canCreateSprintDraft === true
   const canManageSprints = props.canManageSprints === true
@@ -71,13 +73,27 @@ export function SprintPlanningPageClient(props: {
   const [createStoryPoints, setCreateStoryPoints] = useState<string>('0')
   const [createLoading, setCreateLoading] = useState(false)
 
-  const [sprintName, setSprintName] = useState('Sprint 1')
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
+  const [sprintName, setSprintName] = useState(props.draftSprint?.name || 'Sprint 1')
+  const [startDate, setStartDate] = useState(props.draftSprint?.start_date || '')
+  const [endDate, setEndDate] = useState(props.draftSprint?.end_date || '')
   const [formError, setFormError] = useState<string | null>(null)
-  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set())
-  const [backlogTasks, setBacklogTasks] = useState<Task[]>(props.backlogTasks)
-  const [sprintTasks, setSprintTasks] = useState<Task[]>([])
+  
+  // Combine backlogTasks and draftTasks if draftTasks exist, but only initialize selectedTasks with draftTasks ids.
+  const allInitialTasks = useMemo(() => {
+    const combined = [...props.backlogTasks, ...(props.draftTasks || [])]
+    return uniqueById(combined)
+  }, [props.backlogTasks, props.draftTasks])
+
+  const [selectedTasks, setSelectedTasks] = useState<Set<string>>(() => {
+    if (props.draftTasks && props.draftTasks.length > 0) {
+      return new Set(props.draftTasks.map(t => t.id))
+    }
+    return new Set()
+  })
+  
+  // The UI displays all tasks in backlogTasks except those in sprintTasks
+  const [backlogTasks, setBacklogTasks] = useState<Task[]>(allInitialTasks)
+  const [sprintTasks, setSprintTasks] = useState<Task[]>(props.draftTasks || [])
   const [loading, setLoading] = useState(false)
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -96,7 +112,7 @@ export function SprintPlanningPageClient(props: {
     [backlogTasks, selectedTasks]
   )
   const selectedStoryPoints = selectedTaskObjects.reduce((sum, t) => sum + (t.story_points || 0), 0)
-  const remainingBacklog = backlogTasks
+  const remainingBacklog = backlogTasks.filter((t) => !sprintTasks.find(st => st.id === t.id))
   const capacity = Math.max(1, capacityPoints || defaultCapacity)
   const sprintBacklogStoryPoints = sprintTasks.reduce((sum, t) => sum + (t.story_points || 0), 0)
   const capacityStatus =
@@ -201,8 +217,6 @@ export function SprintPlanningPageClient(props: {
   const handleAddToSprint = () => {
     const tasksToAdd = backlogTasks.filter((t) => selectedTasks.has(t.id))
     setSprintTasks((prev) => uniqueById([...prev, ...tasksToAdd]))
-    // Remove the added tasks from backlog (even if there were duplicates).
-    setBacklogTasks((prev) => prev.filter((t) => !selectedTasks.has(t.id)))
     setSelectedTasks(new Set())
   }
 
@@ -272,20 +286,12 @@ export function SprintPlanningPageClient(props: {
   }
 
   const handleRemoveFromSprint = (taskId: string) => {
-    // Move task back to backlog (no duplicates).
-    setSprintTasks((prevSprint) => {
-      const taskToMove = prevSprint.find((t) => t.id === taskId)
-      if (!taskToMove) return prevSprint
-
-      setBacklogTasks((prevBacklog) => uniqueById([...prevBacklog, taskToMove]))
-      setSelectedTasks((prevSelected) => {
-        if (!prevSelected.has(taskId)) return prevSelected
-        const next = new Set(prevSelected)
-        next.delete(taskId)
-        return next
-      })
-
-      return prevSprint.filter((t) => t.id !== taskId)
+    setSprintTasks((prevSprint) => prevSprint.filter((t) => t.id !== taskId))
+    setSelectedTasks((prevSelected) => {
+      if (!prevSelected.has(taskId)) return prevSelected
+      const next = new Set(prevSelected)
+      next.delete(taskId)
+      return next
     })
   }
 
@@ -338,24 +344,58 @@ export function SprintPlanningPageClient(props: {
 
     setLoading(true)
     try {
-      const createRes = await fetch('/api/sprints', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: props.projectId,
-          phase_id: props.phaseId,
-          process_id: props.processId,
-          name: sprintName.trim(),
-          story_points_total: sprintTasks.reduce((sum, t) => sum + (t.story_points || 0), 0),
-          status: 'draft',
-        }),
-      })
+      let sprintId = props.draftSprint?.id
 
-      const created = await createRes.json()
-      if (!createRes.ok) throw new Error(created?.error || 'Failed to save sprint draft')
+      if (sprintId) {
+        const updateRes = await fetch('/api/sprints', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: sprintId,
+            name: sprintName.trim(),
+            start_date: startDate || undefined,
+            end_date: endDate || undefined,
+            story_points_total: sprintTasks.reduce((sum, t) => sum + (t.story_points || 0), 0),
+          }),
+        })
+        const updated = await updateRes.json()
+        if (!updateRes.ok) throw new Error(updated?.error || 'Failed to update sprint draft')
+      } else {
+        const createRes = await fetch('/api/sprints', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            project_id: props.projectId,
+            phase_id: props.phaseId,
+            process_id: props.processId,
+            name: sprintName.trim(),
+            start_date: startDate || undefined,
+            end_date: endDate || undefined,
+            story_points_total: sprintTasks.reduce((sum, t) => sum + (t.story_points || 0), 0),
+            status: 'draft',
+          }),
+        })
 
-      const sprintId = created?.data?.id as string | undefined
+        const created = await createRes.json()
+        if (!createRes.ok) throw new Error(created?.error || 'Failed to save sprint draft')
+        sprintId = created?.data?.id
+      }
+
       if (!sprintId) throw new Error('Failed to save sprint draft (missing id)')
+
+      // Also unassign tasks that were removed from the draft
+      if (props.draftTasks) {
+        const removedTasks = props.draftTasks.filter(dt => !sprintTasks.find(st => st.id === dt.id))
+        if (removedTasks.length > 0) {
+          await Promise.all(
+            removedTasks.map(t => fetch('/api/tasks', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: t.id, sprint_id: null }),
+            }))
+          )
+        }
+      }
 
       await assignTasksToSprint(sprintId, false)
 
@@ -427,7 +467,6 @@ export function SprintPlanningPageClient(props: {
 
       await assignTasksToSprint(sprintId, true)
 
-      // After starting a sprint, drop users into the Scrum board for that sprint.
       if (props.processId) {
         router.push(
           `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/board?sprintId=${encodeURIComponent(
@@ -445,6 +484,8 @@ export function SprintPlanningPageClient(props: {
       setLoading(false)
     }
   }
+
+
 
   if (loading) {
     return <div className="flex justify-center py-12">Loading...</div>
@@ -488,7 +529,7 @@ export function SprintPlanningPageClient(props: {
           ) : null}
           {canStartSprint ? (
             <Button
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-blue-600 hover:bg-blue-700 text-white"
               onClick={handleStartSprint}
               disabled={
                 !sprintName || !startDate || !endDate || sprintTasks.length === 0 || sprintBacklogStoryPoints > capacity

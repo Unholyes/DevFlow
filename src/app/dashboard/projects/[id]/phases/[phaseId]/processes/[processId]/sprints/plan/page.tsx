@@ -131,8 +131,10 @@ async function ensureSprintStartStageId(supabase: any, orgId: string, phaseId: s
 
 export default async function ProcessSprintPlanningPage({
   params,
+  searchParams,
 }: {
   params: { id: string; phaseId: string; processId: string }
+  searchParams: { draftId?: string }
 }) {
   const tenantSlug = getTenantSlug()
   const supabase = createClient()
@@ -212,6 +214,33 @@ export default async function ProcessSprintPlanningPage({
     )
   }
 
+  let draftSprint = null
+  let draftTasks: any[] = []
+
+  if (searchParams.draftId) {
+    const { data: dSprint } = await supabase
+      .from('sprints')
+      .select('id,name,start_date,end_date')
+      .eq('id', searchParams.draftId)
+      .eq('project_id', project.id)
+      .eq('organization_id', orgId)
+      .maybeSingle()
+    
+    if (dSprint) {
+      draftSprint = dSprint
+      const { data: dTasks } = await supabase
+        .from('tasks')
+        .select('id,title,description,priority,story_points,assignee_id,position')
+        .eq('project_id', project.id)
+        .eq('organization_id', orgId)
+        .eq('process_id', process.id)
+        .eq('sprint_id', dSprint.id)
+        .order('position', { ascending: true })
+      
+      draftTasks = dTasks ?? []
+    }
+  }
+
   return (
     <SprintPlanningPageClient
       projectId={project.id}
@@ -223,6 +252,8 @@ export default async function ProcessSprintPlanningPage({
       backlogTasks={(tasks ?? []) as any}
       canCreateSprintDraft={canCreateSprintDraft}
       canManageSprints={canManageSprints}
+      draftSprint={draftSprint}
+      draftTasks={draftTasks}
     />
   )
 }

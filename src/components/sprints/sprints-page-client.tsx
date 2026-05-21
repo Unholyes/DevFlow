@@ -31,17 +31,30 @@ function UpcomingSprintCard({
   sprintStartStageId,
   onRefresh,
   canManageSprints,
+  projectId,
+  phaseId,
+  processId,
+  planHref,
 }: {
   sprint: SprintWithStats
   hasActiveSprint: boolean
   sprintStartStageId?: string
   onRefresh: () => void
   canManageSprints?: boolean
+  projectId: string
+  phaseId: string
+  processId?: string
+  planHref: string
 }) {
-  const [startDate, setStartDate] = useState('')
-  const [endDate, setEndDate] = useState('')
-  const [busy, setBusy] = useState<'approve' | 'reject' | 'today' | null>(null)
+  const [busy, setBusy] = useState<'reject' | 'today' | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const getLocalDateString = (d: Date = new Date()) => {
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
 
   const handleStartToday = async () => {
     if (hasActiveSprint) return
@@ -50,8 +63,8 @@ function UpcomingSprintCard({
     const today = new Date()
     const end = new Date()
     end.setDate(today.getDate() + 14) // default 14 days
-    const startStr = today.toISOString().split('T')[0]
-    const endStr = end.toISOString().split('T')[0]
+    const startStr = getLocalDateString(today)
+    const endStr = getLocalDateString(end)
 
     try {
       const res = await fetch('/api/sprints', {
@@ -76,35 +89,7 @@ function UpcomingSprintCard({
     }
   }
 
-  const handleApprove = async () => {
-    setError(null)
-    if (!startDate || !endDate) {
-      setError('Start and end dates are required to start')
-      return
-    }
-    setBusy('approve')
-    try {
-      const res = await fetch('/api/sprints', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: sprint.id,
-          action: sprint.status === 'draft' ? 'approve' : undefined,
-          status: 'active',
-          start_date: startDate,
-          end_date: endDate,
-          ...(sprintStartStageId ? { sprint_start_stage_id: sprintStartStageId } : {}),
-        }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json?.error || 'Failed to start sprint')
-      onRefresh()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to start sprint')
-    } finally {
-      setBusy(null)
-    }
-  }
+
 
   const handleReject = async () => {
     if (!confirm(`Reject "${sprint.name}"? Tasks will return to the backlog.`)) return
@@ -134,22 +119,25 @@ function UpcomingSprintCard({
           <p className="mt-1 text-xs text-gray-600">
             {sprint.status === 'draft' ? 'Draft' : 'Planned'} · {sprint.tasks_total} tasks · {sprint.story_points_total} story points
           </p>
+          {sprint.start_date && sprint.end_date && (
+            <p className="mt-1 text-xs text-gray-500 font-medium">
+              Suggested Dates: {sprint.start_date} to {sprint.end_date}
+            </p>
+          )}
         </div>
-        <Badge className="bg-gray-200 text-gray-800">Upcoming</Badge>
+        <div className="flex items-center gap-3">
+          <Badge className="bg-gray-200 text-gray-800">Upcoming</Badge>
+          <Link
+            href={`${planHref}?draftId=${sprint.id}`}
+            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+          >
+            View Details
+          </Link>
+        </div>
       </div>
-      
+
       {canManageSprints && (
         <>
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Custom Start date</label>
-              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={hasActiveSprint} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Custom End date</label>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} disabled={hasActiveSprint} />
-            </div>
-          </div>
           {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
           <div className="mt-4 flex flex-wrap gap-2 items-center">
             <Button
@@ -160,15 +148,6 @@ function UpcomingSprintCard({
               title={hasActiveSprint ? "Cannot start while there is an active sprint" : "Start today for 2 weeks"}
             >
               {busy === 'today' ? 'Starting...' : 'Start Today'}
-            </Button>
-            <Button
-              size="sm"
-              className="bg-green-600 hover:bg-green-700 disabled:opacity-50"
-              onClick={handleApprove}
-              disabled={busy !== null || hasActiveSprint}
-              title={hasActiveSprint ? "Cannot start while there is an active sprint" : "Start with custom dates"}
-            >
-              {busy === 'approve' ? 'Starting...' : 'Start (Custom Dates)'}
             </Button>
             <Button size="sm" variant="outline" onClick={handleReject} disabled={busy !== null}>
               {busy === 'reject' ? 'Rejecting...' : 'Reject / Delete'}
@@ -227,12 +206,19 @@ export function SprintsPageClient(props: {
   sprintStartStageId?: string
 }) {
   const router = useRouter()
-  const todayStr = new Date().toISOString().split('T')[0]
-  
+  const getLocalDateString = (d: Date = new Date()) => {
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
+  const todayStr = getLocalDateString()
+
   const activeSprints = props.sprints.filter(
     (s) => s.status === 'active' && s.start_date && s.start_date <= todayStr
   )
-  
+
   const upcomingSprints = props.sprints.filter(
     (s) =>
       s.status === 'draft' ||
@@ -281,56 +267,56 @@ export function SprintsPageClient(props: {
 
       {!embedded ? (
         <>
-      {props.processName || props.selectedProcessName ? (
-        <Card className="border-blue-200 bg-blue-50 shadow-sm">
-          <CardContent className="py-4">
-            <p className="text-xs uppercase tracking-wide text-blue-700">Active process</p>
-            <p className="mt-1 text-sm font-semibold text-blue-900">
-              {props.processName ?? props.selectedProcessName}{' '}
-              {props.processMethod || props.selectedMethod ? `(${props.processMethod ?? props.selectedMethod})` : ''}
-            </p>
-          </CardContent>
-        </Card>
-      ) : null}
+          {props.processName || props.selectedProcessName ? (
+            <Card className="border-blue-200 bg-blue-50 shadow-sm">
+              <CardContent className="py-4">
+                <p className="text-xs uppercase tracking-wide text-blue-700">Active process</p>
+                <p className="mt-1 text-sm font-semibold text-blue-900">
+                  {props.processName ?? props.selectedProcessName}{' '}
+                  {props.processMethod || props.selectedMethod ? `(${props.processMethod ?? props.selectedMethod})` : ''}
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="border-gray-200 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Total Sprints</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-900">{props.sprints.length}</div>
-          </CardContent>
-        </Card>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card className="border-gray-200 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-gray-600">Total Sprints</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-gray-900">{props.sprints.length}</div>
+              </CardContent>
+            </Card>
 
-        <Card className="border-gray-200 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Active</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{activeSprints.length}</div>
-          </CardContent>
-        </Card>
+            <Card className="border-gray-200 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-gray-600">Active</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600">{activeSprints.length}</div>
+              </CardContent>
+            </Card>
 
-        <Card className="border-gray-200 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Completed</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{completedSprints.length}</div>
-          </CardContent>
-        </Card>
+            <Card className="border-gray-200 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-gray-600">Completed</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">{completedSprints.length}</div>
+              </CardContent>
+            </Card>
 
-        <Card className="border-gray-200 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Avg Velocity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-900">{averageVelocity}</div>
-            <div className="text-xs text-gray-500 mt-1">points/sprint</div>
-          </CardContent>
-        </Card>
-      </div>
+            <Card className="border-gray-200 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-gray-600">Avg Velocity</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-gray-900">{averageVelocity}</div>
+                <div className="text-xs text-gray-500 mt-1">points/sprint</div>
+              </CardContent>
+            </Card>
+          </div>
         </>
       ) : null}
 
@@ -393,12 +379,16 @@ export function SprintsPageClient(props: {
         </CardContent>
       </Card>
 
-      {activeSprints.length > 0 && (
-        <Card className="border-gray-200 shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg">Active Sprints</CardTitle>
-          </CardHeader>
-          <CardContent>
+      <Card className="border-gray-200 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg">Active Sprints</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {activeSprints.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <p>No active sprints yet</p>
+            </div>
+          ) : (
             <div className="space-y-4">
               {activeSprints.map((sprint) => (
                 <div key={sprint.id} className="p-4 bg-blue-50 rounded-lg border border-blue-200">
@@ -424,8 +414,8 @@ export function SprintsPageClient(props: {
                         href={
                           props.processId
                             ? `${processBoardPath(props.projectId, props.phaseId, props.processId)}?sprintId=${encodeURIComponent(
-                                sprint.id
-                              )}`
+                              sprint.id
+                            )}`
                             : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${sprint.id}`
                         }
                         className="text-sm text-blue-600 hover:text-blue-700 font-medium"
@@ -457,9 +447,9 @@ export function SprintsPageClient(props: {
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="border-gray-200 shadow-sm">
         <CardHeader>
@@ -480,6 +470,10 @@ export function SprintsPageClient(props: {
                   sprintStartStageId={props.sprintStartStageId}
                   onRefresh={() => router.refresh()}
                   canManageSprints={props.canManageSprints}
+                  projectId={props.projectId}
+                  phaseId={props.phaseId}
+                  processId={props.processId}
+                  planHref={planHref}
                 />
               ))}
             </div>
@@ -524,11 +518,11 @@ export function SprintsPageClient(props: {
                     href={
                       props.processId
                         ? processSprintDetailPath(
-                            props.projectId,
-                            props.phaseId,
-                            props.processId,
-                            sprint.id
-                          )
+                          props.projectId,
+                          props.phaseId,
+                          props.processId,
+                          sprint.id
+                        )
                         : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${sprint.id}`
                     }
                     className="text-sm text-blue-600 hover:text-blue-700 font-medium"

@@ -308,12 +308,15 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ success: true })
     }
 
-    if (action === 'approve' || (updates.status === 'active' && (existing as { status?: string }).status === 'draft')) {
+    const existingStatus = String((existing as { status?: string }).status ?? '')
+    const isStartingSprint = updates.status === 'active' && ['draft', 'planned', 'active'].includes(existingStatus)
+
+    if (action === 'approve' || isStartingSprint) {
       if (!canManage) {
-        return NextResponse.json({ error: 'You do not have permission to approve sprints' }, { status: 403 })
+        return NextResponse.json({ error: 'You do not have permission to approve or start sprints' }, { status: 403 })
       }
 
-      if (String((existing as { status?: string }).status ?? '') !== 'draft') {
+      if (action === 'approve' && existingStatus !== 'draft') {
         return NextResponse.json({ error: 'Only draft sprints can be approved' }, { status: 400 })
       }
 
