@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { notifyRoleAdjusted } from '@/lib/notifications/create-notifications'
 
 type SystemRole = 'Owner' | 'Admin' | 'Member'
 
@@ -59,7 +60,7 @@ export async function POST(request: Request, context: { params: Promise<{ organi
 
   const { data: targetMember, error: targetError } = await admin
     .from('organization_members')
-    .select('id,system_role')
+    .select('id,system_role,user_id')
     .eq('id', memberId)
     .eq('organization_id', organizationId)
     .maybeSingle()
@@ -92,6 +93,16 @@ export async function POST(request: Request, context: { params: Promise<{ organi
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
   if (!updated?.length) return NextResponse.json({ error: 'Update did not apply.' }, { status: 500 })
+
+  if (targetMember?.user_id) {
+    void notifyRoleAdjusted({
+      supabase,
+      organizationId,
+      actorId: user.id,
+      recipientId: targetMember.user_id,
+      newRole: nextRole,
+    })
+  }
 
   return NextResponse.json({ ok: true })
 }

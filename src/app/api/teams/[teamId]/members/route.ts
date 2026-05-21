@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { notifyTeamAdded } from '@/lib/notifications/create-notifications'
 
 function jsonError(status: number, code: string, error: string) {
   return NextResponse.json({ ok: false, code, error }, { status })
@@ -157,6 +158,17 @@ export async function POST(request: Request, context: { params: Promise<{ teamId
     const isDup = (insertError as any)?.code === '23505'
     return jsonError(isDup ? 409 : 400, isDup ? 'TEAM_MEMBER_ALREADY_EXISTS' : 'TEAM_MEMBER_ADD_FAILED', isDup ? 'One or more users are already on this team.' : msg)
   }
+
+  const { data: team } = await admin.from('teams').select('name').eq('id', teamId).maybeSingle()
+  const teamName = team?.name || 'Team'
+
+  void notifyTeamAdded({
+    supabase,
+    organizationId: teamOrg.organizationId,
+    actorId: user.id,
+    teamName,
+    memberIds: filtered,
+  })
 
   return NextResponse.json({ ok: true })
 }

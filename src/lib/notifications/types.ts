@@ -1,4 +1,17 @@
-export type NotificationType = 'task_assigned' | 'task_comment' | 'phase_completed'
+export type NotificationType =
+  | 'task_assigned'
+  | 'task_comment'
+  | 'phase_completed'
+  | 'project_completed'
+  | 'process_completed'
+  | 'task_created'
+  | 'task_deleted'
+  | 'task_edited'
+  | 'team_added'
+  | 'role_adjusted'
+  | 'assigned_project'
+  | 'assigned_phase'
+  | 'assigned_process'
 
 export type UserNotificationRow = {
   id: string

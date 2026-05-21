@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { userCanManageProjectMembers } from '@/lib/permissions/project-members-permissions'
 import { loadProjectTeamRoles } from '@/lib/permissions/team-roles'
+import { notifyProjectAssignmentAndRoleAdjustments } from '@/lib/notifications/create-notifications'
 import {
   PROJECT_ACCESS_LEVELS,
   PROJECT_FUNCTIONAL_ROLES,
@@ -318,6 +319,30 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
   }
 
+  // Fetch project name and old members before upserting
+  const { data: projectRow } = await admin
+    .from('projects')
+    .select('name')
+    .eq('id', ctx.projectId)
+    .maybeSingle()
+  const projectName = projectRow?.name || 'Project'
+
+  const { data: existingMembers } = await admin
+    .from('project_members')
+    .select('user_id, project_access_level, functional_role')
+    .eq('project_id', ctx.projectId)
+    .in('user_id', userIds)
+
+  const oldMembersMap: Record<string, { projectAccessLevel: string; functionalRole: string | null }> = {}
+  if (existingMembers) {
+    for (const m of existingMembers) {
+      oldMembersMap[m.user_id] = {
+        projectAccessLevel: m.project_access_level,
+        functionalRole: m.functional_role,
+      }
+    }
+  }
+
   const rows = userIds.map((userId) => ({
     organization_id: ctx.organizationId,
     project_id: ctx.projectId,
@@ -340,6 +365,24 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       )
     }
     return jsonError(500, upsertError.message)
+  }
+
+  if (upserted) {
+    const membersParam = upserted.map((m) => ({
+      userId: m.user_id,
+      projectAccessLevel: m.project_access_level as 'Admin' | 'Editor' | 'Viewer',
+      functionalRole: m.functional_role,
+    }))
+
+    void notifyProjectAssignmentAndRoleAdjustments({
+      supabase,
+      organizationId: ctx.organizationId,
+      actorId: user.id,
+      projectId: ctx.projectId,
+      projectName,
+      members: membersParam,
+      oldMembersMap,
+    })
   }
 
   return NextResponse.json({

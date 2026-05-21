@@ -76,7 +76,7 @@ export async function loadRecentActivity(
 
   let taskQuery = supabase
     .from('tasks')
-    .select('id,title,updated_at,created_at,completed_at,assignee_id,process_id,project_id')
+    .select('id,title,updated_at,created_at,completed_at,assignee_id,created_by_id,completed_by_id,updated_by_id,process_id,project_id')
     .eq('organization_id', filter.organizationId)
     .order('updated_at', { ascending: false })
     .limit(fetchLimit)
@@ -117,7 +117,10 @@ export async function loadRecentActivity(
 
   const userIds = [...new Set(commentRows.map((c) => c.user_id).filter(Boolean))] as string[]
   const assigneeIds = [...new Set(taskRows.map((t) => t.assignee_id).filter(Boolean))] as string[]
-  const allProfileIds = [...new Set([...userIds, ...assigneeIds])]
+  const creatorIds = [...new Set(taskRows.map((t) => (t as any).created_by_id).filter(Boolean))] as string[]
+  const completerIds = [...new Set(taskRows.map((t) => (t as any).completed_by_id).filter(Boolean))] as string[]
+  const updaterIds = [...new Set(taskRows.map((t) => (t as any).updated_by_id).filter(Boolean))] as string[]
+  const allProfileIds = [...new Set([...userIds, ...assigneeIds, ...creatorIds, ...completerIds, ...updaterIds])]
 
   const profileById: Record<string, { full_name: string | null }> = {}
   if (allProfileIds.length > 0) {
@@ -136,36 +139,50 @@ export async function loadRecentActivity(
     const updated = new Date(t.updated_at as string).getTime()
     const created = new Date(t.created_at as string).getTime()
     const isNew = updated - created < 60_000
-    const assigneeName = t.assignee_id
-      ? profileById[t.assignee_id as string]?.full_name?.trim() || 'Teammate'
-      : 'Someone'
-    const initials = initialsFromName(assigneeName)
 
     if (t.completed_at) {
+      const completerId = ((t as any).completed_by_id || t.assignee_id || (t as any).created_by_id) as string | undefined
+      const completerName = completerId
+        ? profileById[completerId]?.full_name?.trim() || 'Teammate'
+        : 'Someone'
+      const initials = initialsFromName(completerName)
+
       items.push({
         id: `task-done-${t.id}`,
         type: 'task_completed',
-        user: assigneeName,
+        user: completerName,
         userInitials: initials,
         action: 'completed',
         target: title,
         timestamp: new Date(t.completed_at as string).toISOString(),
       })
     } else if (isNew) {
+      const creatorId = ((t as any).created_by_id || t.assignee_id) as string | undefined
+      const creatorName = creatorId
+        ? profileById[creatorId]?.full_name?.trim() || 'Teammate'
+        : 'Someone'
+      const initials = initialsFromName(creatorName)
+
       items.push({
         id: `task-new-${t.id}`,
         type: 'task_created',
-        user: assigneeName,
+        user: creatorName,
         userInitials: initials,
         action: 'created',
         target: title,
         timestamp: new Date(t.created_at as string).toISOString(),
       })
     } else {
+      const updaterId = ((t as any).updated_by_id || t.assignee_id || (t as any).created_by_id) as string | undefined
+      const updaterName = updaterId
+        ? profileById[updaterId]?.full_name?.trim() || 'Teammate'
+        : 'Someone'
+      const initials = initialsFromName(updaterName)
+
       items.push({
         id: `task-up-${t.id}`,
         type: 'task_created',
-        user: assigneeName,
+        user: updaterName,
         userInitials: initials,
         action: 'updated',
         target: title,

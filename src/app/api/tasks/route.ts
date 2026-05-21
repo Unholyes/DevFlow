@@ -5,7 +5,13 @@ import { NextResponse } from 'next/server'
 import { resolveAssigneeIdForTask, resolveTeamIdForTask } from '@/lib/tasks/validate-task-assignments'
 import { enrichTasksForNavigator } from '@/lib/tasks/enrich-for-navigator'
 import { parseTaskTypeFromBody } from '@/lib/tasks/task-type'
-import { notifyTaskAssigned } from '@/lib/notifications/create-notifications'
+import {
+  notifyTaskAssigned,
+  notifyTaskCreated,
+  notifyTaskEdited,
+  notifyTaskDeleted,
+  notifyProcessCompleted,
+} from '@/lib/notifications/create-notifications'
 import { loadTaskNotificationContext } from '@/lib/notifications/load-task-context'
 import {
   loadPhaseIdForSprint,
@@ -134,6 +140,11 @@ export async function POST(request: Request) {
   try {
     const orgId = await resolveOrgId(supabase)
     if (!orgId) return NextResponse.json({ error: 'Missing tenant context', data: null }, { status: 400 })
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized', data: null }, { status: 401 })
 
     const body = await request.json();
     const {
@@ -280,6 +291,8 @@ export async function POST(request: Request) {
       service_class,
       current_stage_entered_at: nowIso,
       task_type,
+      created_by_id: user.id,
+      updated_by_id: user.id,
     }
     if (teamResolved.teamId !== undefined) {
       insertRow.team_id = teamResolved.teamId
@@ -292,26 +305,38 @@ export async function POST(request: Request) {
 
     if (error) throw error
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (user && data?.id && assigneeResolved.assigneeId) {
-      const ctx = await loadTaskNotificationContext(supabase, orgId, data.id as string)
-      if (ctx) {
-        void notifyTaskAssigned({
-          supabase,
-          organizationId: orgId,
-          actorId: user.id,
-          assigneeId: ctx.assignee_id,
-          task: {
-            id: ctx.id,
-            title: ctx.title,
-            project_id: ctx.project_id,
-            phase_id: ctx.phase_id,
-            process_id: ctx.process_id,
-          },
-        })
+    if (data?.id) {
+      if (assigneeResolved.assigneeId) {
+        const ctx = await loadTaskNotificationContext(supabase, orgId, data.id as string)
+        if (ctx) {
+          void notifyTaskAssigned({
+            supabase,
+            organizationId: orgId,
+            actorId: user.id,
+            assigneeId: ctx.assignee_id,
+            task: {
+              id: ctx.id,
+              title: ctx.title,
+              project_id: ctx.project_id,
+              phase_id: ctx.phase_id,
+              process_id: ctx.process_id,
+            },
+          })
+        }
       }
+
+      void notifyTaskCreated({
+        supabase,
+        organizationId: orgId,
+        actorId: user.id,
+        task: {
+          id: data.id as string,
+          title: data.title as string,
+          project_id: data.project_id as string,
+          phase_id: data.phase_id as string | null,
+          process_id: data.process_id as string | null,
+        },
+      })
     }
 
     return NextResponse.json({ data })
@@ -343,6 +368,15 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: 'Task id is required' }, { status: 400 })
     }
 
+    const { data: beforeTask, error: beforeError } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('id', id)
+      .eq('organization_id', orgId)
+      .maybeSingle()
+    if (beforeError) throw beforeError
+    if (!beforeTask) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+
     if (updates.title !== undefined) {
       const trimmedTitle = normalizeTaskTitle(updates.title)
       if (!trimmedTitle) {
@@ -355,26 +389,14 @@ export async function PATCH(request: Request) {
           ? await loadPhaseIdForWorkflowStage(supabase as any, orgId, updates.workflow_stage_id)
           : null
 
-      const { data: taskForTitle, error: titleLoadError } = await supabase
-        .from('tasks')
-        .select('phase_id, process_id, workflow_stage_id')
-        .eq('id', id)
-        .eq('organization_id', orgId)
-        .maybeSingle()
-
-      if (titleLoadError) throw titleLoadError
-      if (!taskForTitle) {
-        return NextResponse.json({ error: 'Task not found' }, { status: 404 })
-      }
-
       const phaseIdForTitle =
         titlePhaseId ??
-        (taskForTitle.phase_id as string | null) ??
-        (taskForTitle.workflow_stage_id
+        (beforeTask.phase_id as string | null) ??
+        (beforeTask.workflow_stage_id
           ? await loadPhaseIdForWorkflowStage(
               supabase as any,
               orgId,
-              String(taskForTitle.workflow_stage_id),
+              String(beforeTask.workflow_stage_id),
             )
           : null)
 
@@ -383,7 +405,7 @@ export async function PATCH(request: Request) {
           ? updates.process_id == null || updates.process_id === ''
             ? null
             : String(updates.process_id)
-          : (taskForTitle.process_id as string | null)
+          : (beforeTask.process_id as string | null)
 
       if (!processIdForTitle && !phaseIdForTitle) {
         return NextResponse.json({ error: 'Task process or phase could not be resolved' }, { status: 400 })
@@ -482,6 +504,11 @@ export async function PATCH(request: Request) {
       }
     }
 
+    updates.updated_by_id = user.id
+    if (updates.completed_at !== undefined) {
+      updates.completed_by_id = updates.completed_at ? user.id : null
+    }
+
     const { data, error } = await supabase
       .from('tasks')
       .update(updates)
@@ -492,25 +519,124 @@ export async function PATCH(request: Request) {
 
     if (error) throw error
 
-    if (assigneeChanging && data?.id) {
-      const newAssignee = (data.assignee_id as string | null) ?? null
-      const prevAssignee = beforeCtx?.assignee_id ?? null
-      if (newAssignee && newAssignee !== prevAssignee) {
-        const ctx = await loadTaskNotificationContext(supabase, orgId, data.id as string)
-        if (ctx) {
-          void notifyTaskAssigned({
-            supabase,
-            organizationId: orgId,
-            actorId: user.id,
-            assigneeId: newAssignee,
-            task: {
-              id: ctx.id,
-              title: ctx.title,
-              project_id: ctx.project_id,
-              phase_id: ctx.phase_id,
-              process_id: ctx.process_id,
-            },
-          })
+    if (data?.id) {
+      if (assigneeChanging) {
+        const newAssignee = (data.assignee_id as string | null) ?? null
+        const prevAssignee = beforeCtx?.assignee_id ?? null
+        if (newAssignee && newAssignee !== prevAssignee) {
+          const ctx = await loadTaskNotificationContext(supabase, orgId, data.id as string)
+          if (ctx) {
+            void notifyTaskAssigned({
+              supabase,
+              organizationId: orgId,
+              actorId: user.id,
+              assigneeId: newAssignee,
+              task: {
+                id: ctx.id,
+                title: ctx.title,
+                project_id: ctx.project_id,
+                phase_id: ctx.phase_id,
+                process_id: ctx.process_id,
+              },
+            })
+          }
+        }
+      }
+
+      // Check task edits and trigger notifyTaskEdited
+      const changedFields: string[] = []
+      if (updates.title !== undefined && updates.title !== beforeTask.title) {
+        changedFields.push(`title to “${updates.title}”`)
+      }
+      if (updates.description !== undefined && updates.description !== beforeTask.description) {
+        changedFields.push(`description`)
+      }
+      if (updates.priority !== undefined && updates.priority !== beforeTask.priority) {
+        changedFields.push(`priority to “${updates.priority}”`)
+      }
+      if (updates.story_points !== undefined && updates.story_points !== beforeTask.story_points) {
+        changedFields.push(`story points to ${updates.story_points ?? 'none'}`)
+      }
+      if (updates.due_date !== undefined && updates.due_date !== beforeTask.due_date) {
+        changedFields.push(`due date to ${updates.due_date ?? 'none'}`)
+      }
+      if (updates.team_id !== undefined && updates.team_id !== beforeTask.team_id) {
+        changedFields.push(`assigned team`)
+      }
+      if (updates.assignee_id !== undefined && updates.assignee_id !== beforeTask.assignee_id) {
+        changedFields.push(`assignee`)
+      }
+
+      if (changedFields.length > 0) {
+        void notifyTaskEdited({
+          supabase,
+          organizationId: orgId,
+          actorId: user.id,
+          task: {
+            id: beforeTask.id,
+            title: (updates.title as string | undefined) ?? beforeTask.title,
+            project_id: beforeTask.project_id,
+            phase_id: beforeTask.phase_id,
+            process_id: beforeTask.process_id,
+          },
+          changesPreview: `changed ${changedFields.join(', ')}`,
+        })
+      }
+
+      // Check dynamic process completion
+      const updatedProcessId = (data.process_id as string | null) ?? null
+      if (updatedProcessId) {
+        const { data: stages } = await supabase
+          .from('workflow_stages')
+          .select('id, is_done')
+          .eq('phase_id', beforeTask.phase_id)
+
+        if (stages) {
+          const stageDoneMap = new Map<string, boolean>()
+          stages.forEach((s) => stageDoneMap.set(s.id, s.is_done))
+
+          const wasDoneBefore = stageDoneMap.get(beforeTask.workflow_stage_id) === true
+          const isDoneNow = stageDoneMap.get((updates.workflow_stage_id as string | undefined) ?? beforeTask.workflow_stage_id) === true
+
+          if (!wasDoneBefore && isDoneNow) {
+            const { data: processTasks } = await supabase
+              .from('tasks')
+              .select('id, workflow_stage_id')
+              .eq('process_id', updatedProcessId)
+
+            if (processTasks && processTasks.length > 0) {
+              const allTasksDone = processTasks.every((t) => stageDoneMap.get(t.workflow_stage_id) === true)
+              if (allTasksDone) {
+                const { data: proc } = await supabase
+                  .from('phase_processes')
+                  .select('name, phase_id')
+                  .eq('id', updatedProcessId)
+                  .maybeSingle()
+
+                let phaseTitle = 'Phase'
+                if (proc?.phase_id) {
+                  const { data: phase } = await supabase
+                    .from('sdlc_phases')
+                    .select('name')
+                    .eq('id', proc.phase_id)
+                    .maybeSingle()
+                  if (phase?.name) phaseTitle = phase.name
+                }
+                const processTitle = proc?.name || 'Process'
+
+                void notifyProcessCompleted({
+                  supabase,
+                  organizationId: orgId,
+                  actorId: user.id,
+                  projectId: beforeTask.project_id,
+                  phaseId: beforeTask.phase_id,
+                  phaseTitle,
+                  processId: updatedProcessId,
+                  processTitle,
+                })
+              }
+            }
+          }
         }
       }
     }
@@ -542,8 +668,20 @@ export async function DELETE(request: Request) {
   }
 
   try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const orgId = await resolveOrgId(supabase)
     if (!orgId) return NextResponse.json({ error: 'Missing tenant context' }, { status: 400 })
+
+    const { data: beforeTask } = await supabase
+      .from('tasks')
+      .select('title, project_id')
+      .eq('id', taskId)
+      .eq('organization_id', orgId)
+      .maybeSingle()
 
     const { error } = await supabase
       .from('tasks')
@@ -552,6 +690,16 @@ export async function DELETE(request: Request) {
       .eq('organization_id', orgId)
 
     if (error) throw error
+
+    if (beforeTask) {
+      void notifyTaskDeleted({
+        supabase,
+        organizationId: orgId,
+        actorId: user.id,
+        taskTitle: beforeTask.title,
+        projectId: beforeTask.project_id,
+      })
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

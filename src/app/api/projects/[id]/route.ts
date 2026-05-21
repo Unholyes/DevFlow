@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { TENANT_SLUG_HEADER } from '@/lib/tenant/resolve'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
+import { notifyProjectCompleted } from '@/lib/notifications/create-notifications'
 
 async function resolveOrgIdForRequest(supabase: ReturnType<typeof createClient>, userId: string, tenantSlug: string | null) {
   if (tenantSlug) {
@@ -38,6 +39,13 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return NextResponse.json({ error: 'Project name is required' }, { status: 400 })
     }
 
+    const { data: currentProj } = await supabase
+      .from('projects')
+      .select('name, status')
+      .eq('id', params.id)
+      .eq('organization_id', orgId)
+      .maybeSingle()
+
     const updatesBase = {
       name: body.name.trim(),
       description: body.description?.trim() || null,
@@ -66,6 +74,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       .eq('organization_id', orgId)
       .select('id')
       .maybeSingle()
+
+    let updatedId: string | null = null
 
     if (updateWithAllAttempt.error?.code === 'PGRST204') {
       const fallbackWithDueDate = await supabase
@@ -96,23 +106,34 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
           if (fallbackBase.error) throw fallbackBase.error
           if (!fallbackBase.data?.id) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-          return NextResponse.json({ data: { id: fallbackBase.data.id } })
+          updatedId = fallbackBase.data.id
+        } else {
+          if (fallbackWithGating.error) throw fallbackWithGating.error
+          if (!fallbackWithGating.data?.id) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+          updatedId = fallbackWithGating.data.id
         }
-
-        if (fallbackWithGating.error) throw fallbackWithGating.error
-        if (!fallbackWithGating.data?.id) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-        return NextResponse.json({ data: { id: fallbackWithGating.data.id } })
+      } else {
+        if (fallbackWithDueDate.error) throw fallbackWithDueDate.error
+        if (!fallbackWithDueDate.data?.id) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+        updatedId = fallbackWithDueDate.data.id
       }
-
-      if (fallbackWithDueDate.error) throw fallbackWithDueDate.error
-      if (!fallbackWithDueDate.data?.id) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-      return NextResponse.json({ data: { id: fallbackWithDueDate.data.id } })
+    } else {
+      if (updateWithAllAttempt.error) throw updateWithAllAttempt.error
+      if (!updateWithAllAttempt.data?.id) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+      updatedId = updateWithAllAttempt.data.id
     }
 
-    if (updateWithAllAttempt.error) throw updateWithAllAttempt.error
-    if (!updateWithAllAttempt.data?.id) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+    if (updatedId && body.status === 'completed' && currentProj && currentProj.status !== 'completed') {
+      void notifyProjectCompleted({
+        supabase,
+        organizationId: orgId,
+        actorId: user.id,
+        projectId: params.id,
+        projectTitle: currentProj.name || body.name || 'Project',
+      })
+    }
 
-    return NextResponse.json({ data: { id: updateWithAllAttempt.data.id } })
+    return NextResponse.json({ data: { id: updatedId } })
   } catch (error) {
     console.error('Error updating project:', error)
     return NextResponse.json({ error: 'Failed to update project' }, { status: 500 })
