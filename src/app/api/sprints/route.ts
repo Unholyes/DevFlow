@@ -47,6 +47,52 @@ function parseSprintStatus(value: unknown): 'draft' | 'planned' | 'active' | 'cl
   return 'active'
 }
 
+async function validateSprintDateOverlap(
+  supabase: ReturnType<typeof createClient>,
+  orgId: string,
+  projectId: string,
+  processId: string | null | undefined,
+  excludeSprintId: string | null,
+  startDateStr: string,
+  endDateStr: string
+): Promise<string | null> {
+  let query = supabase
+    .from('sprints')
+    .select('id, name, start_date, end_date')
+    .eq('organization_id', orgId)
+    .eq('project_id', projectId)
+    .eq('status', 'active')
+
+  if (processId) {
+    query = query.eq('process_id', processId)
+  }
+
+  const { data: activeSprints } = await query
+
+  const nStart = new Date(startDateStr)
+  const nEnd = new Date(endDateStr)
+  const newStartDay = new Date(nStart.getFullYear(), nStart.getMonth(), nStart.getDate()).getTime()
+  const newEndDay = new Date(nEnd.getFullYear(), nEnd.getMonth(), nEnd.getDate()).getTime()
+
+  for (const sprint of activeSprints ?? []) {
+    if (sprint.id === excludeSprintId) continue
+    if (sprint.start_date && sprint.end_date) {
+      const aStart = new Date(sprint.start_date)
+      const aEnd = new Date(sprint.end_date)
+      if (!Number.isNaN(aStart.getTime()) && !Number.isNaN(aEnd.getTime())) {
+        const activeStartDay = new Date(aStart.getFullYear(), aStart.getMonth(), aStart.getDate()).getTime()
+        const activeEndDay = new Date(aEnd.getFullYear(), aEnd.getMonth(), aEnd.getDate()).getTime()
+        
+        if (newStartDay <= activeEndDay && newEndDay >= activeStartDay) {
+          return `Sprint dates overlap with active sprint "${sprint.name}" (${sprint.start_date} to ${sprint.end_date})`
+        }
+      }
+    }
+  }
+
+  return null
+}
+
 export async function GET(request: Request) {
   const supabase = createClient()
   const { searchParams } = new URL(request.url)
@@ -159,6 +205,19 @@ export async function POST(request: Request) {
 
       startDateValue = start_date
       endDateValue = end_date
+
+      const overlapError = await validateSprintDateOverlap(
+        supabase as any,
+        orgId,
+        project_id,
+        process_id,
+        null,
+        startDateValue,
+        endDateValue
+      )
+      if (overlapError) {
+        return NextResponse.json({ error: overlapError }, { status: 400 })
+      }
     }
 
     const { data, error } = await supabase
@@ -219,7 +278,7 @@ export async function PATCH(request: Request) {
 
     const { data: existing, error: loadError } = await supabase
       .from('sprints')
-      .select('id,project_id,status')
+      .select('id,project_id,process_id,status')
       .eq('id', id)
       .eq('organization_id', orgId)
       .maybeSingle()
@@ -271,6 +330,24 @@ export async function PATCH(request: Request) {
       }
       if (parsedEndDate < parsedStartDate) {
         return NextResponse.json({ error: 'End date cannot be before start date' }, { status: 400 })
+      }
+
+      const projectIdStr = String((existing as { project_id?: unknown }).project_id ?? '')
+      const processIdStr = (existing as { process_id?: unknown }).process_id 
+        ? String((existing as { process_id?: unknown }).process_id) 
+        : null
+
+      const overlapError = await validateSprintDateOverlap(
+        supabase as any,
+        orgId,
+        projectIdStr,
+        processIdStr,
+        id,
+        approveStart,
+        approveEnd
+      )
+      if (overlapError) {
+        return NextResponse.json({ error: overlapError }, { status: 400 })
       }
 
       const { data, error } = await supabase

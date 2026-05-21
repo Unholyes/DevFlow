@@ -15,19 +15,33 @@ import {
 } from '@/lib/theme/settings-surface-classes'
 import { applyPresetToFormValues, isBuiltInPreset } from '@/lib/theme/organization-theme-presets'
 import { resolveOrganizationTheme } from '@/lib/theme/resolve-organization-theme'
+import { normalizeHexColor } from '@/lib/theme/resolve-theme-tokens'
+
+const hexColorField = z
+  .string()
+  .regex(/^#[0-9A-Fa-f]{6}$/i, 'Use format #RRGGBB')
+  .transform((value) => normalizeHexColor(value) ?? value)
+
+function setNormalizedColor(
+  onChange: (value: string) => void,
+  raw: string
+) {
+  const normalized = normalizeHexColor(raw)
+  if (normalized) onChange(normalized)
+}
 
 const organizationSchema = z.object({
   name: z.string().min(1, "Organization name is required").max(100, "Organization name must be less than 100 characters"),
   theme_preset: z.enum(['default', 'blue', 'green', 'purple', 'dark', 'custom']).optional(),
-  primary_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  secondary_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  accent_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  background_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  surface_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  sidebar_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  border_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  text_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
-  muted_text_color: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid color format').optional(),
+  primary_color: hexColorField.optional(),
+  secondary_color: hexColorField.optional(),
+  accent_color: hexColorField.optional(),
+  background_color: hexColorField.optional(),
+  surface_color: hexColorField.optional(),
+  sidebar_color: hexColorField.optional(),
+  border_color: hexColorField.optional(),
+  text_color: hexColorField.optional(),
+  muted_text_color: hexColorField.optional(),
 })
 
 type OrganizationFormData = z.infer<typeof organizationSchema>
@@ -308,7 +322,7 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                         id="primary_color"
                         type="color"
                         value={field.value}
-                        onChange={field.onChange}
+                        onChange={(e) => setNormalizedColor(field.onChange, e.target.value)}
                         className="w-16 h-10 p-1 border border-input rounded"
                       />
                     )}
@@ -319,7 +333,8 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                     render={({ field }) => (
                       <Input
                         value={field.value}
-                        onChange={field.onChange}
+                        onChange={(e) => setNormalizedColor(field.onChange, e.target.value)}
+                        onBlur={(e) => setNormalizedColor(field.onChange, e.target.value)}
                         placeholder="#3B82F6"
                         className="flex-1"
                       />
@@ -345,7 +360,7 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                         id="secondary_color"
                         type="color"
                         value={field.value}
-                        onChange={field.onChange}
+                        onChange={(e) => setNormalizedColor(field.onChange, e.target.value)}
                         className="w-16 h-10 p-1 border border-input rounded"
                       />
                     )}
@@ -356,7 +371,8 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                     render={({ field }) => (
                       <Input
                         value={field.value}
-                        onChange={field.onChange}
+                        onChange={(e) => setNormalizedColor(field.onChange, e.target.value)}
+                        onBlur={(e) => setNormalizedColor(field.onChange, e.target.value)}
                         placeholder="#64748B"
                         className="flex-1"
                       />
@@ -382,7 +398,7 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                         id="accent_color"
                         type="color"
                         value={field.value}
-                        onChange={field.onChange}
+                        onChange={(e) => setNormalizedColor(field.onChange, e.target.value)}
                         className="w-16 h-10 p-1 border border-input rounded"
                       />
                     )}
@@ -393,7 +409,8 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                     render={({ field }) => (
                       <Input
                         value={field.value}
-                        onChange={field.onChange}
+                        onChange={(e) => setNormalizedColor(field.onChange, e.target.value)}
+                        onBlur={(e) => setNormalizedColor(field.onChange, e.target.value)}
                         placeholder="#10B981"
                         className="flex-1"
                       />
@@ -433,7 +450,7 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                           <Input
                             type="color"
                             value={field.value as any}
-                            onChange={field.onChange}
+                            onChange={(e) => setNormalizedColor(field.onChange, e.target.value)}
                             className="w-16 h-10 p-1 border border-input rounded"
                           />
                         )}
@@ -444,7 +461,8 @@ export function OrganizationForm({ organization, updateOrganization }: Organizat
                         render={({ field }) => (
                           <Input
                             value={field.value as any}
-                            onChange={field.onChange}
+                            onChange={(e) => setNormalizedColor(field.onChange, e.target.value)}
+                            onBlur={(e) => setNormalizedColor(field.onChange, e.target.value)}
                             placeholder={placeholder}
                             className="flex-1"
                           />
