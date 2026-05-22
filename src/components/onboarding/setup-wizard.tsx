@@ -491,8 +491,6 @@ export function SetupProjectWizard({
                               >
                                 <option value="scrum">Scrum</option>
                                 <option value="kanban">Kanban</option>
-                                <option value="waterfall">Waterfall</option>
-                                <option value="devops">DevOps</option>
                               </select>
                             </div>
                             <Button
