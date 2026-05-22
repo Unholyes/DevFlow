@@ -212,8 +212,8 @@ export async function POST(request: Request) {
         project_id,
         process_id,
         null,
-        startDateValue,
-        endDateValue
+        startDateValue as string,
+        endDateValue as string
       )
       if (overlapError) {
         return NextResponse.json({ error: overlapError }, { status: 400 })
