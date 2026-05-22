@@ -5,16 +5,28 @@ import { DashboardHeader } from './dashboard-header'
 import { DashboardSidebar, type SidebarProject } from './dashboard-sidebar'
 import type { UserRole } from '@/types'
 
+export type ServerUserInfo = {
+  fullName: string
+  email: string
+  avatarUrl: string | null
+}
+
 interface DashboardLayoutProps {
   children: ReactNode
   role?: UserRole
   sidebarProjects?: SidebarProject[]
+  userInfo?: ServerUserInfo | null
+  organizationName?: string | null
+  organizationIcon?: string | null
 }
 
 export function DashboardLayout({
   children,
   role = 'team_member',
   sidebarProjects = [],
+  userInfo = null,
+  organizationName = null,
+  organizationIcon = null,
 }: DashboardLayoutProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
 
@@ -25,6 +37,9 @@ export function DashboardLayout({
         <DashboardHeader 
           isSidebarCollapsed={isSidebarCollapsed}
           onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          serverUserInfo={userInfo}
+          serverOrganizationName={organizationName}
+          serverOrganizationIcon={organizationIcon}
         />
       </div>
 
@@ -36,6 +51,7 @@ export function DashboardLayout({
             isCollapsed={isSidebarCollapsed}
             onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             projects={sidebarProjects}
+            serverOrganizationName={organizationName}
           />
         </div>
 
@@ -47,4 +63,4 @@ export function DashboardLayout({
       </div>
     </div>
   )
-}
+}

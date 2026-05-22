@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { FolderKanban, Calendar } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { getCachedUser } from '@/lib/supabase/cached'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { Button } from '@/components/ui/button'
@@ -21,9 +22,8 @@ export default async function ProjectsPage() {
   const tenantSlug = getTenantSlug()
   const supabase = createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Use cached getUser (shared with layout — zero extra DB calls)
+  const { user } = await getCachedUser()
 
   if (!user) redirect('/auth/login')
 
@@ -39,27 +39,45 @@ export default async function ProjectsPage() {
 
   if (!orgId) redirect('/onboarding')
 
-  const { data: membership } = await supabase
-    .from('organization_members')
-    .select('system_role,custom_roles')
-    .eq('organization_id', orgId)
-    .eq('user_id', user.id)
-    .maybeSingle()
+  // Fetch membership, permissions, and projects in parallel instead of sequentially
+  const [{ data: membership }, { data: defaultRoleRow }, { data: customRoleRows }, { data: projects }] =
+    await Promise.all([
+      supabase
+        .from('organization_members')
+        .select('system_role,custom_roles')
+        .eq('organization_id', orgId)
+        .eq('user_id', user.id)
+        .maybeSingle(),
+      supabase
+        .from('organization_default_roles')
+        .select('permissions')
+        .eq('organization_id', orgId)
+        .eq('role', 'Member') // Will be overridden below if different role
+        .maybeSingle(),
+      supabase.from('organization_roles').select('name,permissions').eq('organization_id', orgId),
+      supabase
+        .from('projects')
+        .select('id,name,description,status,created_at')
+        .eq('organization_id', orgId)
+        .order('created_at', { ascending: false }),
+    ])
 
   const systemRole = String((membership as any)?.system_role ?? 'Member')
   const assignedCustomRoles: string[] = Array.isArray((membership as any)?.custom_roles)
     ? (((membership as any).custom_roles as unknown[]).filter((x) => typeof x === 'string' && x.trim().length > 0) as string[])
     : []
 
-  const [{ data: defaultRoleRow }, { data: customRoleRows }] = await Promise.all([
-    supabase
+  // If system role isn't Member, fetch the correct default role permissions
+  let resolvedDefaultPerms = (defaultRoleRow as any)?.permissions
+  if (systemRole !== 'Member' && systemRole !== 'Owner') {
+    const { data: correctRole } = await supabase
       .from('organization_default_roles')
       .select('permissions')
       .eq('organization_id', orgId)
       .eq('role', systemRole)
-      .maybeSingle(),
-    supabase.from('organization_roles').select('name,permissions').eq('organization_id', orgId),
-  ])
+      .maybeSingle()
+    resolvedDefaultPerms = (correctRole as any)?.permissions
+  }
 
   const customByNameLower = new Map<string, unknown>()
   for (const r of (customRoleRows ?? []) as any[]) {
@@ -70,14 +88,8 @@ export default async function ProjectsPage() {
 
   const canCreateProject =
     systemRole === 'Owner' ||
-    permissionListHas((defaultRoleRow as any)?.permissions, 'pm.projects.create') ||
+    permissionListHas(resolvedDefaultPerms, 'pm.projects.create') ||
     assignedCustomRoles.some((name) => permissionListHas(customByNameLower.get(normalizeName(name).toLowerCase()), 'pm.projects.create'))
-
-  const { data: projects } = await supabase
-    .from('projects')
-    .select('id,name,description,status,created_at')
-    .eq('organization_id', orgId)
-    .order('created_at', { ascending: false })
 
   const projectList = projects ?? []
   const progressByProjectId = await computeProjectProgressByIds(

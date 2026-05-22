@@ -17,7 +17,6 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { UserRole } from '@/types'
-import { useOrganizationName } from '@/lib/hooks/use-organization-name'
 
 export type SidebarProject = { id: string; name: string }
 
@@ -55,15 +54,17 @@ export function DashboardSidebar({
   isCollapsed = false,
   onToggle,
   projects = [],
+  serverOrganizationName = null,
 }: {
   role?: UserRole
   isCollapsed?: boolean
   onToggle?: () => void
   projects?: SidebarProject[]
+  serverOrganizationName?: string | null
 }) {
   const pathname = usePathname()
   const [isProjectsOpen, setIsProjectsOpen] = useState(true)
-  const { name: organizationName } = useOrganizationName()
+  const organizationName = serverOrganizationName
 
   const navItems = role === 'tenant_admin' ? tenantAdminNavigation : tenantMemberNavigation
 

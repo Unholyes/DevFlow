@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Search, Settings, User, LogOut, Menu, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import type { ServerUserInfo } from './dashboard-layout'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,7 +17,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { supabase } from '@/lib/supabase/client'
-import { useOrganizationName } from '@/lib/hooks/use-organization-name'
 import { NotificationsDropdown } from '@/components/dashboard/notifications-dropdown'
 
 type HeaderUser = {
@@ -36,19 +36,37 @@ type SearchSuggestion = {
 interface DashboardHeaderProps {
   isSidebarCollapsed?: boolean
   onToggleSidebar?: () => void
+  serverUserInfo?: ServerUserInfo | null
+  serverOrganizationName?: string | null
+  serverOrganizationIcon?: string | null
 }
 
-export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }: DashboardHeaderProps) {
+export function DashboardHeader({
+  isSidebarCollapsed = false,
+  onToggleSidebar,
+  serverUserInfo = null,
+  serverOrganizationName = null,
+  serverOrganizationIcon = null,
+}: DashboardHeaderProps) {
   const router = useRouter()
-  const [userInfo, setUserInfo] = useState<HeaderUser | null>(null)
-  const { name: organizationName, icon: organizationIcon } = useOrganizationName()
+  // Use server-provided user info directly — no client-side fetch needed
+  const [userInfo, setUserInfo] = useState<HeaderUser | null>(
+    serverUserInfo
+      ? { fullName: serverUserInfo.fullName, email: serverUserInfo.email, avatarUrl: serverUserInfo.avatarUrl }
+      : null,
+  )
+  const organizationName = serverOrganizationName
+  const organizationIcon = serverOrganizationIcon
   const [searchQuery, setSearchQuery] = useState('')
   const [searchSuggestions, setSearchSuggestions] = useState<SearchSuggestion[]>([])
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isSearchLoading, setIsSearchLoading] = useState(false)
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1)
 
+  // Only fetch client-side if server didn't provide user info (backwards compat)
   useEffect(() => {
+    if (userInfo) return // Already have server-provided data
+
     let isMounted = true
 
     const loadUser = async () => {
@@ -77,7 +95,7 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
     return () => {
       isMounted = false
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const initials = useMemo(() => {
     const name = userInfo?.fullName

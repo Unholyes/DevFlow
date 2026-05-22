@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getCachedUser, getCachedProfile } from '@/lib/supabase/cached'
 import { AccountsPageContent } from '@/components/accounts/accounts-page-content'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
@@ -17,19 +18,14 @@ export default async function AccountsPage({
 }) {
   const supabase = createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Use cached user + profile (shared with layout — zero extra DB calls)
+  const { user } = await getCachedUser()
 
   if (!user) {
     redirect('/auth/login')
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+  const profile = await getCachedProfile(user.id)
 
   if (profile?.role === 'super_admin') redirect('/super-admin/dashboard')
 
@@ -80,8 +76,7 @@ export default async function AccountsPage({
     redirect('/dashboard')
   }
 
-  // Org-scoped authorization: allow opening this page for any org member,
-  // but restrict write actions to tenant_admin users (Owner/Admin).
+  // Use cached workspace context (shared with layout — zero extra DB calls)
   const ws = await resolveWorkspaceContext({
     supabase: supabase as any,
     userId: user.id,
@@ -92,6 +87,7 @@ export default async function AccountsPage({
   }
   const canManageAccounts = ws.role === 'tenant_admin'
 
+  // Fetch org lists in parallel
   const [{ data: ownedOrgs }, { data: memberships }] = await Promise.all([
     supabase
       .from('organizations')
