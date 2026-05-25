@@ -13,6 +13,7 @@ import { isPhaseLockedForProject } from '@/lib/projects/phase-gating'
 import { userCanManageBacklog, userCanArchiveTasks } from '@/lib/permissions/backlog-permissions'
 import { getLocalDateString } from '@/lib/sprints/sprint-date-validation'
 import { isSprintActiveForBoard } from '@/lib/sprints/sprint-board-eligibility'
+import { isPhaseCompleted } from '@/lib/phases/phase-completed'
 
 export default async function ProcessBoardPage({
   params,
@@ -60,6 +61,8 @@ export default async function ProcessBoardPage({
 
   const phase = (phases ?? []).find((p) => p.id === params.phaseId)
   if (!phase) notFound()
+
+  const phaseCompleted = isPhaseCompleted(phase.status)
 
   const gatingContext = await loadProjectPhasesGatingContext(
     supabase,
@@ -142,7 +145,9 @@ export default async function ProcessBoardPage({
       sprintRow?.id && stageIds.length > 0
         ? await supabase
             .from('tasks')
-            .select('id,title,priority,story_points,workflow_stage_id,completed_at,position,team_id,assignee_id')
+            .select(
+              'id,title,priority,story_points,workflow_stage_id,completed_at,position,team_id,assignee_id,blocked,blocked_reason,task_type',
+            )
             .eq('project_id', project.id)
             .eq('organization_id', orgId)
             .eq('process_id', process.id)
@@ -158,11 +163,13 @@ export default async function ProcessBoardPage({
         processName={process.name}
         currentTab="board"
         allProcesses={(allProcesses ?? []) as { id: string; name: string; methodology: string }[]}
+        phaseCompleted={phaseCompleted}
       >
         <ScrumView
           projectId={project.id}
           phaseId={phase.id}
           processId={process.id}
+          phaseCompleted={phaseCompleted}
           sprint={
             sprintRow
               ? ({
@@ -250,6 +257,7 @@ export default async function ProcessBoardPage({
       processName={process.name}
       currentTab="board"
       allProcesses={(allProcesses ?? []) as { id: string; name: string; methodology: string }[]}
+      phaseCompleted={phaseCompleted}
     >
       <KanbanView
         projectId={project.id}
@@ -259,7 +267,7 @@ export default async function ProcessBoardPage({
         stages={(stages ?? []) as any}
         tasks={(tasks ?? []) as any}
         teams={teamsForOrg}
-        canManageBacklog={canManageBacklog}
+        canManageBacklog={canManageBacklog && !phaseCompleted}
         canArchiveTasks={canArchiveTasks}
       />
     </KanbanProcessChrome>

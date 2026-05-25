@@ -5,6 +5,8 @@ import { SprintPlanningPageClient } from '@/components/sprints/sprint-planning-p
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { userCanCreateSprintDraft, userCanManageSprints } from '@/lib/permissions/sprint-permissions'
 import { repairOrphanedProductBacklogTasks } from '@/lib/sprints/release-sprint-tasks-to-backlog'
+import { isPhaseCompleted } from '@/lib/phases/phase-completed'
+import { processSprintsPath } from '@/lib/processes/process-workspace-routes'
 
 async function ensureBacklogStageId(supabase: any, orgId: string, phaseId: string) {
   const { data: existingBacklog } = await supabase
@@ -162,11 +164,15 @@ export default async function ProcessSprintPlanningPage({
 
   const { data: phase } = await supabase
     .from('sdlc_phases')
-    .select('id')
+    .select('id,status')
     .eq('id', params.phaseId)
     .eq('project_id', project.id)
     .maybeSingle()
   if (!phase) notFound()
+
+  if (isPhaseCompleted((phase as { status?: string }).status)) {
+    return redirect(processSprintsPath(params.id, phase.id, params.processId))
+  }
 
   const { data: process } = await supabase
     .from('phase_processes')

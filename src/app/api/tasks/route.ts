@@ -23,6 +23,7 @@ import {
   loadPhaseIdForWorkflowStage,
   normalizeTaskTitle,
 } from '@/lib/tasks/validate-task-title'
+import { getPhaseNewWorkBlockReason } from '@/lib/phases/phase-completed'
 import { userCanManageBacklog } from '@/lib/permissions/backlog-permissions'
 import { assertSprintAllowsBoardMoves } from '@/lib/sprints/assert-sprint-board-movable'
 import { resolveBacklogStageIdForPhase } from '@/lib/sprints/resolve-backlog-stage-id'
@@ -218,6 +219,11 @@ export async function POST(request: Request) {
     const createPhaseId = await loadPhaseIdForWorkflowStage(supabase as any, orgId, workflow_stage_id)
     if (!createPhaseId) {
       return NextResponse.json({ error: 'Invalid workflow stage', data: null }, { status: 400 })
+    }
+
+    const phaseWorkBlock = await getPhaseNewWorkBlockReason(supabase as any, createPhaseId)
+    if (phaseWorkBlock) {
+      return NextResponse.json({ error: phaseWorkBlock, data: null }, { status: 403 })
     }
 
     const { data: createStage } = await supabase

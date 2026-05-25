@@ -14,6 +14,7 @@ import {
 import { isSprintActiveForBoard } from '@/lib/sprints/sprint-board-eligibility'
 import { releaseSprintTasksToProductBacklog } from '@/lib/sprints/release-sprint-tasks-to-backlog'
 import { applyUnfinishedTasksAfterSprintClose } from '@/lib/sprints/apply-sprint-close-unfinished'
+import { getPhaseNewWorkBlockReason } from '@/lib/phases/phase-completed'
 
 function isUniqueViolation(error: unknown) {
   return typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
@@ -155,6 +156,11 @@ export async function POST(request: Request) {
 
     if (!project_id || !phase_id || !name?.trim()) {
       return NextResponse.json({ error: 'project_id, phase_id, and name are required' }, { status: 400 })
+    }
+
+    const phaseWorkBlock = await getPhaseNewWorkBlockReason(supabase, phase_id)
+    if (phaseWorkBlock) {
+      return NextResponse.json({ error: phaseWorkBlock }, { status: 403 })
     }
 
     const [canCreateDraft, canManage] = await Promise.all([
@@ -319,6 +325,16 @@ export async function PATCH(request: Request) {
     if (loadError) throw loadError
     if (!existing?.id) {
       return NextResponse.json({ error: 'Sprint not found' }, { status: 404 })
+    }
+
+    const existingPhaseId = String((existing as { phase_id?: unknown }).phase_id ?? '')
+    const phaseWorkBlock =
+      existingPhaseId.length > 0 ? await getPhaseNewWorkBlockReason(supabase, existingPhaseId) : null
+    const phaseAllowsSprintPatchOnly =
+      phaseWorkBlock != null && (action === 'close' || action === 'reject')
+
+    if (phaseWorkBlock && !phaseAllowsSprintPatchOnly) {
+      return NextResponse.json({ error: phaseWorkBlock }, { status: 403 })
     }
 
     const projectId = String((existing as { project_id?: unknown }).project_id ?? '')

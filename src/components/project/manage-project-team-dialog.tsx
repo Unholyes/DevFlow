@@ -104,6 +104,9 @@ function parseAccessLevel(value: string): ProjectAccessLevel {
   return 'Editor'
 }
 
+/** Select value when the member has no project team role (permissions from access level only). */
+const NO_PROJECT_TEAM_ROLE = '__no_team_role__'
+
 export function ManageProjectTeamDialog({
   projectId,
   projectName,
@@ -157,10 +160,7 @@ export function ManageProjectTeamDialog({
       setAssigneeOptions(list)
 
       const roles = Array.isArray(json.teamRoles) ? (json.teamRoles as ProjectTeamRoleOption[]) : []
-      if (roles.length > 0) {
-        setTeamRoles(roles)
-        setProjectTeamRoleId((cur) => cur || roles[0]?.id || '')
-      }
+      setTeamRoles(roles)
 
       const userById = new Map(
         list.filter((o) => o.kind === 'user').map((o) => [o.id, o] as const),
@@ -248,8 +248,9 @@ export function ManageProjectTeamDialog({
     return out
   }, [accessLevelPermissions, teamRolePermissions])
 
-  const canSave =
-    Boolean(assignee) && !isSaving && !isLoadingOptions && (teamRoles.length === 0 || Boolean(projectTeamRoleId))
+  const canSave = Boolean(assignee) && !isSaving && !isLoadingOptions
+
+  const teamRoleSelectValue = projectTeamRoleId || NO_PROJECT_TEAM_ROLE
 
   const handleRemoveMember = async (member: ProjectMemberRow) => {
     const confirmed = window.confirm(
@@ -559,13 +560,24 @@ export function ManageProjectTeamDialog({
                   <div>
                     <FieldLabel className="inline-flex items-center" htmlFor={`${baseId}-team-role`}>
                       Team role
-                      <InfoHint text="Additional permissions on top of the access level. Configure role definitions under Accounts → Team roles." />
+                      <InfoHint text="Optional. Extra permissions on top of the access level. Choose None to use only the project access level template." />
                     </FieldLabel>
-                    <Select value={projectTeamRoleId} onValueChange={setProjectTeamRoleId}>
+                    <Select
+                      value={teamRoleSelectValue}
+                      onValueChange={(v) =>
+                        setProjectTeamRoleId(v === NO_PROJECT_TEAM_ROLE ? '' : v)
+                      }
+                      disabled={teamRoles.length === 0}
+                    >
                       <SelectTrigger id={`${baseId}-team-role`} className="h-9">
-                        <SelectValue placeholder="Team role" />
+                        <SelectValue
+                          placeholder={
+                            teamRoles.length === 0 ? 'No team roles defined' : 'Team role (optional)'
+                          }
+                        />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value={NO_PROJECT_TEAM_ROLE}>None</SelectItem>
                         {teamRoles.map((r) => (
                           <SelectItem key={r.id} value={r.id}>
                             {r.name}
@@ -599,24 +611,26 @@ export function ManageProjectTeamDialog({
                       )}
                     </div>
 
-                    {selectedTeamRole ? (
-                      <div>
-                        <p className="text-xs font-medium text-blue-900">
-                          Team role ({selectedTeamRole.name})
+                    <div>
+                      <p className="text-xs font-medium text-blue-900">
+                        Team role {selectedTeamRole ? `(${selectedTeamRole.name})` : '(none)'}
+                      </p>
+                      {!selectedTeamRole ? (
+                        <p className="mt-1 text-xs text-blue-800">
+                          Only project access level permissions apply.
                         </p>
-                        {teamRolePermissions.length === 0 ? (
-                          <p className="mt-1 text-xs text-blue-800">No extra permissions from this role.</p>
-                        ) : (
-                          <ul className="mt-1.5 max-h-24 space-y-1 overflow-auto text-xs text-blue-900">
-                            {teamRolePermissions.map((perm) => (
-                              <li key={`role-${perm}`} className="list-inside list-disc">
-                                {getProjectTemplatePermissionLabel(perm)}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    ) : null}
+                      ) : teamRolePermissions.length === 0 ? (
+                        <p className="mt-1 text-xs text-blue-800">No extra permissions from this role.</p>
+                      ) : (
+                        <ul className="mt-1.5 max-h-24 space-y-1 overflow-auto text-xs text-blue-900">
+                          {teamRolePermissions.map((perm) => (
+                            <li key={`role-${perm}`} className="list-inside list-disc">
+                              {getProjectTemplatePermissionLabel(perm)}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </div>
 
                   <div className="mt-3 border-t border-blue-200/80 pt-2">

@@ -7,6 +7,7 @@ import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-
 import { userCanCreateSprintDraft, userCanManageSprints } from '@/lib/permissions/sprint-permissions'
 import { repairOrphanedProductBacklogTasks } from '@/lib/sprints/release-sprint-tasks-to-backlog'
 import { resolveBacklogStageIdForPhase } from '@/lib/sprints/resolve-backlog-stage-id'
+import { isPhaseCompleted } from '@/lib/phases/phase-completed'
 
 export default async function ProcessSprintsPage({
   params,
@@ -38,11 +39,13 @@ export default async function ProcessSprintsPage({
 
   const { data: phase } = await supabase
     .from('sdlc_phases')
-    .select('id')
+    .select('id,status')
     .eq('id', params.phaseId)
     .eq('project_id', project.id)
     .maybeSingle()
   if (!phase) notFound()
+
+  const phaseCompleted = isPhaseCompleted((phase as { status?: string }).status)
 
   const { data: process } = await supabase
     .from('phase_processes')
@@ -160,6 +163,7 @@ export default async function ProcessSprintsPage({
       processName={process.name}
       currentTab="sprints"
       allProcesses={(allProcesses ?? []) as { id: string; name: string; methodology: string }[]}
+      phaseCompleted={phaseCompleted}
     >
       <SprintsPageClient
         projectId={project.id}
@@ -170,8 +174,8 @@ export default async function ProcessSprintsPage({
         sprints={sprintsWithStats}
         backlogTasks={(backlogTasks ?? []) as any}
         chromeEmbedded
-        canManageSprints={canManageSprints}
-        canCreateSprintDraft={canCreateSprintDraft}
+        canManageSprints={canManageSprints && !phaseCompleted}
+        canCreateSprintDraft={canCreateSprintDraft && !phaseCompleted}
         sprintStartStageId={sprintStartStageId ?? undefined}
       />
     </ScrumProcessChrome>

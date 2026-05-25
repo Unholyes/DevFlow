@@ -295,6 +295,7 @@ export function ProductBacklogPageClient(props: {
   /** `sdlc.backlog.manage` — create and edit backlog items. */
   canManageBacklog?: boolean
   canCreateSprintDraft?: boolean
+  phaseCompleted?: boolean
 }) {
   const router = useRouter()
   const pathname = usePathname()

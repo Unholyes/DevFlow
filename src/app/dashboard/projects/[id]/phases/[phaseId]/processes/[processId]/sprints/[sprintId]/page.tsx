@@ -7,6 +7,7 @@ import { processSprintPlanPath } from '@/lib/processes/process-workspace-routes'
 import { userCanManageSprints } from '@/lib/permissions/sprint-permissions'
 import { getLocalDateString } from '@/lib/sprints/sprint-date-validation'
 import { isSprintActiveForBoard } from '@/lib/sprints/sprint-board-eligibility'
+import { isPhaseCompleted } from '@/lib/phases/phase-completed'
 
 async function ensureBacklogStageId(supabase: any, orgId: string, phaseId: string) {
   const { data: existingBacklog } = await supabase
@@ -161,11 +162,13 @@ export default async function ProcessSprintDetailsPage({
 
   const { data: phase } = await supabase
     .from('sdlc_phases')
-    .select('id')
+    .select('id,status')
     .eq('id', params.phaseId)
     .eq('project_id', project.id)
     .maybeSingle()
   if (!phase) notFound()
+
+  const phaseCompleted = isPhaseCompleted((phase as { status?: string }).status)
 
   const { data: process } = await supabase
     .from('phase_processes')
@@ -264,7 +267,7 @@ export default async function ProcessSprintDetailsPage({
       sprint={sprint as any}
       tasks={(tasks ?? []) as any}
       stageIsDoneById={stageIsDoneById}
-      canManageSprints={canManageSprints}
+      canManageSprints={canManageSprints && !phaseCompleted}
       hasActiveSprint={hasActiveSprint}
       sprintActiveForBoard={sprintActiveForBoard}
       planHref={processSprintPlanPath(project.id, phase.id, process.id)}

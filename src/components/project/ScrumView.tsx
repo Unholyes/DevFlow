@@ -267,6 +267,7 @@ export default function ScrumView(props: {
   projectId: string
   phaseId: string
   processId?: string
+  phaseCompleted?: boolean
   sprint: { id: string; name: string; status: 'draft' | 'planned' | 'active' | 'closed'; start_date?: string | null } | null
   stages: Stage[]
   tasks: TaskRow[]
@@ -280,7 +281,7 @@ export default function ScrumView(props: {
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null)
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
-  const isLocked = !canMoveTasksOnSprintBoard(props.sprint)
+  const isLocked = !canMoveTasksOnSprintBoard(props.sprint) || props.phaseCompleted === true
 
   const teamFilterId = (searchParams.get('teamId') ?? '').trim()
   const teamFilterActive = teamFilterId.length > 0
@@ -313,6 +314,10 @@ export default function ScrumView(props: {
                 ...t,
                 title: row.title,
                 priority: row.priority,
+                story_points:
+                  row.story_points !== undefined && row.story_points !== null
+                    ? row.story_points
+                    : t.story_points,
                 team_id: row.team_id !== undefined ? row.team_id : t.team_id,
                 assignee_id: row.assignee_id !== undefined ? row.assignee_id : t.assignee_id,
                 blocked: row.blocked ?? t.blocked,

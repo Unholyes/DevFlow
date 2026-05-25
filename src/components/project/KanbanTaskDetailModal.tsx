@@ -258,7 +258,6 @@ export function KanbanTaskDetailModal({
         title: title.trim(),
         description: description.trim() || null,
         priority,
-        story_points: null,
         due_date: dueDate.trim() || null,
         blocked,
         blocked_reason: blocked ? blockedReason.trim() || null : null,

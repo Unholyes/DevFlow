@@ -3,6 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { CompletePhaseButton } from '@/components/phases/complete-phase-button'
+import { PhaseCompletedBanner } from '@/components/phases/phase-completed-banner'
 import { userCanApprovePhaseGates } from '@/lib/permissions/phase-gate-permissions'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { processWorkspacePath } from '@/lib/processes/process-workspace-routes'
@@ -217,6 +218,8 @@ export default async function PhasePage({ params }: { params: { id: string; phas
           />
         </div>
       </div>
+
+      {phase.status === 'completed' ? <PhaseCompletedBanner /> : null}
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
         <div className="flex items-center justify-between">

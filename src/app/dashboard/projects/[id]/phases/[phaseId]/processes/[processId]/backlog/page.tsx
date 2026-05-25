@@ -9,6 +9,7 @@ import { ensureKanbanPhaseWorkflowStructure } from '@/lib/kanban/ensure-default-
 import { userCanManageBacklog } from '@/lib/permissions/backlog-permissions'
 import { userCanCreateSprintDraft } from '@/lib/permissions/sprint-permissions'
 import { repairOrphanedProductBacklogTasks } from '@/lib/sprints/release-sprint-tasks-to-backlog'
+import { isPhaseCompleted } from '@/lib/phases/phase-completed'
 
 async function ensureBacklogStageId(supabase: any, orgId: string, phaseId: string) {
   const { data: existingBacklog } = await supabase
@@ -144,11 +145,13 @@ export default async function ProcessBacklogPage({
 
   const { data: phase } = await supabase
     .from('sdlc_phases')
-    .select('id,title')
+    .select('id,title,status')
     .eq('id', params.phaseId)
     .eq('project_id', project.id)
     .maybeSingle()
   if (!phase) notFound()
+
+  const phaseCompleted = isPhaseCompleted((phase as { status?: string }).status)
 
   const { data: process } = await supabase
     .from('phase_processes')
@@ -261,8 +264,9 @@ export default async function ProcessBacklogPage({
       pullStageId={pullStage?.id ?? null}
       pullStageName={pullStage?.name ?? null}
       assigneeNames={assigneeNames}
-      canManageBacklog={canManageBacklog}
-      canCreateSprintDraft={canCreateSprintDraft}
+      canManageBacklog={canManageBacklog && !phaseCompleted}
+      canCreateSprintDraft={canCreateSprintDraft && !phaseCompleted}
+      phaseCompleted={phaseCompleted}
     />
   )
 
@@ -275,6 +279,7 @@ export default async function ProcessBacklogPage({
         processName={process.name}
         currentTab="backlog"
         allProcesses={(allProcesses ?? []) as { id: string; name: string; methodology: string }[]}
+        phaseCompleted={phaseCompleted}
       >
         {backlogClient}
       </KanbanProcessChrome>
@@ -290,6 +295,7 @@ export default async function ProcessBacklogPage({
         processName={process.name}
         currentTab="backlog"
         allProcesses={(allProcesses ?? []) as { id: string; name: string; methodology: string }[]}
+        phaseCompleted={phaseCompleted}
       >
         {backlogClient}
       </ScrumProcessChrome>

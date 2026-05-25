@@ -18,6 +18,8 @@ interface BacklogTaskCardProps {
   onDelete: () => void;
   showCheckbox?: boolean;
   showActions?: boolean;
+  /** Opens task detail when the card body is clicked (not used with drag handle). */
+  onOpen?: () => void;
 }
 
 const priorityColors = {
@@ -42,16 +44,44 @@ export function BacklogTaskCard({
   onDelete,
   showCheckbox = true,
   showActions = true,
+  onOpen,
 }: BacklogTaskCardProps) {
+  const openable = typeof onOpen === 'function'
+
   return (
-    <div className={`group border rounded-lg p-4 transition-all hover:shadow-md ${
-      isSelected ? 'border-blue-500 bg-blue-50/50' : 'border-gray-200 bg-white'
-    }`}>
+    <div
+      className={`group border rounded-lg p-4 transition-all hover:shadow-md ${
+        isSelected ? 'border-blue-500 bg-blue-50/50' : 'border-gray-200 bg-white'
+      } ${openable ? 'cursor-pointer' : ''}`}
+      role={openable ? 'button' : undefined}
+      tabIndex={openable ? 0 : undefined}
+      onClick={
+        openable
+          ? (e) => {
+              const target = e.target as HTMLElement
+              if (target.closest('button, input, a, [data-no-card-open]')) return
+              onOpen()
+            }
+          : undefined
+      }
+      onKeyDown={
+        openable
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onOpen()
+              }
+            }
+          : undefined
+      }
+    >
       <div className="flex items-start gap-4">
         {/* Drag Handle */}
-        <div className="cursor-grab text-gray-300 hover:text-gray-500 mt-1">
-          <GripVertical className="h-5 w-5" />
-        </div>
+        {showActions ? (
+          <div className="cursor-grab text-gray-300 hover:text-gray-500 mt-1" data-no-card-open>
+            <GripVertical className="h-5 w-5" />
+          </div>
+        ) : null}
 
         {/* Checkbox */}
         {showCheckbox ? (

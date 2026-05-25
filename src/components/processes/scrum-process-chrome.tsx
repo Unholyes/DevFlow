@@ -10,6 +10,7 @@ import {
   processSummaryPath,
   processSwitcherPath,
 } from '@/lib/processes/process-workspace-routes'
+import { PhaseCompletedBanner } from '@/components/phases/phase-completed-banner'
 
 export type ScrumProcessTab = 'summary' | 'sprints' | 'board' | 'backlog'
 
@@ -20,6 +21,7 @@ export function ScrumProcessChrome(props: {
   processName: string
   currentTab: ScrumProcessTab
   allProcesses?: { id: string; name: string; methodology: string }[]
+  phaseCompleted?: boolean
   children: React.ReactNode
 }) {
   const base = `/dashboard/projects/${props.projectId}/phases/${props.phaseId}`
@@ -63,6 +65,8 @@ export function ScrumProcessChrome(props: {
           ))}
         </div>
       ) : null}
+
+      {props.phaseCompleted ? <PhaseCompletedBanner /> : null}
 
       <nav className="flex flex-wrap gap-1 border-b border-gray-200" aria-label="Scrum process">
         {tabs.map((tab) => (

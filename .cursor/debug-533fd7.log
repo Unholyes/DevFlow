@@ -1,0 +1,2 @@
+{"sessionId":"533fd7","location":"product-backlog-page-client.tsx:mount","message":"backlog gating props","data":{"phaseCompleted":true,"canManageBacklog":false,"canCreateSprintDraft":false},"timestamp":1779735213734,"hypothesisId":"B","runId":"post-fix"}
+{"sessionId":"533fd7","location":"product-backlog-page-client.tsx:mount","message":"backlog gating props","data":{"phaseCompleted":true,"canManageBacklog":false,"canCreateSprintDraft":false},"timestamp":1779735213734,"hypothesisId":"B","runId":"post-fix"}

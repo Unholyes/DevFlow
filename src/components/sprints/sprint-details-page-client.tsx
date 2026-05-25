@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { BacklogTaskCard } from '@/components/project/backlog-task-card'
+import { KanbanTaskDetailModal } from '@/components/project/KanbanTaskDetailModal'
 import { SprintCompletionModal } from '@/components/project/sprint-completion-modal'
 import { processBoardPath } from '@/lib/processes/process-workspace-routes'
 import { isSprintActiveForBoard } from '@/lib/sprints/sprint-board-eligibility'
@@ -100,6 +101,10 @@ export function SprintDetailsPageClient(props: {
   }, [searchParams])
   const [isCompleting, setIsCompleting] = useState(false)
   const [tasks, setTasks] = useState<Task[]>(props.tasks)
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
+
+  const sprintClosed = props.sprint.status === 'closed'
+  const taskDetailReadOnly = sprintClosed || !props.canManageSprints
 
   const totalTasks = tasks.length
   const isTaskDone = (t: Task) => isTaskDoneForSprintClose(t, stageIsDoneMap)
@@ -425,12 +430,13 @@ export function SprintDetailsPageClient(props: {
                     }}
                     isSelected={false}
                     onSelect={() => {}}
-                    onEdit={() => {}}
+                    onEdit={() => setDetailTaskId(task.id)}
                     onDelete={() => {}}
                     showCheckbox={false}
                     showActions={false}
+                    onOpen={() => setDetailTaskId(task.id)}
                   />
-                  <div className="absolute right-4 top-4 flex items-center gap-2">
+                  <div className="absolute right-4 top-4 flex items-center gap-2 pointer-events-none">
                     {isTaskDone(task) ? (
                       <div className="pointer-events-none inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
                         <CheckCircle2 className="h-3 w-3" />
@@ -500,6 +506,16 @@ export function SprintDetailsPageClient(props: {
           </CardContent>
         </Card>
       ) : null}
+
+      <KanbanTaskDetailModal
+        taskId={detailTaskId}
+        open={detailTaskId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetailTaskId(null)
+        }}
+        onTaskSaved={() => {}}
+        readOnly={taskDetailReadOnly}
+      />
 
       {props.canManageSprints ? (
         <SprintCompletionModal
