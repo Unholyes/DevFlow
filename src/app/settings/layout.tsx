@@ -7,6 +7,7 @@ import { buildOrganizationTheme, ORGANIZATION_THEME_COLUMNS } from '@/lib/theme/
 import type { UserRole } from '@/types'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
+import { loadMemberProjectIds, loadSidebarProjects } from '@/lib/dashboard/load-sidebar-projects'
 
 interface SettingsLayoutProps {
   children: ReactNode
@@ -37,6 +38,11 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
   const ws = await resolveWorkspaceContext({ supabase: supabase as any, userId: user.id })
   const role = ws.role as UserRole
 
+  let memberProjectIds: string[] = []
+  if (role === 'team_member') {
+    memberProjectIds = await loadMemberProjectIds(supabase as any, user.id)
+  }
+
   // Tenant-domain onboarding wizard gate:
   // if we're on a tenant subdomain and the org has no projects yet, force the setup wizard.
   const tenantSlug = getTenantSlug()
@@ -63,13 +69,11 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
   let organizationTheme = undefined
 
   if (ws.organizationId) {
-    const { data: projectRows } = await supabase
-      .from('projects')
-      .select('id,name')
-      .eq('organization_id', ws.organizationId)
-      .order('created_at', { ascending: false })
-      .limit(4)
-    sidebarProjects = projectRows ?? []
+    sidebarProjects = await loadSidebarProjects(supabase as any, {
+      organizationId: ws.organizationId,
+      userId: user.id,
+      role,
+    })
 
     const { data: orgData } = await supabase
       .from('organizations')
@@ -82,7 +86,7 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
 
   return (
     <ThemeProvider organizationTheme={organizationTheme}>
-      <DashboardLayout role={role} sidebarProjects={sidebarProjects}>
+      <DashboardLayout role={role} sidebarProjects={sidebarProjects} memberProjectIds={memberProjectIds}>
         {children}
       </DashboardLayout>
     </ThemeProvider>

@@ -4,6 +4,8 @@ import type { NextRequest } from 'next/server'
 import { USER_ROLES } from './constants'
 import { resolveTenantSlugFromHost, TENANT_SLUG_HEADER } from '@/lib/tenant/resolve'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { canAccessDashboardPath } from '@/lib/dashboard/dashboard-access'
+import { resolveWorkspaceRoleForMiddleware } from '@/lib/auth/resolve-workspace-role-middleware'
 
 function stripPort(host: string) {
   const idx = host.indexOf(':')
@@ -389,6 +391,27 @@ export async function middleware(req: NextRequest) {
   if (user && isOnboardingRoute && tenantSlug && pathname === '/onboarding') {
     console.log('[mw] tenant /onboarding -> /dashboard', { host: req.headers.get('host'), pathname, tenantSlug })
     return NextResponse.redirect(new URL('/dashboard', req.url))
+  }
+
+  // Org-scoped dashboard/settings routes: tenant admins vs members see different pages.
+  if (user && (pathname.startsWith('/dashboard') || pathname.startsWith('/settings'))) {
+    const { data: profileForAccess } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (profileForAccess?.role !== USER_ROLES.SUPER_ADMIN) {
+      const { role } = await resolveWorkspaceRoleForMiddleware(supabase, user.id, tenantSlug)
+      if (!canAccessDashboardPath(role, pathname)) {
+        console.log('[mw] role denied dashboard path -> /dashboard', {
+          host: req.headers.get('host'),
+          pathname,
+          role,
+        })
+        return NextResponse.redirect(new URL('/dashboard', req.url))
+      }
+    }
   }
 
   return res

@@ -18,6 +18,7 @@ import {
 import { cn } from '@/lib/utils'
 import type { UserRole } from '@/types'
 import { useOrganizationName } from '@/lib/hooks/use-organization-name'
+import { getDashboardNavItems } from '@/lib/dashboard/dashboard-access'
 
 export type SidebarProject = { id: string; name: string }
 
@@ -29,20 +30,15 @@ function sidebarProjectLabel(projects: SidebarProject[], project: SidebarProject
   return `${project.name} · ${project.id.slice(0, 6)}`
 }
 
-const tenantMemberNavigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: Home },
-  { name: 'Tasks', href: '/dashboard/tasks', icon: CheckSquare },
-  { name: 'Calendar', href: '/dashboard/calendar', icon: Calendar },
-  { name: 'Team', href: '/dashboard/team', icon: Users },
-  { name: 'Reports & Analytics', href: '/dashboard/reports', icon: BarChart3 },
-]
-
-const tenantAdminNavigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: Home },
-  { name: 'Accounts', href: '/dashboard/accounts', icon: UserCog },
-  { name: 'Projects', href: '/dashboard/projects', icon: FolderOpen },
-  { name: 'Reports & Analytics', href: '/dashboard/reports', icon: BarChart3 },
-]
+const navIcons = {
+  Dashboard: Home,
+  Tasks: CheckSquare,
+  Calendar: Calendar,
+  Team: Users,
+  'Reports & Analytics': BarChart3,
+  Accounts: UserCog,
+  Projects: FolderOpen,
+} as const
 
 const bottomNavigation = [
   { name: 'Settings', href: '/settings', icon: Settings },
@@ -65,7 +61,11 @@ export function DashboardSidebar({
   const [isProjectsOpen, setIsProjectsOpen] = useState(true)
   const { name: organizationName } = useOrganizationName()
 
-  const navItems = role === 'tenant_admin' ? tenantAdminNavigation : tenantMemberNavigation
+  const navItems = getDashboardNavItems(role).map((item) => ({
+    ...item,
+    icon: navIcons[item.name as keyof typeof navIcons] ?? Home,
+  }))
+  const showProjectsSection = role === 'tenant_admin' || projects.length > 0
 
   return (
     <div
@@ -97,8 +97,8 @@ export function DashboardSidebar({
           )
         })}
 
-        {/* Projects Section - Hide when collapsed */}
-        {!isCollapsed && (
+        {/* Projects Section - admins always; members only when they have project access */}
+        {!isCollapsed && showProjectsSection && (
           <div className="mt-8">
             <button
               onClick={() => setIsProjectsOpen(!isProjectsOpen)}
@@ -134,13 +134,15 @@ export function DashboardSidebar({
                     </Link>
                   )
                 })}
-                <Link
-                  href="/dashboard/projects"
-                  className="flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ml-3 text-[color:var(--theme-muted-foreground)] hover:bg-black/5 hover:text-[var(--theme-primary)]"
-                >
-                  <FolderOpen className="mr-3 h-4 w-4" />
-                  <span>View all projects</span>
-                </Link>
+                {role === 'tenant_admin' && (
+                  <Link
+                    href="/dashboard/projects"
+                    className="flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ml-3 text-[color:var(--theme-muted-foreground)] hover:bg-black/5 hover:text-[var(--theme-primary)]"
+                  >
+                    <FolderOpen className="mr-3 h-4 w-4" />
+                    <span>View all projects</span>
+                  </Link>
+                )}
               </div>
             )}
           </div>

@@ -5,6 +5,7 @@ import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { loadMemberDashboardData } from '@/lib/dashboard/load-team-member-dashboard'
 import { redirect } from 'next/navigation'
+import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
 
 export default async function Dashboard() {
   const supabase = createClient()
@@ -32,16 +33,15 @@ export default async function Dashboard() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, full_name')
+    .select('full_name')
     .eq('id', user.id)
     .single()
 
-  const role = profile?.role ?? 'team_member'
+  const ws = await resolveWorkspaceContext({ supabase: supabase as any, userId: user.id })
   const displayName =
     profile?.full_name?.trim() || user.email?.split('@')[0] || 'there'
 
-  // Show tenant admin dashboard for tenant_admin role
-  if (role === 'tenant_admin') {
+  if (ws.role === 'tenant_admin') {
     const [
       activeProjectsRes,
       membersRes,

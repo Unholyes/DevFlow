@@ -3,26 +3,31 @@
 import { ReactNode, useState } from 'react'
 import { DashboardHeader } from './dashboard-header'
 import { DashboardSidebar, type SidebarProject } from './dashboard-sidebar'
+import { DashboardRouteGuard } from './dashboard-route-guard'
 import type { UserRole } from '@/types'
 
 interface DashboardLayoutProps {
   children: ReactNode
   role?: UserRole
   sidebarProjects?: SidebarProject[]
+  memberProjectIds?: string[]
 }
 
 export function DashboardLayout({
   children,
   role = 'team_member',
   sidebarProjects = [],
+  memberProjectIds = [],
 }: DashboardLayoutProps) {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
 
   return (
     <div className="min-h-screen bg-[var(--theme-background)] text-[var(--theme-foreground)]">
+      <DashboardRouteGuard role={role} memberProjectIds={memberProjectIds} />
       {/* Fixed Header */}
       <div className="fixed top-0 left-0 right-0 z-50">
-        <DashboardHeader 
+        <DashboardHeader
+          role={role}
           isSidebarCollapsed={isSidebarCollapsed}
           onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         />

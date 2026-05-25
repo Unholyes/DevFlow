@@ -6,6 +6,7 @@ import { ThemeProvider } from '@/components/theme/theme-provider'
 import { buildOrganizationTheme, ORGANIZATION_THEME_COLUMNS } from '@/lib/theme/load-organization-theme'
 import type { UserRole } from '@/types'
 import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
+import { loadMemberProjectIds, loadSidebarProjects } from '@/lib/dashboard/load-sidebar-projects'
 
 export default async function DashboardRouteLayout({ children }: { children: ReactNode }) {
   const supabase = createClient()
@@ -32,6 +33,11 @@ export default async function DashboardRouteLayout({ children }: { children: Rea
   const ws = await resolveWorkspaceContext({ supabase: supabase as any, userId: user.id })
   const role = ws.role as UserRole
 
+  let memberProjectIds: string[] = []
+  if (role === 'team_member') {
+    memberProjectIds = await loadMemberProjectIds(supabase as any, user.id)
+  }
+
   // First-time tenant setup: if this workspace has no projects yet, tenant admins complete
   // the wizard before the main dashboard (works on base host e.g. localhost as well as tenant subdomains).
   if (role === 'tenant_admin' && ws.organizationId) {
@@ -51,13 +57,11 @@ export default async function DashboardRouteLayout({ children }: { children: Rea
   let organizationTheme = undefined
 
   if (ws.organizationId) {
-    const { data: projectRows } = await supabase
-      .from('projects')
-      .select('id,name')
-      .eq('organization_id', ws.organizationId)
-      .order('created_at', { ascending: false })
-      .limit(4)
-    sidebarProjects = projectRows ?? []
+    sidebarProjects = await loadSidebarProjects(supabase as any, {
+      organizationId: ws.organizationId,
+      userId: user.id,
+      role,
+    })
 
     const { data: orgData } = await supabase
       .from('organizations')
@@ -70,7 +74,7 @@ export default async function DashboardRouteLayout({ children }: { children: Rea
 
   return (
     <ThemeProvider organizationTheme={organizationTheme}>
-      <DashboardLayout role={role} sidebarProjects={sidebarProjects}>
+      <DashboardLayout role={role} sidebarProjects={sidebarProjects} memberProjectIds={memberProjectIds}>
         {children}
       </DashboardLayout>
     </ThemeProvider>

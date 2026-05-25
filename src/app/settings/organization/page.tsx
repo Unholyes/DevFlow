@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import { updateOrganization } from '@/lib/actions/settings'
 import { OrganizationForm } from '@/components/settings/organization-form'
+import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
 import {
   settingsCard,
   settingsMemberRow,
@@ -23,13 +24,8 @@ export default async function OrganizationPage() {
     redirect('/auth/login')
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  if (profile?.role !== 'tenant_admin') {
+  const ws = await resolveWorkspaceContext({ supabase: supabase as any, userId: user.id })
+  if (ws.role !== 'tenant_admin') {
     redirect('/settings')
   }
 

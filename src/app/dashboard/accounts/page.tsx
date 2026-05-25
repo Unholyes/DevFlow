@@ -90,7 +90,12 @@ export default async function AccountsPage({
   if (ws.organizationId !== organizationId) {
     redirect('/dashboard')
   }
-  const canManageAccounts = ws.role === 'tenant_admin'
+
+  if (ws.role !== 'tenant_admin') {
+    redirect('/dashboard')
+  }
+
+  const canManageAccounts = true
 
   const [{ data: ownedOrgs }, { data: memberships }] = await Promise.all([
     supabase

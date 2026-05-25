@@ -18,6 +18,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { supabase } from '@/lib/supabase/client'
 import { useOrganizationName } from '@/lib/hooks/use-organization-name'
 import { NotificationsDropdown } from '@/components/dashboard/notifications-dropdown'
+import { getSearchPlaceholder } from '@/lib/dashboard/dashboard-access'
+import type { UserRole } from '@/types'
 
 type HeaderUser = {
   fullName: string
@@ -29,16 +31,21 @@ type SearchSuggestion = {
   id: string
   label: string
   href: string
-  type: 'project' | 'feature'
+  type: 'project' | 'feature' | 'task'
   description?: string
 }
 
 interface DashboardHeaderProps {
   isSidebarCollapsed?: boolean
   onToggleSidebar?: () => void
+  role?: UserRole
 }
 
-export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }: DashboardHeaderProps) {
+export function DashboardHeader({
+  isSidebarCollapsed = false,
+  onToggleSidebar,
+  role = 'team_member',
+}: DashboardHeaderProps) {
   const router = useRouter()
   const [userInfo, setUserInfo] = useState<HeaderUser | null>(null)
   const { name: organizationName, icon: organizationIcon } = useOrganizationName()
@@ -206,7 +213,7 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
-              placeholder="Search projects, settings, and features..."
+              placeholder={getSearchPlaceholder(role)}
               className="pl-10 pr-4 py-2 w-full rounded-full focus-visible:ring-2 focus-visible:ring-[var(--theme-primary)] border"
               style={{ backgroundColor: 'color-mix(in srgb, var(--theme-surface) 70%, white)', borderColor: 'var(--theme-border)' }}
               value={searchQuery}
@@ -242,7 +249,11 @@ export function DashboardHeader({ isSidebarCollapsed = false, onToggleSidebar }:
                         >
                           <p className="text-sm font-medium text-gray-900">{suggestion.label}</p>
                           <p className="text-xs text-gray-500">
-                            {suggestion.type === 'project' ? 'Project' : 'Feature'}
+                            {suggestion.type === 'project'
+                              ? 'Project'
+                              : suggestion.type === 'task'
+                                ? 'Task'
+                                : 'Feature'}
                             {suggestion.description ? ` - ${suggestion.description}` : ''}
                           </p>
                         </button>
