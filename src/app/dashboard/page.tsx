@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { getCachedUser, getCachedProfile } from '@/lib/supabase/cached'
 import { TenantAdminDashboardHome } from '@/components/dashboard/tenant-admin-dashboard-home'
 import { TeamMemberDashboard } from '@/components/dashboard/team-member-dashboard'
 import { getTenantSlug } from '@/lib/tenant/server'
@@ -11,9 +12,8 @@ export default async function Dashboard() {
   const supabase = createClient()
   const tenantSlug = getTenantSlug()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Use cached user + profile (shared with layout — zero extra DB calls)
+  const { user } = await getCachedUser()
 
   if (!user) {
     return null
@@ -31,11 +31,7 @@ export default async function Dashboard() {
 
   if (!orgId) redirect('/onboarding')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name')
-    .eq('id', user.id)
-    .single()
+  const profile = await getCachedProfile(user.id)
 
   const ws = await resolveWorkspaceContext({ supabase: supabase as any, userId: user.id })
   const displayName =

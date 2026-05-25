@@ -3,6 +3,7 @@ import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { ReportsAnalyticsContent } from '@/components/dashboard/reports-analytics-content'
 import { createClient } from '@/lib/supabase/server'
+import { getCachedUser } from '@/lib/supabase/cached'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { loadBlockedTasksForOrg } from '@/lib/reports/load-blocked-tasks'
@@ -16,12 +17,11 @@ export const metadata: Metadata = {
 
 export default async function ReportsAnalyticsPage() {
   const supabase = createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const tenantSlug = getTenantSlug()
+
+  const { user } = await getCachedUser()
   if (!user) redirect('/auth/login')
 
-  const tenantSlug = getTenantSlug()
   const orgId = tenantSlug
     ? (await supabase.from('organizations').select('id').eq('slug', tenantSlug).maybeSingle()).data?.id ?? null
     : await resolvePrimaryOrgIdForUser(supabase as any, user.id)

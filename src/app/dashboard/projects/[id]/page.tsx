@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { CheckCircle2, Clock, Circle, ArrowRight, ArrowLeft, Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { getCachedUser } from '@/lib/supabase/cached'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { userCanManageProjectMembers } from '@/lib/permissions/project-members-permissions'
@@ -30,9 +31,8 @@ export default async function ProjectPage({ params }: { params: { id: string } }
   const tenantSlug = getTenantSlug()
   const supabase = createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Use cached getUser (shared with layout — zero extra DB calls)
+  const { user } = await getCachedUser()
 
   if (!user) redirect('/auth/login')
 
@@ -48,121 +48,111 @@ export default async function ProjectPage({ params }: { params: { id: string } }
 
   if (!orgId) redirect('/onboarding')
 
-  // `phase_gating_enabled` was introduced in `migrations/add_phase_gating.sql`.
-  // If the column doesn't exist yet, PostgREST returns PGRST204, causing `project` to be null.
-  // Retry without the column so the page doesn't 404.
-  let project:
-    | {
-        id: string
-        name: string
-        description: string | null
-        status: string
-        progress_percent: number | null
-        phase_gating_enabled?: boolean | null
-      due_date?: string | null
-      }
-    | null = null
-
-  {
-    const attempt = await supabase
+  // ── Batch 1: Fetch project, team count, phases, and permissions in parallel ──
+  const [projectAttempt, memberCountRes, phasesAttempt, canManageProjectTeam] = await Promise.all([
+    supabase
       .from('projects')
       .select('id,name,description,status,progress_percent,phase_gating_enabled,due_date')
       .eq('id', params.id)
       .eq('organization_id', orgId)
+      .maybeSingle(),
+    supabase
+      .from('project_members')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', params.id)
+      .eq('organization_id', orgId),
+    supabase
+      .from('sdlc_phases')
+      .select('id,title,methodology,status,order_index,is_gated')
+      .eq('project_id', params.id)
+      .order('order_index', { ascending: true }),
+    userCanManageProjectMembers(supabase, {
+      organizationId: orgId,
+      userId: user.id,
+      projectId: params.id,
+    }),
+  ])
+
+  // Handle PGRST204 fallback for project (column doesn't exist yet)
+  let project: {
+    id: string; name: string; description: string | null; status: string;
+    progress_percent: number | null; phase_gating_enabled?: boolean | null;
+    due_date?: string | null;
+  } | null = null
+
+  if (projectAttempt.error?.code === 'PGRST204') {
+    const fallbackWithDueDate = await supabase
+      .from('projects')
+      .select('id,name,description,status,progress_percent,due_date')
+      .eq('id', params.id)
+      .eq('organization_id', orgId)
       .maybeSingle()
 
-    if (attempt.error?.code === 'PGRST204') {
-      const fallbackWithDueDate = await supabase
+    if (fallbackWithDueDate.error?.code === 'PGRST204') {
+      const fallback = await supabase
         .from('projects')
-        .select('id,name,description,status,progress_percent,due_date')
+        .select('id,name,description,status,progress_percent')
         .eq('id', params.id)
         .eq('organization_id', orgId)
         .maybeSingle()
-
-      if (fallbackWithDueDate.error?.code === 'PGRST204') {
-        const fallback = await supabase
-          .from('projects')
-          .select('id,name,description,status,progress_percent')
-          .eq('id', params.id)
-          .eq('organization_id', orgId)
-          .maybeSingle()
-
-        project = fallback.data as any
-      } else {
-        project = fallbackWithDueDate.data as any
-      }
+      project = fallback.data as any
     } else {
-      project = attempt.data as any
+      project = fallbackWithDueDate.data as any
     }
+  } else {
+    project = projectAttempt.data as any
   }
 
   if (!project) notFound()
   const projectDueDate = project.due_date ? new Date(project.due_date) : null
+  const teamMemberCount = (!memberCountRes.error && typeof memberCountRes.count === 'number')
+    ? memberCountRes.count
+    : 0
 
-  let teamMemberCount = 0
-  {
-    const { count, error: memberCountError } = await supabase
-      .from('project_members')
-      .select('id', { count: 'exact', head: true })
-      .eq('project_id', project.id)
-      .eq('organization_id', orgId)
+  // Handle PGRST204 fallback for phases
+  let phases: {
+    id: string; title: string; methodology: 'scrum' | 'kanban' | 'waterfall' | 'devops';
+    status: string; order_index: number; is_gated?: boolean | null;
+  }[] | null = null
 
-    if (!memberCountError && typeof count === 'number') {
-      teamMemberCount = count
-    }
-  }
-
-  // `is_gated` was introduced in `migrations/add_phase_gating.sql`.
-  // Retry without it if needed.
-  let phases:
-    | {
-        id: string
-        title: string
-        methodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
-        status: string
-        order_index: number
-        is_gated?: boolean | null
-      }[]
-    | null = null
-
-  {
-    const attempt = await supabase
+  if (phasesAttempt.error?.code === 'PGRST204') {
+    const fallback = await supabase
       .from('sdlc_phases')
-      .select('id,title,methodology,status,order_index,is_gated')
+      .select('id,title,methodology,status,order_index')
       .eq('project_id', project.id)
       .order('order_index', { ascending: true })
-
-    if (attempt.error?.code === 'PGRST204') {
-      const fallback = await supabase
-        .from('sdlc_phases')
-        .select('id,title,methodology,status,order_index')
-        .eq('project_id', project.id)
-        .order('order_index', { ascending: true })
-      phases = fallback.data as any
-    } else {
-      phases = attempt.data as any
-    }
+    phases = fallback.data as any
+  } else {
+    phases = phasesAttempt.data as any
   }
 
-  // Per-phase and project progress: % of tasks done (completed_at or is_done stage).
-  // Done semantics match the phase page: completed_at OR stage marked is_done.
+  // ── Batch 2: Fetch workflow stages, tasks, and phase processes in parallel ──
   const phaseIdsForProgress = (phases ?? []).map((phase) => phase.id)
-  const { data: workflowStagesForProgress } =
-    phaseIdsForProgress.length > 0
-      ? await supabase
+
+  const [workflowStagesRes, phaseProcessesRes] = phaseIdsForProgress.length > 0
+    ? await Promise.all([
+        supabase
           .from('workflow_stages')
           .select('id,phase_id,is_done')
           .eq('organization_id', orgId)
+          .in('phase_id', phaseIdsForProgress),
+        supabase
+          .from('phase_processes')
+          .select('id,phase_id,name,methodology,order_index')
           .in('phase_id', phaseIdsForProgress)
-      : { data: [] as any[] }
+          .order('order_index', { ascending: true }),
+      ])
+    : [{ data: [] as any[] }, { data: [] as any[] }]
 
+  const workflowStagesForProgress = workflowStagesRes.data ?? []
   const stageIdToPhaseId = new Map<string, string>()
   const doneStageIds = new Set<string>()
-  for (const s of (workflowStagesForProgress ?? []) as { id: string; phase_id: string; is_done: boolean }[]) {
+  for (const s of workflowStagesForProgress as { id: string; phase_id: string; is_done: boolean }[]) {
     stageIdToPhaseId.set(s.id, s.phase_id)
     if (s.is_done) doneStageIds.add(s.id)
   }
 
+  // Fetch tasks (depends on stage IDs from previous batch)
   const stageIdsForProgress = Array.from(stageIdToPhaseId.keys())
   const { data: tasksForProgress } =
     stageIdsForProgress.length > 0
@@ -204,33 +194,16 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         ? Math.min(100, Math.max(0, Math.round((completedTasks / tasksCount) * 100)))
         : (project.progress_percent ?? 0)
 
-  let phaseProcesses:
-    | {
-        id: string
-        phase_id: string
-        name: string
-        methodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'
-        order_index: number
-      }[]
-    | null = null
+  // Handle PGRST204 for phase processes
+  let phaseProcesses: {
+    id: string; phase_id: string; name: string;
+    methodology: 'scrum' | 'kanban' | 'waterfall' | 'devops'; order_index: number;
+  }[] | null = null
 
-  {
-    const phaseIds = (phases ?? []).map((phase) => phase.id)
-    if (phaseIds.length === 0) {
-      phaseProcesses = []
-    } else {
-      const attempt = await supabase
-        .from('phase_processes')
-        .select('id,phase_id,name,methodology,order_index')
-        .in('phase_id', phaseIds)
-        .order('order_index', { ascending: true })
-
-      if (attempt.error?.code === 'PGRST204') {
-        phaseProcesses = []
-      } else {
-        phaseProcesses = (attempt.data as any[]) ?? []
-      }
-    }
+  if ((phaseProcessesRes as any)?.error?.code === 'PGRST204') {
+    phaseProcesses = []
+  } else {
+    phaseProcesses = ((phaseProcessesRes.data as any[]) ?? [])
   }
 
   const mappedPhases = (phases ?? []).map((p) => {
@@ -288,12 +261,6 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     isGated: p.isGated,
     progress: p.progress,
   }))
-
-  const canManageProjectTeam = await userCanManageProjectMembers(supabase, {
-    organizationId: orgId,
-    userId: user.id,
-    projectId: project.id,
-  })
 
   return (
     <div className="space-y-6">

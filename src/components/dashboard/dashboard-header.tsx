@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Search, Settings, User, LogOut, Menu, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import type { ServerUserInfo } from './dashboard-layout'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,23 +40,39 @@ interface DashboardHeaderProps {
   isSidebarCollapsed?: boolean
   onToggleSidebar?: () => void
   role?: UserRole
+  serverUserInfo?: ServerUserInfo | null
+  serverOrganizationName?: string | null
+  serverOrganizationIcon?: string | null
 }
 
 export function DashboardHeader({
   isSidebarCollapsed = false,
   onToggleSidebar,
   role = 'team_member',
+  serverUserInfo = null,
+  serverOrganizationName = null,
+  serverOrganizationIcon = null,
 }: DashboardHeaderProps) {
   const router = useRouter()
-  const [userInfo, setUserInfo] = useState<HeaderUser | null>(null)
-  const { name: organizationName, icon: organizationIcon } = useOrganizationName()
+  // Use server-provided user info directly — no client-side fetch needed
+  const [userInfo, setUserInfo] = useState<HeaderUser | null>(
+    serverUserInfo
+      ? { fullName: serverUserInfo.fullName, email: serverUserInfo.email, avatarUrl: serverUserInfo.avatarUrl }
+      : null,
+  )
+  const clientOrg = useOrganizationName()
+  const organizationName = serverOrganizationName ?? clientOrg.name
+  const organizationIcon = serverOrganizationIcon ?? clientOrg.icon
   const [searchQuery, setSearchQuery] = useState('')
   const [searchSuggestions, setSearchSuggestions] = useState<SearchSuggestion[]>([])
   const [isSearchOpen, setIsSearchOpen] = useState(false)
   const [isSearchLoading, setIsSearchLoading] = useState(false)
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(-1)
 
+  // Only fetch client-side if server didn't provide user info (backwards compat)
   useEffect(() => {
+    if (userInfo) return // Already have server-provided data
+
     let isMounted = true
 
     const loadUser = async () => {
@@ -84,7 +101,7 @@ export function DashboardHeader({
     return () => {
       isMounted = false
     }
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const initials = useMemo(() => {
     const name = userInfo?.fullName

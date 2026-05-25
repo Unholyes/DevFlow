@@ -51,15 +51,18 @@ export function DashboardSidebar({
   isCollapsed = false,
   onToggle,
   projects = [],
+  serverOrganizationName = null,
 }: {
   role?: UserRole
   isCollapsed?: boolean
   onToggle?: () => void
   projects?: SidebarProject[]
+  serverOrganizationName?: string | null
 }) {
   const pathname = usePathname()
   const [isProjectsOpen, setIsProjectsOpen] = useState(true)
-  const { name: organizationName } = useOrganizationName()
+  const { name: clientOrganizationName } = useOrganizationName()
+  const organizationName = serverOrganizationName ?? clientOrganizationName
 
   const navItems = getDashboardNavItems(role).map((item) => ({
     ...item,

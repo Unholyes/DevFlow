@@ -28,17 +28,25 @@ export async function loadSidebarProjects(
 
   const { data: memberships } = await supabase
     .from('project_members')
-    .select('project_id, projects:project_id ( id, name, created_at )')
+    .select('project_id, projects:project_id ( id, name, created_at, organization_id )')
     .eq('user_id', opts.userId)
 
   const projects: SidebarProject[] = []
 
   for (const row of memberships ?? []) {
     const project = unwrapJoinedProject(
-      (row as { projects?: { id: string; name: string; created_at?: string } | { id: string; name: string; created_at?: string }[] | null })
-        .projects
+      (row as {
+        projects?:
+          | { id: string; name: string; created_at?: string; organization_id?: string }
+          | { id: string; name: string; created_at?: string; organization_id?: string }[]
+          | null
+      }).projects
     )
-    if (project?.id && project?.name) {
+    if (
+      project?.id &&
+      project?.name &&
+      String((project as { organization_id?: string }).organization_id ?? '') === opts.organizationId
+    ) {
       projects.push({ id: project.id, name: project.name })
     }
   }

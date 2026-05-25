@@ -1,6 +1,7 @@
 import { ReactNode } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getCachedUser, getCachedProfile, getCachedOrgInfo } from '@/lib/supabase/cached'
 import { DashboardLayout } from '@/components/dashboard/dashboard-layout'
 import { ThemeProvider } from '@/components/theme/theme-provider'
 import { buildOrganizationTheme, ORGANIZATION_THEME_COLUMNS } from '@/lib/theme/load-organization-theme'
@@ -16,35 +17,28 @@ interface SettingsLayoutProps {
 export default async function SettingsLayout({ children }: SettingsLayoutProps) {
   const supabase = createClient()
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { user } = await getCachedUser()
 
   if (!user) {
     redirect('/auth/login')
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+  const [profile, ws] = await Promise.all([
+    getCachedProfile(user.id),
+    resolveWorkspaceContext({ supabase: supabase as any, userId: user.id }),
+  ])
 
-  // Redirect super admins to their dashboard
+  const role = ws.role as UserRole
+
   if (profile?.role === 'super_admin') {
     redirect('/super-admin/dashboard')
   }
-
-  const ws = await resolveWorkspaceContext({ supabase: supabase as any, userId: user.id })
-  const role = ws.role as UserRole
 
   let memberProjectIds: string[] = []
   if (role === 'team_member') {
     memberProjectIds = await loadMemberProjectIds(supabase as any, user.id)
   }
 
-  // Tenant-domain onboarding wizard gate:
-  // if we're on a tenant subdomain and the org has no projects yet, force the setup wizard.
   const tenantSlug = getTenantSlug()
   if (tenantSlug) {
     const { data: org } = await supabase.from('organizations').select('id').eq('slug', tenantSlug).maybeSingle()
@@ -56,9 +50,6 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
         .limit(1)
         .maybeSingle()
 
-      // Only tenant admins should be forced into the setup wizard.
-      // Otherwise, non-admin members can get stuck in a redirect loop:
-      // /dashboard -> /onboarding/setup -> /dashboard ...
       if (!project?.id && role === 'tenant_admin') {
         redirect('/onboarding/setup')
       }
@@ -67,26 +58,48 @@ export default async function SettingsLayout({ children }: SettingsLayoutProps) 
 
   let sidebarProjects: { id: string; name: string }[] = []
   let organizationTheme = undefined
+  let orgInfo: { name: string | null; icon: string | null } = { name: null, icon: null }
 
   if (ws.organizationId) {
-    sidebarProjects = await loadSidebarProjects(supabase as any, {
-      organizationId: ws.organizationId,
-      userId: user.id,
-      role,
-    })
+    const [sidebarProjectsResult, orgThemeData, cachedOrgInfo] = await Promise.all([
+      loadSidebarProjects(supabase as any, {
+        organizationId: ws.organizationId,
+        userId: user.id,
+        role,
+      }),
+      supabase
+        .from('organizations')
+        .select(ORGANIZATION_THEME_COLUMNS)
+        .eq('id', ws.organizationId)
+        .single()
+        .then((r) => r.data),
+      getCachedOrgInfo(ws.organizationId),
+    ])
 
-    const { data: orgData } = await supabase
-      .from('organizations')
-      .select(ORGANIZATION_THEME_COLUMNS)
-      .eq('id', ws.organizationId)
-      .single()
+    sidebarProjects = sidebarProjectsResult
+    organizationTheme = buildOrganizationTheme(orgThemeData)
+    orgInfo = {
+      name: cachedOrgInfo?.name ?? null,
+      icon: cachedOrgInfo?.icon_url ?? null,
+    }
+  }
 
-    organizationTheme = buildOrganizationTheme(orgData)
+  const userInfo = {
+    fullName: profile?.full_name || user.email?.split('@')[0] || 'User',
+    email: user.email || 'No email',
+    avatarUrl: profile?.avatar_url || null,
   }
 
   return (
     <ThemeProvider organizationTheme={organizationTheme}>
-      <DashboardLayout role={role} sidebarProjects={sidebarProjects} memberProjectIds={memberProjectIds}>
+      <DashboardLayout
+        role={role}
+        sidebarProjects={sidebarProjects}
+        memberProjectIds={memberProjectIds}
+        userInfo={userInfo}
+        organizationName={orgInfo.name}
+        organizationIcon={orgInfo.icon}
+      >
         {children}
       </DashboardLayout>
     </ThemeProvider>

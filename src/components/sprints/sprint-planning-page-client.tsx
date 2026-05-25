@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowRight, ArrowLeft, Save, Play, Target, Minus, Plus, Loader2 } from 'lucide-react'
+import { ArrowRight, ArrowLeft, Save, Play, Target, Minus, Plus, Loader2, Archive } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -523,8 +523,8 @@ export function SprintPlanningPageClient(props: {
               onClick={handleSaveDraft}
               disabled={!sprintName.trim() || sprintTasks.length === 0 || sprintBacklogStoryPoints > capacity}
             >
-              <Save className="h-4 w-4 mr-2" />
-              Save Draft
+              <Archive className="h-4 w-4 mr-2" />
+              Archive Sprint
             </Button>
           ) : null}
           {canStartSprint ? (
@@ -575,10 +575,10 @@ export function SprintPlanningPageClient(props: {
 
       <Card
         className={`border-2 shadow-sm ${capacityStatus === 'over'
-            ? 'border-red-200 bg-red-50/30'
-            : capacityStatus === 'under'
-              ? 'border-yellow-200 bg-yellow-50/30'
-              : 'border-green-200 bg-green-50/30'
+          ? 'border-red-200 bg-red-50/30'
+          : capacityStatus === 'under'
+            ? 'border-yellow-200 bg-yellow-50/30'
+            : 'border-green-200 bg-green-50/30'
           }`}
       >
         <CardContent className="p-6">
@@ -586,18 +586,18 @@ export function SprintPlanningPageClient(props: {
             <div className="flex items-center gap-4">
               <div
                 className={`p-3 rounded-lg ${capacityStatus === 'over'
-                    ? 'bg-red-100'
-                    : capacityStatus === 'under'
-                      ? 'bg-yellow-100'
-                      : 'bg-green-100'
+                  ? 'bg-red-100'
+                  : capacityStatus === 'under'
+                    ? 'bg-yellow-100'
+                    : 'bg-green-100'
                   }`}
               >
                 <Target
                   className={`h-6 w-6 ${capacityStatus === 'over'
-                      ? 'text-red-600'
-                      : capacityStatus === 'under'
-                        ? 'text-yellow-600'
-                        : 'text-green-600'
+                    ? 'text-red-600'
+                    : capacityStatus === 'under'
+                      ? 'text-yellow-600'
+                      : 'text-green-600'
                     }`}
                 />
               </div>
@@ -658,7 +658,7 @@ export function SprintPlanningPageClient(props: {
         <Card className="border-gray-200 shadow-sm">
           <CardHeader>
             <div className="flex justify-between items-center">
-              <CardTitle className="text-lg">Product Bascklog</CardTitle>
+              <CardTitle className="text-lg">Product Backlog</CardTitle>
               <div className="flex items-center gap-2">
                 <Badge variant="outline">{remainingBacklog.length} tasks</Badge>
                 <Button
