@@ -68,15 +68,18 @@ export function DashboardSidebar({
     ...item,
     icon: navIcons[item.name as keyof typeof navIcons] ?? Home,
   }))
-  const showProjectsSection = role === 'tenant_admin' || projects.length > 0
+  const showProjectsSection = true
+  const isMemberProjectsEmpty = role === 'team_member' && projects.length === 0
+
+  const showMemberProjectsPanel = role === 'team_member' && !isCollapsed
 
   return (
     <div
-      className={`min-h-screen border-r flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`}
+      className={`h-full border-r flex flex-col transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-64'}`}
       style={{ backgroundColor: 'var(--theme-sidebar)', borderRightColor: 'var(--theme-border)' }}
     >
       {/* Navigation */}
-      <nav className="flex-1 px-2 py-6 space-y-2">
+      <nav className="flex-1 min-h-0 overflow-y-auto px-2 py-6 space-y-2">
         {navItems.map((item) => {
           const isActive = item.name === 'Dashboard'
             ? pathname === item.href
@@ -100,15 +103,79 @@ export function DashboardSidebar({
           )
         })}
 
-        {/* Projects Section - admins always; members only when they have project access */}
-        {!isCollapsed && showProjectsSection && (
-          <div className="mt-8">
+        {/* Quick links to assigned projects (members) or org projects (admins) */}
+        {showMemberProjectsPanel && showProjectsSection && (
+          <div className="mt-6">
             <button
               onClick={() => setIsProjectsOpen(!isProjectsOpen)}
               className="flex items-center justify-between w-full px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-colors hover:text-[color:var(--theme-foreground)]"
               style={{ color: 'var(--theme-muted-foreground)' }}
             >
-              <span>Projects</span>
+              <span>Assigned projects</span>
+              {isProjectsOpen ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </button>
+            {isProjectsOpen && (
+              <div className="mt-2 space-y-1">
+                {isMemberProjectsEmpty ? (
+                  <div
+                    className="ml-3 mr-1 rounded-lg border border-dashed px-3 py-3"
+                    style={{ borderColor: 'var(--theme-border)' }}
+                  >
+                    <p className="text-xs font-medium" style={{ color: 'var(--theme-foreground)' }}>
+                      No projects assigned
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--theme-muted-foreground)' }}>
+                      When an admin adds you to a project, it will appear here.
+                    </p>
+                  </div>
+                ) : null}
+                {projects.slice(0, SIDEBAR_PROJECT_LIMIT).map((project) => {
+                  const projectHref = `/dashboard/projects/${project.id}`
+                  const isActive = pathname === projectHref
+                  return (
+                    <Link
+                      key={project.id}
+                      href={projectHref}
+                      title={sidebarProjectLabel(projects, project)}
+                      className={cn(
+                        'flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ml-3',
+                        isActive
+                          ? 'bg-[var(--theme-primary)]/10 text-[var(--theme-primary)] border-r-2 border-[var(--theme-primary)]'
+                          : 'text-[color:var(--theme-muted-foreground)] hover:bg-black/5 hover:text-[var(--theme-primary)]'
+                      )}
+                    >
+                      <FolderOpen className="mr-3 h-4 w-4" />
+                      <span className="truncate">{sidebarProjectLabel(projects, project)}</span>
+                    </Link>
+                  )
+                })}
+                {!isMemberProjectsEmpty && projects.length > SIDEBAR_PROJECT_LIMIT ? (
+                  <Link
+                    href="/dashboard/projects"
+                    className="flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ml-3 text-[color:var(--theme-muted-foreground)] hover:bg-black/5 hover:text-[var(--theme-primary)]"
+                  >
+                    <FolderOpen className="mr-3 h-4 w-4" />
+                    <span>View all assigned</span>
+                  </Link>
+                ) : null}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Admin: collapsible org project shortcuts */}
+        {role === 'tenant_admin' && !isCollapsed && showProjectsSection && (
+          <div className="mt-6">
+            <button
+              onClick={() => setIsProjectsOpen(!isProjectsOpen)}
+              className="flex items-center justify-between w-full px-3 py-2 text-xs font-semibold uppercase tracking-wider transition-colors hover:text-[color:var(--theme-foreground)]"
+              style={{ color: 'var(--theme-muted-foreground)' }}
+            >
+              <span>Recent projects</span>
               {isProjectsOpen ? (
                 <ChevronDown className="h-4 w-4" />
               ) : (
@@ -137,15 +204,13 @@ export function DashboardSidebar({
                     </Link>
                   )
                 })}
-                {role === 'tenant_admin' && (
-                  <Link
-                    href="/dashboard/projects"
-                    className="flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ml-3 text-[color:var(--theme-muted-foreground)] hover:bg-black/5 hover:text-[var(--theme-primary)]"
-                  >
-                    <FolderOpen className="mr-3 h-4 w-4" />
-                    <span>View all projects</span>
-                  </Link>
-                )}
+                <Link
+                  href="/dashboard/projects"
+                  className="flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ml-3 text-[color:var(--theme-muted-foreground)] hover:bg-black/5 hover:text-[var(--theme-primary)]"
+                >
+                  <FolderOpen className="mr-3 h-4 w-4" />
+                  <span>View all projects</span>
+                </Link>
               </div>
             )}
           </div>

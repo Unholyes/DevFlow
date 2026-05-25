@@ -129,10 +129,12 @@ export default async function ProjectsPage() {
         {projectList.length === 0 ? (
           <div className="md:col-span-2 lg:col-span-3 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-6 py-12 text-center">
             <FolderKanban className="mx-auto h-10 w-10 text-gray-400" aria-hidden />
-            <p className="mt-3 text-sm font-medium text-gray-900">No projects yet</p>
-            <p className="mt-1 text-sm text-gray-500">
+            <h2 className="mt-4 text-sm font-semibold text-gray-900">
+              {isTeamMember ? 'No projects assigned to you' : 'No projects yet'}
+            </h2>
+            <p className="mt-2 text-sm text-gray-600 max-w-md mx-auto leading-relaxed">
               {isTeamMember
-                ? 'You are not assigned to any projects in this workspace.'
+                ? 'Ask a workspace admin to add you to a project. Once you are on the team, projects will appear here and in the sidebar.'
                 : 'Create a project to get started.'}
             </p>
           </div>
@@ -188,7 +190,12 @@ export default async function ProjectsPage() {
 
                   <div className="flex items-center text-sm text-gray-600 pt-2 border-t border-gray-100">
                     <Calendar className="h-4 w-4 mr-2" />
-                    <span>Created {new Date(project.created_at).toLocaleDateString()}</span>
+                    <span>
+                      Created{' '}
+                      {project.created_at
+                        ? new Date(project.created_at).toLocaleDateString()
+                        : '—'}
+                    </span>
                   </div>
                 </div>
               </Link>

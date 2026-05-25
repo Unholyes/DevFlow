@@ -19,6 +19,8 @@ interface ProjectCardsProps {
     dueDate: Date
   }>
   showViewAll?: boolean
+  /** When set, empty state copy and actions match tenant member (assigned projects only). */
+  audience?: 'admin' | 'member'
 }
 
 const sdlcColors = {
@@ -34,13 +36,21 @@ const statusColors = {
   completed: 'bg-blue-100 text-blue-800',
 }
 
-export function ProjectCards({ projects, showViewAll = true }: ProjectCardsProps) {
+export function ProjectCards({
+  projects,
+  showViewAll = true,
+  audience = 'admin',
+}: ProjectCardsProps) {
+  const isMember = audience === 'member'
+
   return (
     <div className="bg-white overflow-hidden shadow rounded-lg">
       <div className="px-4 py-5 sm:p-6">
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-medium text-gray-900">Active Projects</h3>
-          {showViewAll && (
+          <h3 className="text-lg font-medium text-gray-900">
+            {isMember ? 'Your projects' : 'Active Projects'}
+          </h3>
+          {showViewAll && !isMember && (
             <Link href="/dashboard/projects" className="text-sm text-blue-600 hover:text-blue-500">
               View all projects
             </Link>
@@ -51,13 +61,19 @@ export function ProjectCards({ projects, showViewAll = true }: ProjectCardsProps
           {projects.length === 0 ? (
             <div className="sm:col-span-2 xl:col-span-3 rounded-lg border border-dashed border-gray-200 bg-gray-50/80 px-6 py-12 text-center">
               <FolderKanban className="mx-auto h-10 w-10 text-gray-400" aria-hidden />
-              <h4 className="mt-4 text-sm font-semibold text-gray-900">No active projects yet</h4>
+              <h4 className="mt-4 text-sm font-semibold text-gray-900">
+                {isMember ? 'No projects assigned to you' : 'No active projects yet'}
+              </h4>
               <p className="mt-2 text-sm text-gray-600 max-w-md mx-auto leading-relaxed">
-                When projects are set to active, they will show up here with progress and task counts.
+                {isMember
+                  ? 'Ask a workspace admin to add you to a project. Once you are on the team, progress and tasks will show here.'
+                  : 'When projects are set to active, they will show up here with progress and task counts.'}
               </p>
-              <Button asChild className="mt-6" variant="default">
-                <Link href="/dashboard/projects">Browse projects</Link>
-              </Button>
+              {!isMember ? (
+                <Button asChild className="mt-6" variant="default">
+                  <Link href="/dashboard/projects">Browse projects</Link>
+                </Button>
+              ) : null}
             </div>
           ) : null}
           {projects.map((project) => (

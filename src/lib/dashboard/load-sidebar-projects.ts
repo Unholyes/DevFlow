@@ -45,7 +45,7 @@ export async function loadSidebarProjects(
     if (
       project?.id &&
       project?.name &&
-      String((project as { organization_id?: string }).organization_id ?? '') === opts.organizationId
+      String(project.organization_id ?? '') === opts.organizationId
     ) {
       projects.push({ id: project.id, name: project.name })
     }

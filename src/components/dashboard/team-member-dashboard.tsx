@@ -93,7 +93,7 @@ export function TeamMemberDashboard({
             boardDescription={taskSummary || 'Tasks assigned to you, grouped by status.'}
             headerExtra={<TaskStatusSummary counts={statusCounts} />}
           />
-          <ProjectCards projects={projectCards} />
+          <ProjectCards projects={projectCards} showViewAll={false} audience="member" />
         </div>
 
         <div className="space-y-8">

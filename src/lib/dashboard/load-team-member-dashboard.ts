@@ -38,6 +38,13 @@ export type MemberDashboardActivity = RecentActivityItem
 
 const DEFAULT_METHODOLOGY: Project['sdlcMethodology'] = 'kanban'
 
+function unwrapJoinedProject<T extends Record<string, unknown>>(
+  value: T | T[] | null | undefined
+): T | null {
+  if (Array.isArray(value)) return (value[0] as T | undefined) ?? null
+  return value ?? null
+}
+
 export async function loadMemberDashboardData(
   supabase: SupabaseClient,
   organizationId: string,
@@ -48,44 +55,75 @@ export async function loadMemberDashboardData(
   activities: MemberDashboardActivity[]
   sprintHint: MemberDashboardSprintHint | null
 }> {
-  const { data: projectRows, error: projectsError } = await supabase
-    .from('projects')
-    .select('id,name,description,status,due_date,updated_at')
-    .eq('organization_id', organizationId)
-    .eq('status', 'active')
-    .order('updated_at', { ascending: false })
-    .limit(6)
+  const { data: memberships, error: projectsError } = await supabase
+    .from('project_members')
+    .select(
+      `
+      project_id,
+      projects:project_id (
+        id,
+        name,
+        description,
+        status,
+        due_date,
+        updated_at,
+        organization_id
+      )
+    `,
+    )
+    .eq('user_id', userId)
 
   if (projectsError) {
-    console.error('Dashboard projects:', projectsError)
+    console.error('Dashboard assigned projects:', projectsError)
   }
 
-  const projects = projectRows ?? []
+  const projects = (memberships ?? [])
+    .map((row) => {
+      const project = unwrapJoinedProject(
+        (row as { projects?: Record<string, unknown> | Record<string, unknown>[] | null }).projects
+      )
+      if (!project?.id) return null
+      if (String(project.organization_id ?? '') !== organizationId) return null
+      if (String(project.status ?? '') !== 'active') return null
+      return project
+    })
+    .filter((p): p is Record<string, unknown> => p !== null)
+    .sort((a, b) => {
+      const aTime = typeof a.updated_at === 'string' ? Date.parse(a.updated_at) : 0
+      const bTime = typeof b.updated_at === 'string' ? Date.parse(b.updated_at) : 0
+      return bTime - aTime
+    })
+    .slice(0, 6)
   const progressByProjectId = await computeProjectProgressByIds(
     supabase,
     organizationId,
-    projects.map((p) => ({ id: p.id, status: p.status as string | null }))
+    projects.map((p) => ({ id: String(p.id), status: (p.status as string | null) ?? null }))
   )
 
   const dashboardProjects: MemberDashboardProject[] = projects.map((p) => {
-    const agg = progressByProjectId.get(p.id) ?? {
+    const projectId = String(p.id)
+    const agg = progressByProjectId.get(projectId) ?? {
       progress: 0,
       tasksCount: 0,
       completedTasks: 0,
     }
-    const due =
-      p.due_date ??
-      (typeof p.updated_at === 'string' ? p.updated_at.slice(0, 10) : new Date().toISOString().slice(0, 10))
+    const dueRaw = p.due_date ?? p.updated_at
+    const dueDate =
+      typeof dueRaw === 'string' && /^\d{4}-\d{2}-\d{2}/.test(dueRaw)
+        ? dueRaw.slice(0, 10)
+        : dueRaw
+          ? new Date(String(dueRaw)).toISOString().slice(0, 10)
+          : new Date().toISOString().slice(0, 10)
     return {
-      id: p.id,
-      name: p.name ?? 'Untitled project',
+      id: projectId,
+      name: (p.name as string | null) ?? 'Untitled project',
       description: (p.description as string | null) ?? '',
       sdlcMethodology: DEFAULT_METHODOLOGY,
       status: (p.status as Project['status']) ?? 'active',
       progress: agg.progress,
       tasksCount: agg.tasksCount,
       completedTasks: agg.completedTasks,
-      dueDate: typeof due === 'string' ? due : new Date(due).toISOString().slice(0, 10),
+      dueDate,
     }
   })
 
@@ -130,9 +168,11 @@ export async function loadMemberDashboardData(
     }
   })
 
+  const assignedProjectIds = projects.map((p) => String(p.id))
+
   const [activities, sprintHint] = await Promise.all([
     loadRecentActivity(supabase, { organizationId, limit: 15 }),
-    loadNearestActiveSprint(supabase, organizationId),
+    loadNearestActiveSprint(supabase, organizationId, assignedProjectIds),
   ])
 
   return { projects: dashboardProjects, myTasks, activities, sprintHint }
@@ -140,14 +180,18 @@ export async function loadMemberDashboardData(
 
 async function loadNearestActiveSprint(
   supabase: SupabaseClient,
-  organizationId: string
+  organizationId: string,
+  assignedProjectIds: string[]
 ): Promise<MemberDashboardSprintHint | null> {
+  if (assignedProjectIds.length === 0) return null
+
   const today = new Date().toISOString().slice(0, 10)
   const { data: rows, error } = await supabase
     .from('sprints')
     .select('id,name,end_date,project_id,phase_id,process_id,status')
     .eq('organization_id', organizationId)
     .eq('status', 'active')
+    .in('project_id', assignedProjectIds)
     .gte('end_date', today)
     .order('end_date', { ascending: true })
     .limit(1)

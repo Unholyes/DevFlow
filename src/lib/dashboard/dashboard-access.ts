@@ -19,6 +19,7 @@ export const TENANT_MEMBER_NAV: DashboardNavItem[] = [
   { name: 'Dashboard', href: '/dashboard' },
   { name: 'Tasks', href: '/dashboard/tasks' },
   { name: 'Calendar', href: '/dashboard/calendar' },
+  { name: 'Projects', href: '/dashboard/projects' },
   { name: 'Team', href: '/dashboard/team' },
   { name: 'Reports & Analytics', href: '/dashboard/reports' },
 ]
@@ -83,6 +84,13 @@ const TENANT_MEMBER_SEARCH: DashboardSearchSuggestion[] = [
     href: '/dashboard/team',
     type: 'feature',
     description: 'View team members',
+  },
+  {
+    id: 'feature-projects',
+    label: 'Projects',
+    href: '/dashboard/projects',
+    type: 'feature',
+    description: 'View projects assigned to you',
   },
 ]
 
@@ -179,7 +187,8 @@ export function canAccessDashboardPath(role: UserRole, pathname: string): boolea
 
   // team_member
   if (TENANT_ADMIN_ONLY_PREFIXES.some((p) => matchesPrefix(path, p))) return false
-  if (path === '/dashboard/projects' || path === '/dashboard/projects/new') return false
+  if (path === '/dashboard/projects/new') return false
+  if (path === '/dashboard/projects') return true
   if (PROJECT_DETAIL_RE.test(path)) return true
   if (TENANT_MEMBER_ONLY_PREFIXES.some((p) => matchesPrefix(path, p))) return true
   if (path === '/dashboard' || matchesPrefix(path, '/dashboard/reports')) return true

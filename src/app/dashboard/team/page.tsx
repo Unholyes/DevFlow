@@ -3,6 +3,8 @@ import { TeamPageContent, type TeamPageContentProps } from '@/components/dashboa
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { redirect } from 'next/navigation'
+import { resolveWorkspaceContext } from '@/lib/auth/resolve-workspace-role'
+import { userCanInviteWorkspaceUsers } from '@/lib/permissions/can-invite-workspace-users'
 
 export default async function DashboardTeamPage() {
   const supabase = createClient()
@@ -28,8 +30,8 @@ export default async function DashboardTeamPage() {
 
   if (!orgId) redirect('/onboarding')
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  const workspaceRole = profile?.role === 'tenant_admin' ? 'tenant_admin' : 'team_member'
+  const ws = await resolveWorkspaceContext({ supabase: supabase as any, userId: user.id })
+  const canInviteUsers = await userCanInviteWorkspaceUsers(supabase as any, orgId, user.id)
 
   const [{ data: ownedOrgs }, { data: memberships }] = await Promise.all([
     supabase
@@ -64,7 +66,8 @@ export default async function DashboardTeamPage() {
     organizationId: orgId,
     currentUserId: user.id,
     organizations,
-    role: workspaceRole,
+    role: ws.role as 'tenant_admin' | 'team_member',
+    canInviteUsers,
   }
 
   return <TeamPageContent {...teamProps} />

@@ -1116,17 +1116,6 @@ export function AccountsPageContent({
                   }
                 }}
               >
-                <DialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="h-9"
-                    onClick={() => {
-                      setAssignRoleName('Member')
-                    }}
-                  >
-                    Assign role
-                  </Button>
-                </DialogTrigger>
                 <DialogContent className="max-w-lg p-0">
                   <DialogHeader className="space-y-1 border-b border-slate-200 px-6 py-5 text-left">
                     <div className="flex items-start gap-4">

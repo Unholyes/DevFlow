@@ -54,10 +54,13 @@ export function DashboardHeader({
   serverOrganizationIcon = null,
 }: DashboardHeaderProps) {
   const router = useRouter()
-  // Use server-provided user info directly — no client-side fetch needed
   const [userInfo, setUserInfo] = useState<HeaderUser | null>(
     serverUserInfo
-      ? { fullName: serverUserInfo.fullName, email: serverUserInfo.email, avatarUrl: serverUserInfo.avatarUrl }
+      ? {
+          fullName: serverUserInfo.fullName,
+          email: serverUserInfo.email,
+          avatarUrl: serverUserInfo.avatarUrl,
+        }
       : null,
   )
   const clientOrg = useOrganizationName()
@@ -71,7 +74,7 @@ export function DashboardHeader({
 
   // Only fetch client-side if server didn't provide user info (backwards compat)
   useEffect(() => {
-    if (userInfo) return // Already have server-provided data
+    if (userInfo) return
 
     let isMounted = true
 

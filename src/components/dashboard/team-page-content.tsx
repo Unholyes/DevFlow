@@ -58,6 +58,8 @@ export type TeamPageContentProps = {
   currentUserId: string
   organizations: AccessibleOrg[]
   role?: 'tenant_admin' | 'team_member'
+  /** Invite users permission (Accounts → Roles: Invite users). */
+  canInviteUsers?: boolean
 }
 
 function formatRelativeDate(value: string | Date) {
@@ -70,6 +72,7 @@ export function TeamPageContent({
   organizationId,
   currentUserId,
   organizations,
+  canInviteUsers: canInviteUsersProp = false,
 }: TeamPageContentProps) {
   const [query, setQuery] = useState('')
   const [membersList, setMembersList] = useState<WorkspaceMember[]>([])
@@ -123,19 +126,14 @@ export function TeamPageContent({
       try {
         const [
           { data: orgRolesData, error: orgRolesError },
-          { data: defaultRoleRows, error: defaultRolesError },
           { data: members, error: membersError },
-          { data: invites, error: invitesError },
+          invitesResult,
         ] = await Promise.all([
           supabase
             .from('organization_roles')
             .select('id,name,permissions')
             .eq('organization_id', selectedOrganizationId)
             .order('created_at', { ascending: true }),
-          supabase
-            .from('organization_default_roles')
-            .select('role,permissions')
-            .eq('organization_id', selectedOrganizationId),
           supabase
             .from('organization_members')
             .select(
@@ -154,16 +152,19 @@ export function TeamPageContent({
             )
             .eq('organization_id', selectedOrganizationId)
             .order('joined_at', { ascending: true }),
-          supabase
-            .from('team_invitations')
-            .select('id,email,created_at,status')
-            .eq('organization_id', selectedOrganizationId)
-            .eq('status', 'pending')
-            .order('created_at', { ascending: false }),
+          canInviteUsersProp
+            ? supabase
+                .from('team_invitations')
+                .select('id,email,created_at,status')
+                .eq('organization_id', selectedOrganizationId)
+                .eq('status', 'pending')
+                .order('created_at', { ascending: false })
+            : Promise.resolve({ data: [], error: null }),
         ])
 
+        const { data: invites, error: invitesError } = invitesResult
+
         if (orgRolesError) throw orgRolesError
-        if (defaultRolesError) throw defaultRolesError
         if (membersError) throw membersError
         if (invitesError) throw invitesError
 
@@ -242,7 +243,7 @@ export function TeamPageContent({
     return () => {
       cancelled = true
     }
-  }, [selectedOrganizationId, currentUserId])
+  }, [selectedOrganizationId, currentUserId, canInviteUsersProp])
 
   const handleInvite = async () => {
     const email = inviteEmail.trim().toLowerCase()
@@ -384,9 +385,12 @@ export function TeamPageContent({
     }
   }
 
-  const currentMember = useMemo(() => membersList.find((m) => m.userId === currentUserId) ?? null, [membersList, currentUserId])
+  const canInvite = canInviteUsersProp
+  const currentMember = useMemo(
+    () => membersList.find((m) => m.userId === currentUserId) ?? null,
+    [membersList, currentUserId],
+  )
   const currentSystemRole: SystemRole = currentMember?.systemRole ?? 'Member'
-  const canInvite = currentSystemRole === 'Owner' || currentSystemRole === 'Admin'
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-10">
@@ -840,7 +844,12 @@ export function TeamPageContent({
               <CardDescription>Manage pending invitations</CardDescription>
             </CardHeader>
             <CardContent>
-              {isLoading ? (
+              {!canInviteUsersProp ? (
+                <p className="py-8 text-center text-sm text-gray-500">
+                  You need the <span className="font-medium">Invite users</span> permission to view and
+                  manage invites. Ask an owner or admin to grant it under Accounts → Roles.
+                </p>
+              ) : isLoading ? (
                 <p className="py-8 text-center text-sm text-gray-500">Loading invites…</p>
               ) : invitesList.length === 0 ? (
                 <p className="py-8 text-center text-sm text-gray-500">No pending invites.</p>
