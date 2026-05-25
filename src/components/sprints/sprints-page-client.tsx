@@ -3,7 +3,11 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { Plus, CheckCircle2, PlayCircle, ListTodo } from 'lucide-react'
+import { Plus, CheckCircle2, PlayCircle, ListTodo, Archive } from 'lucide-react'
+import { getLocalDateString } from '@/lib/sprints/sprint-date-validation'
+import { isSprintActiveForBoard } from '@/lib/sprints/sprint-board-eligibility'
+import { validateSprintScheduledDates } from '@/lib/sprints/sprint-activation-dates'
+import { activateSprintWithScheduledDates } from '@/lib/sprints/activate-sprint'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -23,6 +27,127 @@ type SprintRow = {
   end_date: string | null
   status: 'draft' | 'planned' | 'active' | 'closed'
   story_points_total: number
+}
+
+function ArchivedSprintCard({
+  sprint,
+  planHref,
+  canManageSprints,
+  hasActiveSprint,
+  sprintStartStageId,
+  onRefresh,
+}: {
+  sprint: SprintWithStats
+  planHref: string
+  canManageSprints?: boolean
+  hasActiveSprint: boolean
+  sprintStartStageId?: string
+  onRefresh: () => void
+}) {
+  const [busy, setBusy] = useState<'delete' | 'approve' | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete archived proposal "${sprint.name}"? Tasks will return to the backlog.`)) return
+    setBusy('delete')
+    setError(null)
+    try {
+      const res = await fetch(`/api/sprints?id=${encodeURIComponent(sprint.id)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(typeof json.error === 'string' ? json.error : 'Failed to delete proposal')
+      onRefresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete proposal')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const scheduleError = validateSprintScheduledDates(sprint)
+
+  const handleApprove = async () => {
+    if (hasActiveSprint || scheduleError) return
+    setBusy('approve')
+    setError(null)
+    try {
+      const result = await activateSprintWithScheduledDates(sprint, {
+        sprintStartStageId,
+        fromDraft: true,
+      })
+      if (!result.ok) throw new Error(result.error)
+      onRefresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to activate sprint')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  return (
+    <div className="p-4 rounded-lg border border-amber-200 bg-amber-50/40 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h3 className="font-semibold text-gray-900">{sprint.name}</h3>
+          <p className="mt-1 text-xs text-gray-600">
+            Archived proposal · {sprint.tasks_total} tasks · {sprint.story_points_total} story points
+          </p>
+          {sprint.start_date && sprint.end_date ? (
+            <p className="mt-1 text-xs text-gray-500 font-medium">
+              Suggested dates: {sprint.start_date} to {sprint.end_date}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-3">
+          <Badge className="bg-amber-100 text-amber-900">Archived</Badge>
+          <Link
+            href={`${planHref}?draftId=${sprint.id}`}
+            className="text-sm font-medium text-blue-600 hover:text-blue-700"
+          >
+            View / Edit
+          </Link>
+        </div>
+      </div>
+
+      {error ? <p className="mt-2 text-sm text-red-600">{error}</p> : null}
+
+      <div className="mt-4 flex flex-wrap gap-2 items-center">
+        {canManageSprints ? (
+          <>
+            <Button
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+              onClick={() => void handleApprove()}
+              disabled={busy !== null || hasActiveSprint || Boolean(scheduleError)}
+              title={
+                scheduleError
+                  ? scheduleError
+                  : hasActiveSprint
+                    ? 'Cannot activate while another sprint is active on the board'
+                    : 'Activate using the planned start and end dates'
+              }
+            >
+              {busy === 'approve' ? 'Activating…' : 'Approve & activate'}
+            </Button>
+            {hasActiveSprint ? (
+              <span className="text-xs font-medium text-red-500">Another sprint is already active.</span>
+            ) : null}
+          </>
+        ) : null}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void handleDelete()}
+          disabled={busy !== null}
+          className="text-red-600 hover:bg-red-50"
+        >
+          {busy === 'delete' ? 'Deleting…' : 'Delete'}
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 function UpcomingSprintCard({
@@ -46,44 +171,21 @@ function UpcomingSprintCard({
   processId?: string
   planHref: string
 }) {
-  const [busy, setBusy] = useState<'reject' | 'today' | null>(null)
+  const [busy, setBusy] = useState<'reject' | 'activate' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const getLocalDateString = (d: Date = new Date()) => {
-    const year = d.getFullYear()
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  }
+  const scheduleError = validateSprintScheduledDates(sprint)
 
-  const handleStartToday = async () => {
-    if (hasActiveSprint) return
+  const handleActivate = async () => {
+    if (hasActiveSprint || scheduleError) return
     setError(null)
-    setBusy('today')
-    const today = new Date()
-    const end = new Date()
-    end.setDate(today.getDate() + 14) // default 14 days
-    const startStr = getLocalDateString(today)
-    const endStr = getLocalDateString(end)
-
+    setBusy('activate')
     try {
-      const res = await fetch('/api/sprints', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: sprint.id,
-          action: sprint.status === 'draft' ? 'approve' : undefined,
-          status: 'active',
-          start_date: startStr,
-          end_date: endStr,
-          ...(sprintStartStageId ? { sprint_start_stage_id: sprintStartStageId } : {}),
-        }),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json?.error || 'Failed to start sprint')
+      const result = await activateSprintWithScheduledDates(sprint, { sprintStartStageId })
+      if (!result.ok) throw new Error(result.error)
       onRefresh()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to start sprint')
+      setError(e instanceof Error ? e.message : 'Failed to activate sprint')
     } finally {
       setBusy(null)
     }
@@ -117,7 +219,8 @@ function UpcomingSprintCard({
         <div>
           <h3 className="font-semibold text-gray-900">{sprint.name}</h3>
           <p className="mt-1 text-xs text-gray-600">
-            {sprint.status === 'draft' ? 'Draft' : 'Planned'} · {sprint.tasks_total} tasks · {sprint.story_points_total} story points
+            {sprint.status === 'planned' ? 'Planned' : 'Scheduled'} · {sprint.tasks_total} tasks ·{' '}
+            {sprint.story_points_total} story points
           </p>
           {sprint.start_date && sprint.end_date && (
             <p className="mt-1 text-xs text-gray-500 font-medium">
@@ -128,7 +231,11 @@ function UpcomingSprintCard({
         <div className="flex items-center gap-3">
           <Badge className="bg-gray-200 text-gray-800">Upcoming</Badge>
           <Link
-            href={`${planHref}?draftId=${sprint.id}`}
+            href={
+              processId
+                ? processSprintDetailPath(projectId, phaseId, processId, sprint.id)
+                : `/dashboard/projects/${projectId}/phases/${phaseId}/sprints/${sprint.id}`
+            }
             className="text-sm text-blue-600 hover:text-blue-700 font-medium"
           >
             View Details
@@ -143,11 +250,17 @@ function UpcomingSprintCard({
             <Button
               size="sm"
               className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
-              onClick={handleStartToday}
-              disabled={busy !== null || hasActiveSprint}
-              title={hasActiveSprint ? "Cannot start while there is an active sprint" : "Start today for 2 weeks"}
+              onClick={() => void handleActivate()}
+              disabled={busy !== null || hasActiveSprint || Boolean(scheduleError)}
+              title={
+                scheduleError
+                  ? scheduleError
+                  : hasActiveSprint
+                    ? 'Cannot activate while another sprint is active on the board'
+                    : `Activate for ${sprint.start_date} → ${sprint.end_date}`
+              }
             >
-              {busy === 'today' ? 'Starting...' : 'Start Today'}
+              {busy === 'activate' ? 'Activating…' : 'Activate sprint'}
             </Button>
             <Button size="sm" variant="outline" onClick={handleReject} disabled={busy !== null}>
               {busy === 'reject' ? 'Rejecting...' : 'Reject / Delete'}
@@ -203,27 +316,20 @@ export function SprintsPageClient(props: {
   /** When true, chrome provides nav — hide duplicate header/stats. */
   chromeEmbedded?: boolean
   canManageSprints?: boolean
+  canCreateSprintDraft?: boolean
   sprintStartStageId?: string
 }) {
   const router = useRouter()
-  const getLocalDateString = (d: Date = new Date()) => {
-    const year = d.getFullYear()
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  }
-
   const todayStr = getLocalDateString()
 
-  const activeSprints = props.sprints.filter(
-    (s) => s.status === 'active' && s.start_date && s.start_date <= todayStr
-  )
+  const activeSprints = props.sprints.filter((s) => isSprintActiveForBoard(s, todayStr))
+
+  const archivedSprints = props.sprints.filter((s) => s.status === 'draft')
 
   const upcomingSprints = props.sprints.filter(
     (s) =>
-      s.status === 'draft' ||
       s.status === 'planned' ||
-      (s.status === 'active' && (!s.start_date || s.start_date > todayStr))
+      (s.status === 'active' && !isSprintActiveForBoard(s, todayStr)),
   )
   const completedSprints = props.sprints.filter((s) => s.status === 'closed')
   const totalStoryPoints = props.sprints.reduce((sum, s) => sum + (s.story_points_total || 0), 0)
@@ -451,9 +557,50 @@ export function SprintsPageClient(props: {
         </CardContent>
       </Card>
 
+      {props.canCreateSprintDraft || props.canManageSprints ? (
+        <Card className="border-amber-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Archive className="h-5 w-5 text-amber-700" />
+              Archived proposals
+            </CardTitle>
+            <p className="text-sm text-gray-600 font-normal">
+              Sprint plans saved from Create Sprint. Edit or delete proposals here; sprint managers can approve and
+              start them.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {archivedSprints.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <p>No archived sprint proposals yet.</p>
+                <p className="mt-1 text-xs">Use &quot;Archive Sprint&quot; on the plan page to save a draft for review.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {archivedSprints.map((sprint) => (
+                  <ArchivedSprintCard
+                    key={sprint.id}
+                    sprint={sprint}
+                    planHref={planHref}
+                    hasActiveSprint={activeSprints.length > 0}
+                    sprintStartStageId={props.sprintStartStageId}
+                    onRefresh={() => router.refresh()}
+                    canManageSprints={props.canManageSprints}
+                  />
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card className="border-gray-200 shadow-sm">
         <CardHeader>
           <CardTitle className="text-lg">Upcoming Sprints</CardTitle>
+          <p className="text-sm text-gray-600 font-normal">
+            Scheduled sprints not yet on the board. Activate to commit the planned dates; the board opens on the
+            start date (only one sprint on the board at a time).
+          </p>
         </CardHeader>
         <CardContent>
           {upcomingSprints.length === 0 ? (

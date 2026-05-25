@@ -8,6 +8,7 @@ import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-
 import { ensureKanbanPhaseWorkflowStructure } from '@/lib/kanban/ensure-default-workflow-stages'
 import { userCanManageBacklog } from '@/lib/permissions/backlog-permissions'
 import { userCanCreateSprintDraft } from '@/lib/permissions/sprint-permissions'
+import { repairOrphanedProductBacklogTasks } from '@/lib/sprints/release-sprint-tasks-to-backlog'
 
 async function ensureBacklogStageId(supabase: any, orgId: string, phaseId: string) {
   const { data: existingBacklog } = await supabase
@@ -170,6 +171,12 @@ export default async function ProcessBacklogPage({
 
   const backlogStageId = await ensureBacklogStageId(supabase as any, orgId, phase.id)
   if (!backlogStageId) notFound()
+
+  await repairOrphanedProductBacklogTasks(supabase as any, {
+    organizationId: orgId,
+    phaseId: phase.id,
+    processId: process.id,
+  })
 
   const { data: workflowStages } = await supabase
     .from('workflow_stages')

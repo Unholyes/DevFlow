@@ -36,6 +36,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { cn } from '@/lib/utils'
 import { TaskTypeIcon } from '@/components/tasks/task-type-icon'
 import { BlockedTaskChip } from '@/components/tasks/blocked-task-chip'
+import { canMoveTasksOnSprintBoard } from '@/lib/sprints/sprint-board-eligibility'
 
 type Stage = {
   id: string
@@ -265,7 +266,7 @@ export default function ScrumView(props: {
   projectId: string
   phaseId: string
   processId?: string
-  sprint: { id: string; name: string; status: 'planned' | 'active' | 'closed' } | null
+  sprint: { id: string; name: string; status: 'draft' | 'planned' | 'active' | 'closed'; start_date?: string | null } | null
   stages: Stage[]
   tasks: TaskRow[]
   teams?: { id: string; name: string }[]
@@ -278,7 +279,7 @@ export default function ScrumView(props: {
   const [movingTaskId, setMovingTaskId] = useState<string | null>(null)
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null)
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
-  const isLocked = props.sprint?.status === 'closed'
+  const isLocked = !canMoveTasksOnSprintBoard(props.sprint)
 
   const teamFilterId = (searchParams.get('teamId') ?? '').trim()
   const teamFilterActive = teamFilterId.length > 0
@@ -568,7 +569,10 @@ export default function ScrumView(props: {
     return (
       <div className="bg-card border border-border rounded-lg p-6 text-card-foreground">
         <h2 className="text-lg font-semibold text-foreground mb-2">No active sprint</h2>
-        <p className="text-sm text-muted-foreground">Create a sprint from the Sprints page to start working on tasks in a Scrum board.</p>
+        <p className="text-sm text-muted-foreground">
+          Start an active sprint from the Sprints page to work on the board. Upcoming and archived proposals do not have a
+          board until a sprint manager starts them.
+        </p>
         <div className="mt-4">
           <Button
             onClick={() =>
@@ -654,7 +658,11 @@ export default function ScrumView(props: {
           <span className="font-bold text-primary bg-accent px-2.5 py-1 rounded-md">
             {donePoints}/{totalPoints} points completed
           </span>
-          {isLocked ? <span className="ml-2 text-xs text-muted-foreground">(Locked)</span> : null}
+          {isLocked ? (
+            <span className="ml-2 text-xs text-amber-700">
+              (Read-only — only the active sprint board allows moving tasks)
+            </span>
+          ) : null}
         </p>
         {teamsList.length > 0 ? (
           <div className="scrum-board-toolbar mt-4 ml-16 flex flex-wrap items-end gap-4 rounded-lg border border-border bg-muted p-3">
@@ -680,6 +688,10 @@ export default function ScrumView(props: {
             {teamFilterActive ? (
               <p className="max-w-md text-xs text-amber-800 dark-theme-warning">
                 Team filter is on — card drag-and-drop is disabled until you show all teams again.
+              </p>
+            ) : isLocked ? (
+              <p className="max-w-md text-xs text-amber-800 dark-theme-warning">
+                This sprint is not active — cards cannot be moved until it is started.
               </p>
             ) : null}
           </div>

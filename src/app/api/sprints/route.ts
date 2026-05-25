@@ -7,6 +7,12 @@ import {
   loadPhaseIdForSprint,
   resolveWorkflowStageForSprintAssignment,
 } from '@/lib/tasks/resolve-sprint-resume-stage'
+import {
+  getLocalDateString,
+  validateSprintStartNotInPast,
+} from '@/lib/sprints/sprint-date-validation'
+import { isSprintActiveForBoard } from '@/lib/sprints/sprint-board-eligibility'
+import { releaseSprintTasksToProductBacklog } from '@/lib/sprints/release-sprint-tasks-to-backlog'
 
 function isUniqueViolation(error: unknown) {
   return typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
@@ -68,6 +74,7 @@ async function validateSprintDateOverlap(
   }
 
   const { data: activeSprints } = await query
+  const todayStr = getLocalDateString()
 
   const nStart = new Date(startDateStr)
   const nEnd = new Date(endDateStr)
@@ -76,6 +83,9 @@ async function validateSprintDateOverlap(
 
   for (const sprint of activeSprints ?? []) {
     if (sprint.id === excludeSprintId) continue
+    if (!isSprintActiveForBoard({ status: 'active', start_date: sprint.start_date }, todayStr)) {
+      continue
+    }
     if (sprint.start_date && sprint.end_date) {
       const aStart = new Date(sprint.start_date)
       const aEnd = new Date(sprint.end_date)
@@ -203,6 +213,11 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'End date cannot be before start date' }, { status: 400 })
       }
 
+      const pastStartError = validateSprintStartNotInPast(start_date)
+      if (pastStartError) {
+        return NextResponse.json({ error: pastStartError }, { status: 400 })
+      }
+
       startDateValue = start_date
       endDateValue = end_date
 
@@ -278,7 +293,7 @@ export async function PATCH(request: Request) {
 
     const { data: existing, error: loadError } = await supabase
       .from('sprints')
-      .select('id,project_id,process_id,status')
+      .select('id,project_id,process_id,phase_id,status')
       .eq('id', id)
       .eq('organization_id', orgId)
       .maybeSingle()
@@ -300,7 +315,16 @@ export async function PATCH(request: Request) {
         return NextResponse.json({ error: 'You do not have permission to reject sprint drafts' }, { status: 403 })
       }
 
-      await supabase.from('tasks').update({ sprint_id: null }).eq('sprint_id', id).eq('organization_id', orgId)
+      const phaseId = String((existing as { phase_id?: unknown }).phase_id ?? '')
+      if (phaseId) {
+        await releaseSprintTasksToProductBacklog(supabase as any, {
+          organizationId: orgId,
+          sprintId: id,
+          phaseId,
+        })
+      } else {
+        await supabase.from('tasks').update({ sprint_id: null }).eq('sprint_id', id).eq('organization_id', orgId)
+      }
 
       const { error: deleteError } = await supabase.from('sprints').delete().eq('id', id).eq('organization_id', orgId)
       if (deleteError) throw deleteError
@@ -414,13 +438,59 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ data })
     }
 
-    if (!canManage) {
+    const isDraft = existingStatus === 'draft'
+    const canCreateDraft =
+      isDraft &&
+      (await userCanCreateSprintDraft(supabase, {
+        organizationId: orgId,
+        userId,
+        projectId,
+      }))
+
+    if (!canManage && !canCreateDraft) {
       return NextResponse.json({ error: 'You do not have permission to update sprints' }, { status: 403 })
     }
 
+    if (!canManage && canCreateDraft) {
+      const safeUpdates: Record<string, unknown> = {}
+      if (updates.name != null) safeUpdates.name = updates.name
+      if (start_date != null) safeUpdates.start_date = start_date
+      if (end_date != null) safeUpdates.end_date = end_date
+      if (updates.start_date != null) safeUpdates.start_date = updates.start_date
+      if (updates.end_date != null) safeUpdates.end_date = updates.end_date
+      if (updates.story_points_total != null) safeUpdates.story_points_total = updates.story_points_total
+      Object.keys(updates).forEach((k) => delete (updates as Record<string, unknown>)[k])
+      Object.assign(updates, safeUpdates)
+      if (Object.keys(safeUpdates).length === 0) {
+        return NextResponse.json({ error: 'No allowed fields to update' }, { status: 400 })
+      }
+    }
+
+    const nextStatus = updates.status != null ? parseSprintStatus(updates.status) : existingStatus
+    const startToValidate =
+      typeof start_date === 'string'
+        ? start_date
+        : typeof updates.start_date === 'string'
+          ? (updates.start_date as string)
+          : null
+    if (
+      startToValidate &&
+      (nextStatus === 'active' || existingStatus === 'active') &&
+      !isDraft
+    ) {
+      const pastStartError = validateSprintStartNotInPast(startToValidate)
+      if (pastStartError) {
+        return NextResponse.json({ error: pastStartError }, { status: 400 })
+      }
+    }
+
+    const rowUpdates: Record<string, unknown> = { ...updates }
+    if (typeof start_date === 'string') rowUpdates.start_date = start_date
+    if (typeof end_date === 'string') rowUpdates.end_date = end_date
+
     const { data, error } = await supabase
       .from('sprints')
-      .update(updates)
+      .update(rowUpdates)
       .eq('id', id)
       .eq('organization_id', orgId)
       .select()
@@ -458,7 +528,7 @@ export async function DELETE(request: Request) {
 
     const { data: existing } = await supabase
       .from('sprints')
-      .select('project_id,status')
+      .select('project_id,phase_id,status')
       .eq('id', sprintId)
       .eq('organization_id', orgId)
       .maybeSingle()
@@ -486,7 +556,16 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    await supabase.from('tasks').update({ sprint_id: null }).eq('sprint_id', sprintId).eq('organization_id', orgId)
+    const phaseId = String((existing as { phase_id?: unknown }).phase_id ?? '')
+    if (phaseId) {
+      await releaseSprintTasksToProductBacklog(supabase as any, {
+        organizationId: orgId,
+        sprintId,
+        phaseId,
+      })
+    } else {
+      await supabase.from('tasks').update({ sprint_id: null }).eq('sprint_id', sprintId).eq('organization_id', orgId)
+    }
 
     const { error } = await supabase.from('sprints').delete().eq('id', sprintId).eq('organization_id', orgId)
 

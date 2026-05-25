@@ -10,13 +10,17 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { BacklogTaskCard } from '@/components/project/backlog-task-card'
 import { SprintCompletionModal } from '@/components/project/sprint-completion-modal'
+import { processBoardPath } from '@/lib/processes/process-workspace-routes'
+import { isSprintActiveForBoard } from '@/lib/sprints/sprint-board-eligibility'
+import { sprintBoardOpensOnStartDate, validateSprintScheduledDates } from '@/lib/sprints/sprint-activation-dates'
+import { activateSprintWithScheduledDates } from '@/lib/sprints/activate-sprint'
 
 type Sprint = {
   id: string
   name: string
-  start_date: string
-  end_date: string
-  status: 'planned' | 'active' | 'closed'
+  start_date: string | null
+  end_date: string | null
+  status: 'draft' | 'planned' | 'active' | 'closed'
   story_points_total: number
   summary?: any | null
   retrospective?: any | null
@@ -41,14 +45,31 @@ export function SprintDetailsPageClient(props: {
   sprintStartStageId?: string
   sprint: Sprint
   tasks: Task[]
+  canManageSprints?: boolean
+  hasActiveSprint?: boolean
+  sprintActiveForBoard?: boolean
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isCompleteOpen, setIsCompleteOpen] = useState(false)
+  const [upcomingBusy, setUpcomingBusy] = useState<'start' | 'reject' | null>(null)
+  const [upcomingError, setUpcomingError] = useState<string | null>(null)
+
+  const sprintActiveForBoard =
+    props.sprintActiveForBoard ??
+    isSprintActiveForBoard({
+      status: props.sprint.status,
+      start_date: props.sprint.start_date,
+    })
+  const canCompleteSprint = props.sprint.status === 'active' && sprintActiveForBoard
+  const isUpcomingSprint =
+    props.sprint.status === 'planned' ||
+    (props.sprint.status === 'active' && !sprintActiveForBoard)
+
   useEffect(() => {
     const shouldOpen = searchParams.get('complete') === '1'
-    if (shouldOpen && props.sprint.status !== 'closed') setIsCompleteOpen(true)
-  }, [searchParams])
+    if (shouldOpen && canCompleteSprint) setIsCompleteOpen(true)
+  }, [searchParams, canCompleteSprint])
   const [isCompleting, setIsCompleting] = useState(false)
   const [tasks, setTasks] = useState<Task[]>(props.tasks)
 
@@ -73,6 +94,51 @@ export function SprintDetailsPageClient(props: {
       })),
     }
   }, [completedPoints, props.sprint.name, props.sprint.story_points_total, unfinishedTasks])
+
+  const scheduleError = validateSprintScheduledDates(props.sprint)
+  const boardOpensLater = sprintBoardOpensOnStartDate(props.sprint)
+
+  const handleActivate = async () => {
+    if (props.hasActiveSprint || scheduleError) return
+    setUpcomingError(null)
+    setUpcomingBusy('start')
+    try {
+      const result = await activateSprintWithScheduledDates(props.sprint, {
+        sprintStartStageId: props.sprintStartStageId,
+      })
+      if (!result.ok) throw new Error(result.error)
+      router.refresh()
+    } catch (e) {
+      setUpcomingError(e instanceof Error ? e.message : 'Failed to activate sprint')
+    } finally {
+      setUpcomingBusy(null)
+    }
+  }
+
+  const handleRejectUpcoming = async () => {
+    if (!confirm(`Remove upcoming sprint "${props.sprint.name}"? Tasks will return to the product backlog.`)) return
+    setUpcomingError(null)
+    setUpcomingBusy('reject')
+    try {
+      const res = await fetch('/api/sprints', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: props.sprint.id, action: 'reject' }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || 'Failed to remove sprint')
+      router.push(
+        props.processId
+          ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints`
+          : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`,
+      )
+      router.refresh()
+    } catch (e) {
+      setUpcomingError(e instanceof Error ? e.message : 'Failed to remove sprint')
+    } finally {
+      setUpcomingBusy(null)
+    }
+  }
 
   const handleCompleteSprint = async (data: {
     retrospective: { wentWell: string; improve: string; actionItems: string }
@@ -149,15 +215,26 @@ export function SprintDetailsPageClient(props: {
           <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-gray-600">
             <span className="inline-flex items-center gap-1">
               <Calendar className="h-4 w-4" />
-              {props.sprint.start_date} → {props.sprint.end_date}
+              {props.sprint.start_date && props.sprint.end_date
+                ? `${props.sprint.start_date} → ${props.sprint.end_date}`
+                : 'Dates not set'}
             </span>
             <span className="text-gray-300">•</span>
-            <Badge variant="outline">{props.sprint.status}</Badge>
+            <Badge variant="outline">
+              {isUpcomingSprint ? 'Upcoming' : props.sprint.status === 'active' ? 'Active' : props.sprint.status}
+            </Badge>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {props.sprint.status !== 'closed' ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {canCompleteSprint && props.processId ? (
+            <Button variant="outline" asChild>
+              <Link href={`${processBoardPath(props.projectId, props.phaseId, props.processId)}?sprintId=${encodeURIComponent(props.sprint.id)}`}>
+                Open board
+              </Link>
+            </Button>
+          ) : null}
+          {canCompleteSprint ? (
             <Button
               className="bg-green-600 hover:bg-green-700"
               onClick={() => setIsCompleteOpen(true)}
@@ -166,8 +243,50 @@ export function SprintDetailsPageClient(props: {
               Complete Sprint
             </Button>
           ) : null}
+          {isUpcomingSprint && props.canManageSprints ? (
+            <>
+              <Button
+                className="bg-blue-600 hover:bg-blue-700"
+                onClick={() => void handleActivate()}
+                disabled={upcomingBusy !== null || props.hasActiveSprint || Boolean(scheduleError)}
+                title={scheduleError ?? undefined}
+              >
+                {upcomingBusy === 'start' ? 'Activating…' : 'Activate sprint'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => void handleRejectUpcoming()}
+                disabled={upcomingBusy !== null}
+              >
+                {upcomingBusy === 'reject' ? 'Removing…' : 'Remove sprint'}
+              </Button>
+            </>
+          ) : null}
         </div>
       </div>
+
+      {isUpcomingSprint ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {scheduleError ? (
+            <p>{scheduleError}</p>
+          ) : (
+            <p>
+              This sprint uses its <span className="font-medium">planned dates</span>
+              {props.sprint.start_date && props.sprint.end_date
+                ? ` (${props.sprint.start_date} → ${props.sprint.end_date})`
+                : ''}
+              . The board and &quot;Complete sprint&quot; are available once the sprint has{' '}
+              <span className="font-medium">started</span>
+              {boardOpensLater && props.sprint.start_date
+                ? ` (on ${props.sprint.start_date})`
+                : ''}
+              .
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      {upcomingError ? <p className="text-sm text-red-600">{upcomingError}</p> : null}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="border-gray-200 shadow-sm">

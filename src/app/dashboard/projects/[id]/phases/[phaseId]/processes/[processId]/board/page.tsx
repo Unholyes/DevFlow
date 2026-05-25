@@ -11,6 +11,8 @@ import { ensureKanbanPhaseWorkflowStructure } from '@/lib/kanban/ensure-default-
 import { loadProjectPhasesGatingContext } from '@/lib/projects/load-project-phases-gating'
 import { isPhaseLockedForProject } from '@/lib/projects/phase-gating'
 import { userCanManageBacklog, userCanArchiveTasks } from '@/lib/permissions/backlog-permissions'
+import { getLocalDateString } from '@/lib/sprints/sprint-date-validation'
+import { isSprintActiveForBoard } from '@/lib/sprints/sprint-board-eligibility'
 
 export default async function ProcessBoardPage({
   params,
@@ -109,29 +111,32 @@ export default async function ProcessBoardPage({
         ? searchParams.sprintId.trim()
         : null
 
-    const { data: sprint } = requestedSprintId
-      ? await supabase
-          .from('sprints')
-          .select('id,name,status,start_date')
-          .eq('id', requestedSprintId)
-          .eq('project_id', project.id)
-          .eq('phase_id', phase.id)
-          .eq('organization_id', orgId)
-          .eq('process_id', process.id)
-          .maybeSingle()
-      : await supabase
-          .from('sprints')
-          .select('id,name,status,start_date')
-          .eq('project_id', project.id)
-          .eq('phase_id', phase.id)
-          .eq('organization_id', orgId)
-          .eq('process_id', process.id)
-          .in('status', ['active', 'planned', 'closed'])
-          .order('start_date', { ascending: false })
-          .limit(1)
-          .maybeSingle()
+    const todayStr = getLocalDateString()
 
-    const sprintRow = (sprint as any) ?? null
+    const { data: processSprints } = await supabase
+      .from('sprints')
+      .select('id,name,status,start_date')
+      .eq('project_id', project.id)
+      .eq('phase_id', phase.id)
+      .eq('organization_id', orgId)
+      .eq('process_id', process.id)
+      .eq('status', 'active')
+      .order('start_date', { ascending: false })
+
+    const activeForBoard = (processSprints ?? []).find((s) => isSprintActiveForBoard(s, todayStr))
+
+    let sprintRow: { id: string; name: string; status: string; start_date: string | null } | null = null
+
+    if (requestedSprintId) {
+      const match = (processSprints ?? []).find((s) => s.id === requestedSprintId)
+      if (match && isSprintActiveForBoard(match, todayStr)) {
+        sprintRow = match
+      } else {
+        return redirect(processBoardPath(project.id, phase.id, process.id))
+      }
+    } else {
+      sprintRow = activeForBoard ?? null
+    }
 
     const { data: sprintTasks } =
       sprintRow?.id && stageIds.length > 0
@@ -160,7 +165,12 @@ export default async function ProcessBoardPage({
           processId={process.id}
           sprint={
             sprintRow
-              ? ({ id: sprintRow.id, name: sprintRow.name, status: sprintRow.status } as any)
+              ? ({
+                  id: sprintRow.id,
+                  name: sprintRow.name,
+                  status: sprintRow.status,
+                  start_date: sprintRow.start_date,
+                } as any)
               : null
           }
           stages={(stages ?? []) as any}

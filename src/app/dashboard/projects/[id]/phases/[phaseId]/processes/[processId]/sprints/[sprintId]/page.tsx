@@ -3,6 +3,10 @@ import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { SprintDetailsPageClient } from '@/components/sprints/sprint-details-page-client'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
+import { processSprintPlanPath } from '@/lib/processes/process-workspace-routes'
+import { userCanManageSprints } from '@/lib/permissions/sprint-permissions'
+import { getLocalDateString } from '@/lib/sprints/sprint-date-validation'
+import { isSprintActiveForBoard } from '@/lib/sprints/sprint-board-eligibility'
 
 async function ensureBacklogStageId(supabase: any, orgId: string, phaseId: string) {
   const { data: existingBacklog } = await supabase
@@ -187,6 +191,36 @@ export default async function ProcessSprintDetailsPage({
   if (!sprint) notFound()
   if (sprint.process_id !== process.id) notFound()
 
+  if (String(sprint.status) === 'draft') {
+    return redirect(`${processSprintPlanPath(project.id, phase.id, process.id)}?draftId=${sprint.id}`)
+  }
+
+  const todayStr = getLocalDateString()
+  const sprintActiveForBoard = isSprintActiveForBoard(
+    { status: String(sprint.status), start_date: sprint.start_date },
+    todayStr,
+  )
+
+  const { data: otherActiveSprints } = await supabase
+    .from('sprints')
+    .select('id,start_date,status')
+    .eq('project_id', project.id)
+    .eq('phase_id', phase.id)
+    .eq('organization_id', orgId)
+    .eq('process_id', process.id)
+    .eq('status', 'active')
+    .neq('id', sprint.id)
+
+  const hasActiveSprint = (otherActiveSprints ?? []).some((s) =>
+    isSprintActiveForBoard({ status: 'active', start_date: (s as { start_date?: string | null }).start_date }, todayStr),
+  )
+
+  const canManageSprints = await userCanManageSprints(supabase, {
+    organizationId: orgId,
+    userId: user.id,
+    projectId: project.id,
+  })
+
   const { data: tasks } = await supabase
     .from('tasks')
     .select('id,title,description,priority,story_points,completed_at,position')
@@ -208,6 +242,9 @@ export default async function ProcessSprintDetailsPage({
       sprintStartStageId={sprintStartStageId ?? undefined}
       sprint={sprint as any}
       tasks={(tasks ?? []) as any}
+      canManageSprints={canManageSprints}
+      hasActiveSprint={hasActiveSprint}
+      sprintActiveForBoard={sprintActiveForBoard}
     />
   )
 }

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { NextResponse } from 'next/server'
+import { assertSprintAllowsBoardMoves } from '@/lib/sprints/assert-sprint-board-movable'
 
 async function resolveOrgId(supabase: ReturnType<typeof createClient>) {
   const tenantSlug = getTenantSlug()
@@ -37,6 +38,30 @@ export async function POST(request: Request) {
         { error: 'projectId, processId, stageId, and orderedTaskIds are required' },
         { status: 400 }
       )
+    }
+
+    if (orderedTaskIds.length > 0) {
+      const { data: sampleTask, error: sampleError } = await supabase
+        .from('tasks')
+        .select('sprint_id')
+        .eq('id', orderedTaskIds[0])
+        .eq('organization_id', orgId)
+        .eq('project_id', projectId)
+        .eq('process_id', processId)
+        .maybeSingle()
+
+      if (sampleError) throw sampleError
+
+      const sprintId = (sampleTask as { sprint_id?: string | null } | null)?.sprint_id
+      if (typeof sprintId === 'string' && sprintId.trim()) {
+        const boardError = await assertSprintAllowsBoardMoves(supabase as any, {
+          organizationId: orgId,
+          sprintId: sprintId.trim(),
+        })
+        if (boardError) {
+          return NextResponse.json({ error: boardError }, { status: 400 })
+        }
+      }
     }
 
     const results = await Promise.all(

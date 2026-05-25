@@ -4,7 +4,9 @@ import { getTenantSlug } from '@/lib/tenant/server'
 import { SprintsPageClient, type SprintWithStats } from '@/components/sprints/sprints-page-client'
 import { ScrumProcessChrome } from '@/components/processes/scrum-process-chrome'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
-import { userCanManageSprints } from '@/lib/permissions/sprint-permissions'
+import { userCanCreateSprintDraft, userCanManageSprints } from '@/lib/permissions/sprint-permissions'
+import { repairOrphanedProductBacklogTasks } from '@/lib/sprints/release-sprint-tasks-to-backlog'
+import { resolveBacklogStageIdForPhase } from '@/lib/sprints/resolve-backlog-stage-id'
 
 export default async function ProcessSprintsPage({
   params,
@@ -71,15 +73,28 @@ export default async function ProcessSprintsPage({
     .eq('process_id', process.id)
     .order('start_date', { ascending: false })
 
-  const { data: backlogTasks } = await supabase
-    .from('tasks')
-    .select('id,title,description,priority,story_points,position')
-    .eq('project_id', project.id)
-    .eq('organization_id', orgId)
-    .eq('process_id', process.id)
-    .is('sprint_id', null)
-    .order('position', { ascending: true })
-    .limit(10)
+  await repairOrphanedProductBacklogTasks(supabase as any, {
+    organizationId: orgId,
+    phaseId: phase.id,
+    processId: process.id,
+  })
+
+  const backlogStageId = await resolveBacklogStageIdForPhase(supabase as any, orgId, phase.id)
+
+  const backlogTasksQuery = backlogStageId
+    ? supabase
+        .from('tasks')
+        .select('id,title,description,priority,story_points,position')
+        .eq('project_id', project.id)
+        .eq('organization_id', orgId)
+        .eq('process_id', process.id)
+        .eq('workflow_stage_id', backlogStageId)
+        .is('sprint_id', null)
+        .order('position', { ascending: true })
+        .limit(10)
+    : Promise.resolve({ data: [] as { id: string; title: string; description: string | null; priority: string; story_points: number | null; position: number | null }[] })
+
+  const { data: backlogTasks } = await backlogTasksQuery
 
   const sprintIds = (sprints ?? []).map((s) => s.id)
   let tasksBySprint: Record<string, { total: number; completed: number }> = {}
@@ -112,11 +127,18 @@ export default async function ProcessSprintsPage({
     } as SprintWithStats
   })
 
-  const canManageSprints = await userCanManageSprints(supabase, {
-    organizationId: orgId,
-    userId: user.id,
-    projectId: project.id,
-  })
+  const [canManageSprints, canCreateSprintDraft] = await Promise.all([
+    userCanManageSprints(supabase, {
+      organizationId: orgId,
+      userId: user.id,
+      projectId: project.id,
+    }),
+    userCanCreateSprintDraft(supabase, {
+      organizationId: orgId,
+      userId: user.id,
+      projectId: project.id,
+    }),
+  ])
 
   const { data: sprintStartStage } = await supabase
     .from('workflow_stages')
@@ -149,6 +171,7 @@ export default async function ProcessSprintsPage({
         backlogTasks={(backlogTasks ?? []) as any}
         chromeEmbedded
         canManageSprints={canManageSprints}
+        canCreateSprintDraft={canCreateSprintDraft}
         sprintStartStageId={sprintStartStageId ?? undefined}
       />
     </ScrumProcessChrome>

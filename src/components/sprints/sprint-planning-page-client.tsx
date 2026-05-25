@@ -19,6 +19,11 @@ import {
 import { BacklogTaskCard } from '@/components/project/backlog-task-card'
 import { KanbanTaskDetailModal, type TaskRowLite } from '@/components/project/KanbanTaskDetailModal'
 import { TaskMessageDialog, taskErrorDialogFromUnknown } from '@/components/tasks/task-message-dialog'
+import { activateSprintWithScheduledDates } from '@/lib/sprints/activate-sprint'
+import {
+  getLocalDateString,
+  isSprintStartDateInPast,
+} from '@/lib/sprints/sprint-date-validation'
 
 type Task = {
   id: string
@@ -31,6 +36,15 @@ type Task = {
 }
 
 const defaultCapacity = 42
+
+function toDateInputValue(value: string | null | undefined): string {
+  if (!value) return ''
+  const s = String(value).trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  const d = new Date(s)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toISOString().slice(0, 10)
+}
 
 function uniqueById<T extends { id: string }>(items: T[]) {
   const map = new Map<string, T>()
@@ -55,6 +69,7 @@ export function SprintPlanningPageClient(props: {
 }) {
   const canCreateSprintDraft = props.canCreateSprintDraft === true
   const canManageSprints = props.canManageSprints === true
+  const isEditingDraft = Boolean(props.draftSprint?.id)
   const canSaveDraft = canCreateSprintDraft
   const canStartSprint = canManageSprints
   const router = useRouter()
@@ -74,8 +89,8 @@ export function SprintPlanningPageClient(props: {
   const [createLoading, setCreateLoading] = useState(false)
 
   const [sprintName, setSprintName] = useState(props.draftSprint?.name || 'Sprint 1')
-  const [startDate, setStartDate] = useState(props.draftSprint?.start_date || '')
-  const [endDate, setEndDate] = useState(props.draftSprint?.end_date || '')
+  const [startDate, setStartDate] = useState(() => toDateInputValue(props.draftSprint?.start_date))
+  const [endDate, setEndDate] = useState(() => toDateInputValue(props.draftSprint?.end_date))
   const [formError, setFormError] = useState<string | null>(null)
 
   // Combine backlogTasks and draftTasks if draftTasks exist, but only initialize selectedTasks with draftTasks ids.
@@ -107,6 +122,18 @@ export function SprintPlanningPageClient(props: {
     if (tasksParam) setSelectedTasks(new Set(tasksParam.split(',')))
   }, [searchParams])
 
+  useEffect(() => {
+    if (!props.draftSprint) return
+    setSprintName(props.draftSprint.name || 'Sprint 1')
+    setStartDate(toDateInputValue(props.draftSprint.start_date))
+    setEndDate(toDateInputValue(props.draftSprint.end_date))
+  }, [
+    props.draftSprint?.id,
+    props.draftSprint?.name,
+    props.draftSprint?.start_date,
+    props.draftSprint?.end_date,
+  ])
+
   const selectedTaskObjects = useMemo(
     () => backlogTasks.filter((t) => selectedTasks.has(t.id)),
     [backlogTasks, selectedTasks]
@@ -115,6 +142,8 @@ export function SprintPlanningPageClient(props: {
   const remainingBacklog = backlogTasks.filter((t) => !sprintTasks.find(st => st.id === t.id))
   const capacity = Math.max(1, capacityPoints || defaultCapacity)
   const sprintBacklogStoryPoints = sprintTasks.reduce((sum, t) => sum + (t.story_points || 0), 0)
+  const todayDateStr = useMemo(() => getLocalDateString(), [])
+  const startDateInPast = Boolean(startDate) && isSprintStartDateInPast(startDate)
   const capacityStatus =
     sprintBacklogStoryPoints > capacity
       ? 'over'
@@ -388,11 +417,17 @@ export function SprintPlanningPageClient(props: {
         const removedTasks = props.draftTasks.filter(dt => !sprintTasks.find(st => st.id === dt.id))
         if (removedTasks.length > 0) {
           await Promise.all(
-            removedTasks.map(t => fetch('/api/tasks', {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: t.id, sprint_id: null }),
-            }))
+            removedTasks.map((t) =>
+              fetch('/api/tasks', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  id: t.id,
+                  sprint_id: null,
+                  ...(props.backlogStageId ? { workflow_stage_id: props.backlogStageId } : {}),
+                }),
+              }),
+            )
           )
         }
       }
@@ -415,6 +450,109 @@ export function SprintPlanningPageClient(props: {
     }
   }
 
+  const validateSprintFormForStartOrActivate = (): string | null => {
+    if (!sprintName.trim() || !startDate || !endDate) {
+      return 'Please fill in all sprint details'
+    }
+    if (sprintTasks.length === 0) {
+      return 'Please add at least one task to the sprint'
+    }
+    if (new Date(endDate) < new Date(startDate)) {
+      return 'End date cannot be before start date'
+    }
+    if (isSprintStartDateInPast(startDate)) {
+      return 'Sprint start date cannot be in the past'
+    }
+    if (sprintBacklogStoryPoints > capacity) {
+      return `Sprint exceeds capacity (${sprintBacklogStoryPoints}/${capacity} points)`
+    }
+    return null
+  }
+
+  const persistDraftBeforeActivate = async (sprintId: string) => {
+    const updateRes = await fetch('/api/sprints', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: sprintId,
+        name: sprintName.trim(),
+        start_date: startDate,
+        end_date: endDate,
+        story_points_total: sprintTasks.reduce((sum, t) => sum + (t.story_points || 0), 0),
+      }),
+    })
+    const updated = await updateRes.json()
+    if (!updateRes.ok) throw new Error(updated?.error || 'Failed to update sprint proposal')
+
+    if (props.draftTasks) {
+      const removedTasks = props.draftTasks.filter((dt) => !sprintTasks.find((st) => st.id === dt.id))
+      if (removedTasks.length > 0) {
+        await Promise.all(
+          removedTasks.map((t) =>
+            fetch('/api/tasks', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                id: t.id,
+                sprint_id: null,
+                ...(props.backlogStageId ? { workflow_stage_id: props.backlogStageId } : {}),
+              }),
+            }),
+          ),
+        )
+      }
+    }
+
+    await assignTasksToSprint(sprintId, false)
+  }
+
+  const handleActivateDraft = async () => {
+    setFormError(null)
+    if (!canStartSprint) {
+      setFormError('You do not have permission to activate sprints')
+      return
+    }
+
+    const sprintId = props.draftSprint?.id
+    if (!sprintId) {
+      setFormError('No archived proposal to activate')
+      return
+    }
+
+    const validationError = validateSprintFormForStartOrActivate()
+    if (validationError) {
+      setFormError(validationError)
+      return
+    }
+
+    setLoading(true)
+    try {
+      await persistDraftBeforeActivate(sprintId)
+
+      const result = await activateSprintWithScheduledDates(
+        { id: sprintId, start_date: startDate, end_date: endDate },
+        { fromDraft: true, sprintStartStageId: props.sprintStartStageId },
+      )
+      if (!result.ok) throw new Error(result.error)
+
+      if (props.processId) {
+        router.push(
+          `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/board?sprintId=${encodeURIComponent(
+            sprintId,
+          )}`,
+        )
+      } else {
+        router.push(`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`)
+      }
+      router.refresh()
+    } catch (e) {
+      console.error(e)
+      setFormError(e instanceof Error ? e.message : 'Failed to activate sprint')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleStartSprint = async () => {
     setFormError(null)
     if (!canStartSprint) {
@@ -422,23 +560,14 @@ export function SprintPlanningPageClient(props: {
       return
     }
 
-    if (!sprintName || !startDate || !endDate) {
-      setFormError('Please fill in all sprint details')
+    if (isEditingDraft) {
+      await handleActivateDraft()
       return
     }
 
-    if (sprintTasks.length === 0) {
-      setFormError('Please add at least one task to the sprint')
-      return
-    }
-
-    if (new Date(endDate) < new Date(startDate)) {
-      setFormError('End date cannot be before start date')
-      return
-    }
-
-    if (sprintBacklogStoryPoints > capacity) {
-      setFormError(`Sprint exceeds capacity (${sprintBacklogStoryPoints}/${capacity} points)`)
+    const validationError = validateSprintFormForStartOrActivate()
+    if (validationError) {
+      setFormError(validationError)
       return
     }
 
@@ -451,7 +580,7 @@ export function SprintPlanningPageClient(props: {
           project_id: props.projectId,
           phase_id: props.phaseId,
           process_id: props.processId,
-          name: sprintName,
+          name: sprintName.trim(),
           start_date: startDate,
           end_date: endDate,
           story_points_total: sprintTasks.reduce((sum, t) => sum + (t.story_points || 0), 0),
@@ -470,8 +599,8 @@ export function SprintPlanningPageClient(props: {
       if (props.processId) {
         router.push(
           `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/board?sprintId=${encodeURIComponent(
-            sprintId
-          )}`
+            sprintId,
+          )}`,
         )
       } else {
         router.push(`/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints`)
@@ -509,15 +638,21 @@ export function SprintPlanningPageClient(props: {
 
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Sprint Planning</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {isEditingDraft ? 'Archived sprint proposal' : 'Sprint Planning'}
+          </h1>
           <p className="text-gray-600 mt-1">
-            {canSaveDraft && !canStartSprint
-              ? 'Select backlog tasks and save a draft for sprint manager approval'
-              : 'Select tasks from backlog and plan your sprint'}
+            {isEditingDraft
+              ? canStartSprint
+                ? 'Update tasks and dates, then activate when ready'
+                : 'Update tasks and save the proposal for sprint manager approval'
+              : canSaveDraft && !canStartSprint
+                ? 'Select backlog tasks and save a draft for sprint manager approval'
+                : 'Select tasks from backlog and plan your sprint'}
           </p>
         </div>
         <div className="flex gap-2">
-          {canSaveDraft ? (
+          {canSaveDraft && !isEditingDraft ? (
             <Button
               variant="outline"
               onClick={handleSaveDraft}
@@ -527,12 +662,44 @@ export function SprintPlanningPageClient(props: {
               Archive Sprint
             </Button>
           ) : null}
-          {canStartSprint ? (
+          {canSaveDraft && isEditingDraft ? (
+            <Button
+              variant="outline"
+              onClick={handleSaveDraft}
+              disabled={!sprintName.trim() || sprintTasks.length === 0 || sprintBacklogStoryPoints > capacity}
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Save proposal
+            </Button>
+          ) : null}
+          {canStartSprint && isEditingDraft ? (
+            <Button
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={() => void handleActivateDraft()}
+              disabled={
+                !sprintName ||
+                !startDate ||
+                !endDate ||
+                startDateInPast ||
+                sprintTasks.length === 0 ||
+                sprintBacklogStoryPoints > capacity
+              }
+            >
+              <Play className="h-4 w-4 mr-2" />
+              Activate sprint
+            </Button>
+          ) : null}
+          {canStartSprint && !isEditingDraft ? (
             <Button
               className="bg-blue-600 hover:bg-blue-700 text-white"
               onClick={handleStartSprint}
               disabled={
-                !sprintName || !startDate || !endDate || sprintTasks.length === 0 || sprintBacklogStoryPoints > capacity
+                !sprintName ||
+                !startDate ||
+                !endDate ||
+                startDateInPast ||
+                sprintTasks.length === 0 ||
+                sprintBacklogStoryPoints > capacity
               }
             >
               <Play className="h-4 w-4 mr-2" />
@@ -556,11 +723,24 @@ export function SprintPlanningPageClient(props: {
               <>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                  <Input
+                    type="date"
+                    min={todayDateStr}
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                  />
+                  {startDateInPast ? (
+                    <p className="mt-1 text-xs text-red-600">Start date cannot be in the past.</p>
+                  ) : null}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                  <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                  <Input
+                    type="date"
+                    min={startDate && !startDateInPast ? startDate : todayDateStr}
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                  />
                 </div>
               </>
             ) : (

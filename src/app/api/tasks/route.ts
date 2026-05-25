@@ -24,6 +24,8 @@ import {
   normalizeTaskTitle,
 } from '@/lib/tasks/validate-task-title'
 import { userCanManageBacklog } from '@/lib/permissions/backlog-permissions'
+import { assertSprintAllowsBoardMoves } from '@/lib/sprints/assert-sprint-board-movable'
+import { resolveBacklogStageIdForPhase } from '@/lib/sprints/resolve-backlog-stage-id'
 
 function isUniqueViolation(error: unknown) {
   return typeof error === 'object' && error !== null && (error as any).code === '23505'
@@ -474,6 +476,30 @@ export async function PATCH(request: Request) {
       typeof sprintIdUpdate === 'string' &&
       uuidRe.test(sprintIdUpdate)
 
+    const leavingSprint =
+      updates.sprint_id === null &&
+      beforeTask.sprint_id != null &&
+      String(beforeTask.sprint_id).length > 0
+
+    if (leavingSprint && updates.workflow_stage_id === undefined) {
+      const phaseIdForRelease =
+        (beforeTask.phase_id as string | null) ??
+        (await loadPhaseIdForSprint(supabase as any, orgId, String(beforeTask.sprint_id)))
+
+      if (phaseIdForRelease) {
+        const backlogStageId = await resolveBacklogStageIdForPhase(
+          supabase as any,
+          orgId,
+          phaseIdForRelease,
+        )
+        if (backlogStageId) {
+          updates.workflow_stage_id = backlogStageId
+          updates.completed_at = null
+          updates.current_stage_entered_at = new Date().toISOString()
+        }
+      }
+    }
+
     if (enteringSprint) {
       const { data: existingForSprint, error: sprintLoadError } = await supabase
         .from('tasks')
@@ -516,12 +542,22 @@ export async function PATCH(request: Request) {
     if (updates.workflow_stage_id !== undefined && typeof updates.workflow_stage_id === 'string') {
       const { data: existing } = await supabase
         .from('tasks')
-        .select('workflow_stage_id')
+        .select('workflow_stage_id,sprint_id')
         .eq('id', id)
         .eq('organization_id', orgId)
         .maybeSingle()
 
       if (existing && existing.workflow_stage_id !== updates.workflow_stage_id) {
+        const sprintIdForMove = (beforeTask.sprint_id as string | null) ?? null
+        if (sprintIdForMove) {
+          const boardError = await assertSprintAllowsBoardMoves(supabase as any, {
+            organizationId: orgId,
+            sprintId: sprintIdForMove,
+          })
+          if (boardError) {
+            return NextResponse.json({ error: boardError }, { status: 400 })
+          }
+        }
         updates.current_stage_entered_at = new Date().toISOString()
       }
     }

@@ -4,6 +4,7 @@ import { getTenantSlug } from '@/lib/tenant/server'
 import { SprintPlanningPageClient } from '@/components/sprints/sprint-planning-page-client'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { userCanCreateSprintDraft, userCanManageSprints } from '@/lib/permissions/sprint-permissions'
+import { repairOrphanedProductBacklogTasks } from '@/lib/sprints/release-sprint-tasks-to-backlog'
 
 async function ensureBacklogStageId(supabase: any, orgId: string, phaseId: string) {
   const { data: existingBacklog } = await supabase
@@ -185,6 +186,12 @@ export default async function ProcessSprintPlanningPage({
   const sprintStartStageId = await ensureSprintStartStageId(supabase as any, orgId, phase.id)
   if (!sprintStartStageId) notFound()
 
+  await repairOrphanedProductBacklogTasks(supabase as any, {
+    organizationId: orgId,
+    phaseId: phase.id,
+    processId: process.id,
+  })
+
   const { data: tasks } = await supabase
     .from('tasks')
     .select('id,title,description,priority,story_points,assignee_id,position')
@@ -220,10 +227,11 @@ export default async function ProcessSprintPlanningPage({
   if (searchParams.draftId) {
     const { data: dSprint } = await supabase
       .from('sprints')
-      .select('id,name,start_date,end_date')
+      .select('id,name,start_date,end_date,status')
       .eq('id', searchParams.draftId)
       .eq('project_id', project.id)
       .eq('organization_id', orgId)
+      .eq('status', 'draft')
       .maybeSingle()
     
     if (dSprint) {
