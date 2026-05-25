@@ -128,9 +128,6 @@ export function DashboardSidebar({
                     <p className="text-xs font-medium" style={{ color: 'var(--theme-foreground)' }}>
                       No projects assigned
                     </p>
-                    <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--theme-muted-foreground)' }}>
-                      When an admin adds you to a project, it will appear here.
-                    </p>
                   </div>
                 ) : null}
                 {projects.slice(0, SIDEBAR_PROJECT_LIMIT).map((project) => {

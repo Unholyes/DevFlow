@@ -391,3 +391,74 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     members: upserted ?? [],
   })
 }
+
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  const { id: projectId } = await context.params
+  if (!projectId) return jsonError(400, 'Missing project id')
+
+  const supabase = createClient()
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) return jsonError(401, 'Unauthorized')
+
+  const ctx = await loadProjectContext(supabase, projectId, user.id)
+  if ('error' in ctx) return ctx.error
+
+  const canManage = await userCanManageProjectMembers(supabase, {
+    organizationId: ctx.organizationId,
+    userId: user.id,
+    projectId: ctx.projectId,
+  })
+  if (!canManage) {
+    return jsonError(403, 'You do not have permission to manage this project team')
+  }
+
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    return jsonError(400, 'Invalid JSON')
+  }
+
+  const parsed = body as Record<string, unknown>
+  const memberId = typeof parsed.memberId === 'string' ? parsed.memberId.trim() : ''
+  const userId = typeof parsed.userId === 'string' ? parsed.userId.trim() : ''
+
+  if (!memberId && !userId) {
+    return jsonError(400, 'memberId or userId is required')
+  }
+
+  const admin = createAdminClient()
+  let query = admin
+    .from('project_members')
+    .delete()
+    .eq('project_id', ctx.projectId)
+    .eq('organization_id', ctx.organizationId)
+
+  if (memberId) {
+    query = query.eq('id', memberId)
+  } else {
+    query = query.eq('user_id', userId)
+  }
+
+  const { data: deleted, error: delError } = await query.select('id,user_id')
+
+  if (delError) {
+    if (delError.code === '42P01') {
+      return jsonError(
+        500,
+        'Project members table is missing. Apply project_members migrations and reload the schema cache.',
+      )
+    }
+    return jsonError(500, delError.message)
+  }
+
+  if (!deleted?.length) {
+    return jsonError(404, 'Project member not found')
+  }
+
+  return NextResponse.json({ ok: true, removed: deleted })
+}

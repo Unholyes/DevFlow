@@ -33,16 +33,18 @@ export function CompletePhaseButton(props: { phaseId: string; disabled: boolean;
   }
 
   return (
-    <div>
+    <div className="shrink-0 flex flex-col items-end gap-1">
       <Button
-        className="bg-green-600 hover:bg-green-700"
+        className="bg-green-600 hover:bg-green-700 whitespace-nowrap"
         onClick={onComplete}
         disabled={props.disabled || saving}
         title={props.reason || undefined}
       >
         {saving ? 'Completing…' : 'Complete Phase'}
       </Button>
-      {props.disabled && props.reason ? <div className="mt-1 text-xs text-gray-500">{props.reason}</div> : null}
+      {props.disabled && props.reason ? (
+        <p className="max-w-xs text-right text-xs text-gray-500">{props.reason}</p>
+      ) : null}
     </div>
   )
 }

@@ -35,7 +35,7 @@ type ProjectTeamRoleOption = {
   effectivePermissions: string[]
 }
 import { cn } from '@/lib/utils'
-import { ChevronDown, Info, Loader2, Search, Users, User, UsersRound, X } from 'lucide-react'
+import { ChevronDown, Info, Loader2, Search, Trash2, Users, User, UsersRound, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 
@@ -46,6 +46,16 @@ type AssigneeOption = {
   id: string
   label: string
   subtitle?: string
+}
+
+type ProjectMemberRow = {
+  id: string
+  userId: string
+  label: string
+  subtitle?: string
+  projectAccessLevel: string
+  projectTeamRoleId: string | null
+  teamRoleName: string | null
 }
 
 function FieldLabel({
@@ -111,6 +121,8 @@ export function ManageProjectTeamDialog({
   const [accessLevel, setAccessLevel] = useState<ProjectAccessLevel>('Editor')
   const [projectTeamRoleId, setProjectTeamRoleId] = useState<string>('')
   const [assigneeOptions, setAssigneeOptions] = useState<AssigneeOption[]>([])
+  const [projectMembers, setProjectMembers] = useState<ProjectMemberRow[]>([])
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null)
   const [projectTemplatePermissions, setProjectTemplatePermissions] = useState<
     Record<ProjectAccessLevel, string[]>
   >({ Admin: [], Editor: [], Viewer: [] })
@@ -143,17 +155,43 @@ export function ManageProjectTeamDialog({
       }
       const list = Array.isArray(json.assignees) ? (json.assignees as AssigneeOption[]) : []
       setAssigneeOptions(list)
-      if (json.projectTemplatePermissions && typeof json.projectTemplatePermissions === 'object') {
-        setProjectTemplatePermissions(json.projectTemplatePermissions as Record<ProjectAccessLevel, string[]>)
-      }
-      if (Array.isArray(json.teamRoles)) {
-        const roles = json.teamRoles as ProjectTeamRoleOption[]
+
+      const roles = Array.isArray(json.teamRoles) ? (json.teamRoles as ProjectTeamRoleOption[]) : []
+      if (roles.length > 0) {
         setTeamRoles(roles)
         setProjectTeamRoleId((cur) => cur || roles[0]?.id || '')
+      }
+
+      const userById = new Map(
+        list.filter((o) => o.kind === 'user').map((o) => [o.id, o] as const),
+      )
+      const roleNameById = new Map(roles.map((r) => [r.id, r.name] as const))
+      const rawMembers = Array.isArray(json.members) ? json.members : []
+      setProjectMembers(
+        rawMembers.map((m: Record<string, unknown>) => {
+          const userId = String(m.userId ?? '')
+          const userOpt = userById.get(userId)
+          const teamRoleId =
+            typeof m.projectTeamRoleId === 'string' ? m.projectTeamRoleId : null
+          return {
+            id: String(m.id ?? ''),
+            userId,
+            label: userOpt?.label ?? 'Unknown user',
+            subtitle: userOpt?.subtitle,
+            projectAccessLevel: String(m.projectAccessLevel ?? 'Viewer'),
+            projectTeamRoleId: teamRoleId,
+            teamRoleName: teamRoleId ? roleNameById.get(teamRoleId) ?? null : null,
+          }
+        }),
+      )
+
+      if (json.projectTemplatePermissions && typeof json.projectTemplatePermissions === 'object') {
+        setProjectTemplatePermissions(json.projectTemplatePermissions as Record<ProjectAccessLevel, string[]>)
       }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Failed to load organization users and teams')
       setAssigneeOptions([])
+      setProjectMembers([])
     } finally {
       setIsLoadingOptions(false)
     }
@@ -164,16 +202,24 @@ export function ManageProjectTeamDialog({
     void loadAssignees()
   }, [open, loadAssignees])
 
+  const assignedUserIds = useMemo(
+    () => new Set(projectMembers.map((m) => m.userId)),
+    [projectMembers],
+  )
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return assigneeOptions
-    return assigneeOptions.filter(
+    const available = assigneeOptions.filter(
+      (o) => o.kind === 'team' || !assignedUserIds.has(o.id),
+    )
+    if (!q) return available
+    return available.filter(
       (o) =>
         o.label.toLowerCase().includes(q) ||
         (o.subtitle && o.subtitle.toLowerCase().includes(q)) ||
         o.kind.toLowerCase().includes(q),
     )
-  }, [assigneeOptions, search])
+  }, [assigneeOptions, assignedUserIds, search])
 
   const selectedTeamRole = useMemo(
     () => teamRoles.find((r) => r.id === projectTeamRoleId) ?? null,
@@ -188,6 +234,39 @@ export function ManageProjectTeamDialog({
 
   const canSave =
     Boolean(assignee) && !isSaving && !isLoadingOptions && (teamRoles.length === 0 || Boolean(projectTeamRoleId))
+
+  const handleRemoveMember = async (member: ProjectMemberRow) => {
+    const confirmed = window.confirm(
+      `Remove ${member.label} from this project? They will lose project access until reassigned.`,
+    )
+    if (!confirmed) return
+
+    setRemovingMemberId(member.id)
+    setSaveError(null)
+    const previous = projectMembers
+    setProjectMembers((cur) => cur.filter((m) => m.id !== member.id))
+
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/members`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ memberId: member.id, userId: member.userId }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(typeof json.error === 'string' ? json.error : 'Failed to remove member')
+      }
+
+      router.refresh()
+      void loadAssignees()
+    } catch (e) {
+      setProjectMembers(previous)
+      setSaveError(e instanceof Error ? e.message : 'Failed to remove member')
+    } finally {
+      setRemovingMemberId(null)
+    }
+  }
 
   const handleSave = async (andNew: boolean) => {
     if (!assignee) {
@@ -252,7 +331,7 @@ export function ManageProjectTeamDialog({
           )}
         >
           <DialogHeader className="shrink-0 border-b border-gray-100 px-6 pb-4 pt-6 text-center">
-            <DialogTitle className="text-lg font-semibold text-gray-900">Assign Team Member</DialogTitle>
+            <DialogTitle className="text-lg font-semibold text-gray-900">Manage Project Team</DialogTitle>
           </DialogHeader>
 
           <div className="flex shrink-0 items-center justify-end border-b border-gray-50 px-6 py-2">
@@ -263,9 +342,58 @@ export function ManageProjectTeamDialog({
 
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
             <div className="space-y-6">
+              <section className="space-y-3">
+                <div className="-mx-6 border-y border-gray-200 bg-gray-100 px-6 py-2 text-sm font-semibold text-gray-800">
+                  Current members ({projectMembers.length})
+                </div>
+                {isLoadingOptions ? (
+                  <p className="flex items-center gap-2 text-sm text-gray-500">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading members…
+                  </p>
+                ) : projectMembers.length === 0 ? (
+                  <p className="text-sm text-gray-500">No one is assigned to this project yet.</p>
+                ) : (
+                  <ul className="divide-y divide-gray-100 rounded-md border border-gray-200">
+                    {projectMembers.map((member) => (
+                      <li
+                        key={member.id}
+                        className="flex items-center justify-between gap-3 px-3 py-2.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-gray-900">{member.label}</p>
+                          {member.subtitle ? (
+                            <p className="truncate text-xs text-gray-500">{member.subtitle}</p>
+                          ) : null}
+                          <p className="mt-0.5 text-xs text-gray-600">
+                            {member.projectAccessLevel}
+                            {member.teamRoleName ? ` · ${member.teamRoleName}` : ''}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="shrink-0 text-red-600 hover:bg-red-50 hover:text-red-700"
+                          disabled={Boolean(removingMemberId)}
+                          onClick={() => void handleRemoveMember(member)}
+                          aria-label={`Remove ${member.label} from project`}
+                        >
+                          {removingMemberId === member.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
               <section className="space-y-4">
                 <div className="-mx-6 border-y border-gray-200 bg-gray-100 px-6 py-2 text-sm font-semibold text-gray-800">
-                  Assignment
+                  Add assignment
                 </div>
 
                 <div>

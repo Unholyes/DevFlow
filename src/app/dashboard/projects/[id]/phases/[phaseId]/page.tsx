@@ -191,8 +191,8 @@ export default async function PhasePage({ params }: { params: { id: string; phas
           Back to Project Overview
         </Link>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex justify-between items-center">
-          <div className="flex items-center gap-3">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex justify-between items-start gap-4">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
             <h1 className="text-xl font-medium text-gray-900">{project.name}</h1>
             <span className="text-gray-400">→</span>
             <h2 className="text-xl font-bold text-blue-600">{phase.title} Phase</h2>
@@ -205,7 +205,7 @@ export default async function PhasePage({ params }: { params: { id: string; phas
             disabled={!canApprovePhaseGates || !canCompletePhase}
             reason={
               !canApprovePhaseGates
-                ? 'You need Approve phase gate transitions (project access template) to complete this phase'
+                ? 'You do not have permission to complete phases '
                 : phase.status === 'completed'
                   ? 'Phase already completed'
                   : hasAnyOpenSprint
