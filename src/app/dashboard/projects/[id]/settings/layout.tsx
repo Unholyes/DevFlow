@@ -1,10 +1,10 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ProjectSettingsNav } from '@/components/project/project-settings-nav'
 import { createClient } from '@/lib/supabase/server'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { loadProjectForSettings } from '@/lib/projects/load-project-for-settings'
+import { userCanManageProjectSettings } from '@/lib/permissions/project-settings-permissions'
 
 export default async function ProjectSettingsLayout({
   children,
@@ -37,6 +37,16 @@ export default async function ProjectSettingsLayout({
   const project = await loadProjectForSettings(supabase, orgId, params.id)
   if (!project) notFound()
 
+  const canManageSettings = await userCanManageProjectSettings(supabase, {
+    organizationId: orgId,
+    userId: user.id,
+    projectId: project.id,
+  })
+
+  if (!canManageSettings) {
+    redirect(`/dashboard/projects/${project.id}`)
+  }
+
   return (
     <div className="mx-auto w-full max-w-3xl px-6 py-6">
       <div className="mb-6">
@@ -46,8 +56,7 @@ export default async function ProjectSettingsLayout({
         <h1 className="mt-2 text-2xl font-semibold text-gray-900">Project settings</h1>
         <p className="mt-1 text-sm text-gray-500">{project.name}</p>
       </div>
-      <ProjectSettingsNav projectId={project.id} />
-      <div className="mt-6">{children}</div>
+      <div>{children}</div>
     </div>
   )
 }

@@ -179,43 +179,41 @@ export async function resolveProjectPermissionsForUser(
       .eq('user_id', userId)
       .maybeSingle()
 
-    if (member) {
-      const permissions = new Set<string>()
-      let hasSpecificRole = false
+    // Assigned to this project: only use this row's access template + team/functional role.
+    // Do not fall back to org-wide inferred Admin (e.g. from create-project or other memberships).
+    if (!member) {
+      return []
+    }
 
-      // 1. Base permissions from Project Access Template (Admin / Editor / Viewer)
-      const level = parseProjectAccessLevel((member as { project_access_level?: unknown })?.project_access_level)
-      if (level) {
-        hasSpecificRole = true
-        const templatePerms = await loadTemplatePermissions(supabase, organizationId, level)
-        for (const p of templatePerms) permissions.add(p)
-      }
+    const permissions = new Set<string>()
 
-      // 2. Additional permissions from Team Role
-      const projectTeamRoleId = String((member as { project_team_role_id?: unknown })?.project_team_role_id ?? '').trim()
-      if (projectTeamRoleId) {
-        hasSpecificRole = true
-        const fromTeamRole = await resolvePermissionsForProjectTeamRoleId(
-          supabase,
-          projectTeamRoleId,
-          organizationId,
-        )
-        for (const p of fromTeamRole) permissions.add(p)
-      } 
-      // 3. Fallback to older Functional Role if no Team Role
-      else {
-        const functionalRole = parseFunctionalRole((member as { functional_role?: unknown })?.functional_role)
-        if (functionalRole) {
-          hasSpecificRole = true
-          const fromFuncRole = await loadProjectFunctionalRolePermissions(supabase, projectId, functionalRole)
-          for (const p of fromFuncRole) permissions.add(p)
-        }
-      }
+    // 1. Base permissions from Project Access Template (Admin / Editor / Viewer)
+    const level = parseProjectAccessLevel((member as { project_access_level?: unknown })?.project_access_level)
+    if (level) {
+      const templatePerms = await loadTemplatePermissions(supabase, organizationId, level)
+      for (const p of templatePerms) permissions.add(p)
+    }
 
-      if (hasSpecificRole) {
-        return Array.from(permissions)
+    // 2. Additional permissions from Team Role
+    const projectTeamRoleId = String((member as { project_team_role_id?: unknown })?.project_team_role_id ?? '').trim()
+    if (projectTeamRoleId) {
+      const fromTeamRole = await resolvePermissionsForProjectTeamRoleId(
+        supabase,
+        projectTeamRoleId,
+        organizationId,
+      )
+      for (const p of fromTeamRole) permissions.add(p)
+    }
+    // 3. Fallback to older Functional Role if no Team Role
+    else {
+      const functionalRole = parseFunctionalRole((member as { functional_role?: unknown })?.functional_role)
+      if (functionalRole) {
+        const fromFuncRole = await loadProjectFunctionalRolePermissions(supabase, projectId, functionalRole)
+        for (const p of fromFuncRole) permissions.add(p)
       }
     }
+
+    return Array.from(permissions)
   }
 
   const accessLevel = await resolveProjectAccessLevelForUser(supabase, params)

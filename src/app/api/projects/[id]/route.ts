@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { TENANT_SLUG_HEADER } from '@/lib/tenant/resolve'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { notifyProjectCompleted } from '@/lib/notifications/create-notifications'
+import { userCanManageProjectSettings } from '@/lib/permissions/project-settings-permissions'
 
 async function resolveOrgIdForRequest(supabase: ReturnType<typeof createClient>, userId: string, tenantSlug: string | null) {
   if (tenantSlug) {
@@ -26,6 +27,15 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     const tenantSlug = request.headers.get(TENANT_SLUG_HEADER)
     const orgId = await resolveOrgIdForRequest(supabase, user.id, tenantSlug)
     if (!orgId) return NextResponse.json({ error: 'No workspace organization found for user' }, { status: 400 })
+
+    const canManageSettings = await userCanManageProjectSettings(supabase, {
+      organizationId: orgId,
+      userId: user.id,
+      projectId: params.id,
+    })
+    if (!canManageSettings) {
+      return NextResponse.json({ error: 'You do not have permission to manage project settings' }, { status: 403 })
+    }
 
     const body = (await request.json()) as {
       name?: string
@@ -152,6 +162,15 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
     const tenantSlug = request.headers.get(TENANT_SLUG_HEADER)
     const orgId = await resolveOrgIdForRequest(supabase, user.id, tenantSlug)
     if (!orgId) return NextResponse.json({ error: 'No workspace organization found for user' }, { status: 400 })
+
+    const canManageSettings = await userCanManageProjectSettings(supabase, {
+      organizationId: orgId,
+      userId: user.id,
+      projectId: params.id,
+    })
+    if (!canManageSettings) {
+      return NextResponse.json({ error: 'You do not have permission to manage project settings' }, { status: 403 })
+    }
 
     const { data: phases, error: phaseLoadError } = await supabase
       .from('sdlc_phases')

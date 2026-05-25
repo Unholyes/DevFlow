@@ -226,11 +226,27 @@ export function ManageProjectTeamDialog({
     [projectTeamRoleId, teamRoles],
   )
 
-  const effectivePermissions = useMemo(() => {
-    if (selectedTeamRole?.effectivePermissions?.length) return selectedTeamRole.effectivePermissions
-    if (selectedTeamRole) return selectedTeamRole.effectivePermissions
-    return projectTemplatePermissions[accessLevel] ?? []
-  }, [accessLevel, projectTemplatePermissions, selectedTeamRole])
+  const accessLevelPermissions = useMemo(
+    () => projectTemplatePermissions[accessLevel] ?? [],
+    [accessLevel, projectTemplatePermissions],
+  )
+
+  const teamRolePermissions = useMemo(
+    () => selectedTeamRole?.effectivePermissions ?? [],
+    [selectedTeamRole],
+  )
+
+  const combinedEffectivePermissions = useMemo(() => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const id of [...accessLevelPermissions, ...teamRolePermissions]) {
+      const key = id.toLowerCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(id)
+    }
+    return out
+  }, [accessLevelPermissions, teamRolePermissions])
 
   const canSave =
     Boolean(assignee) && !isSaving && !isLoadingOptions && (teamRoles.length === 0 || Boolean(projectTeamRoleId))
@@ -525,7 +541,7 @@ export function ManageProjectTeamDialog({
                   <div>
                     <FieldLabel className="inline-flex items-center" htmlFor={`${baseId}-access`}>
                       Project access level
-                      <InfoHint text="Fallback when no functional role is set. Org templates are under workspace Settings → Permissions." />
+                      <InfoHint text="Baseline permissions for this assignment. Configure templates under Settings → Permissions → Project access templates." />
                     </FieldLabel>
                     <Select value={accessLevel} onValueChange={(v) => setAccessLevel(parseAccessLevel(v))}>
                       <SelectTrigger id={`${baseId}-access`} className="h-9">
@@ -543,7 +559,7 @@ export function ManageProjectTeamDialog({
                   <div>
                     <FieldLabel className="inline-flex items-center" htmlFor={`${baseId}-team-role`}>
                       Team role
-                      <InfoHint text="Primary permission profile for this assignment. Configure under Project settings → Team roles." />
+                      <InfoHint text="Additional permissions on top of the access level. Configure role definitions under Accounts → Team roles." />
                     </FieldLabel>
                     <Select value={projectTeamRoleId} onValueChange={setProjectTeamRoleId}>
                       <SelectTrigger id={`${baseId}-team-role`} className="h-9">
@@ -560,20 +576,65 @@ export function ManageProjectTeamDialog({
                   </div>
                 </div>
                 <div className="rounded-md border border-blue-100 bg-blue-50/50 px-3 py-3">
-                  <p className="text-xs font-semibold text-blue-900">
-                    Permissions from <span className="font-medium">{selectedTeamRole?.name ?? 'team role'}</span>
+                  <p className="text-xs font-semibold text-blue-900">Effective access preview</p>
+                  <p className="mt-0.5 text-[11px] text-blue-800">
+                    Access level and team role permissions are combined (union) on this project.
                   </p>
-                  {effectivePermissions.length === 0 ? (
-                    <p className="mt-1 text-xs text-blue-800">No project-scoped permissions (read-only).</p>
-                  ) : (
-                    <ul className="mt-2 max-h-28 space-y-1 overflow-auto text-xs text-blue-900">
-                      {effectivePermissions.map((perm) => (
-                        <li key={perm} className="list-inside list-disc">
-                          {getProjectTemplatePermissionLabel(perm)}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <p className="text-xs font-medium text-blue-900">
+                        Project access level ({accessLevel})
+                      </p>
+                      {accessLevelPermissions.length === 0 ? (
+                        <p className="mt-1 text-xs text-blue-800">No permissions in this template.</p>
+                      ) : (
+                        <ul className="mt-1.5 max-h-24 space-y-1 overflow-auto text-xs text-blue-900">
+                          {accessLevelPermissions.map((perm) => (
+                            <li key={`access-${perm}`} className="list-inside list-disc">
+                              {getProjectTemplatePermissionLabel(perm)}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+
+                    {selectedTeamRole ? (
+                      <div>
+                        <p className="text-xs font-medium text-blue-900">
+                          Team role ({selectedTeamRole.name})
+                        </p>
+                        {teamRolePermissions.length === 0 ? (
+                          <p className="mt-1 text-xs text-blue-800">No extra permissions from this role.</p>
+                        ) : (
+                          <ul className="mt-1.5 max-h-24 space-y-1 overflow-auto text-xs text-blue-900">
+                            {teamRolePermissions.map((perm) => (
+                              <li key={`role-${perm}`} className="list-inside list-disc">
+                                {getProjectTemplatePermissionLabel(perm)}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-3 border-t border-blue-200/80 pt-2">
+                    <p className="text-xs font-medium text-blue-900">
+                      Combined ({combinedEffectivePermissions.length})
+                    </p>
+                    {combinedEffectivePermissions.length === 0 ? (
+                      <p className="mt-1 text-xs text-blue-800">No project-scoped permissions (read-only).</p>
+                    ) : (
+                      <ul className="mt-1.5 max-h-20 space-y-1 overflow-auto text-xs text-blue-900">
+                        {combinedEffectivePermissions.map((perm) => (
+                          <li key={`combined-${perm}`} className="list-inside list-disc">
+                            {getProjectTemplatePermissionLabel(perm)}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </div>
               </section>
 

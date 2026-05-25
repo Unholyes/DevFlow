@@ -10,6 +10,7 @@ import { getCachedUser } from '@/lib/supabase/cached'
 import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { userCanManageProjectMembers } from '@/lib/permissions/project-members-permissions'
+import { userCanManageProjectSettings } from '@/lib/permissions/project-settings-permissions'
 import type { ProjectStatus } from '@/types'
 import { computePhaseProgressPercent } from '@/lib/projects/compute-phase-progress'
 import { isPhaseCompleteForGating, isPhaseLockedByGating } from '@/lib/projects/phase-gating'
@@ -49,7 +50,8 @@ export default async function ProjectPage({ params }: { params: { id: string } }
   if (!orgId) redirect('/onboarding')
 
   // ── Batch 1: Fetch project, team count, phases, and permissions in parallel ──
-  const [projectAttempt, memberCountRes, phasesAttempt, canManageProjectTeam] = await Promise.all([
+  const [projectAttempt, memberCountRes, phasesAttempt, canManageProjectTeam, canManageProjectSettings] =
+    await Promise.all([
     supabase
       .from('projects')
       .select('id,name,description,status,progress_percent,phase_gating_enabled,due_date')
@@ -67,6 +69,11 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       .eq('project_id', params.id)
       .order('order_index', { ascending: true }),
     userCanManageProjectMembers(supabase, {
+      organizationId: orgId,
+      userId: user.id,
+      projectId: params.id,
+    }),
+    userCanManageProjectSettings(supabase, {
       organizationId: orgId,
       userId: user.id,
       projectId: params.id,
@@ -276,6 +283,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       <ProjectHeader
         organizationId={orgId}
         canManageProjectTeam={canManageProjectTeam}
+        canManageProjectSettings={canManageProjectSettings}
         project={{
           id: project.id,
           name: project.name,

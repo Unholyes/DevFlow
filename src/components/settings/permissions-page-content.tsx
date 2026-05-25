@@ -57,6 +57,7 @@ const GLOBAL_ACCOUNT_PERMISSIONS: Array<{
   { id: 'account.users.remove', category: 'Account', label: 'Remove users' },
   { id: 'pm.projects.create', category: 'Project Management', label: 'Create new project' },
   { id: 'pm.project_members.manage', category: 'Project Management', label: 'Manage project team' },
+  { id: 'pm.project_settings.manage', category: 'Project Management', label: 'Manage project settings' },
   { id: 'projects.archive', category: 'Project Management', label: 'Archive project' },
   { id: 'system.api_tokens.generate', category: 'System', label: 'Generate API tokens' },
   { id: 'system.integrations.manage', category: 'System', label: 'Integration setup' },
@@ -799,8 +800,11 @@ export function PermissionsPageContent({
               <p className="mt-2 text-sm text-muted-foreground">
                 Choose which <span className="font-medium">Project Management</span>,{' '}
                 <span className="font-medium">SDLC Management</span>, and <span className="font-medium">Development</span>{' '}
-                permissions are included by default for this access level when someone is assigned to a project.
-                Account and system permissions are configured separately under default or custom account roles.
+                permissions apply when someone is assigned to a project with this access level (
+                <span className="font-medium">Admin</span>, <span className="font-medium">Editor</span>, or{' '}
+                <span className="font-medium">Viewer</span> on the project team).
+                Workspace-wide project permissions (manage team, project settings, etc.) are configured under
+                default or custom <span className="font-medium">account roles</span> above, not here.
               </p>
               <div className="mt-4 max-h-[520px] overflow-auto rounded-md border border-border">
                 {ORDERED_PROJECT_TEMPLATE_GROUPS.map(([category, perms]) => (

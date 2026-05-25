@@ -4,6 +4,7 @@ import { getTenantSlug } from '@/lib/tenant/server'
 import { resolvePrimaryOrgIdForUser } from '@/lib/organizations/resolve-primary-org'
 import { ProjectSettingsForm } from '@/components/project/project-settings-form'
 import { loadProjectForSettings } from '@/lib/projects/load-project-for-settings'
+import { userCanManageProjectSettings } from '@/lib/permissions/project-settings-permissions'
 
 export default async function ProjectSettingsPage({ params }: { params: { id: string } }) {
   const tenantSlug = getTenantSlug()
@@ -29,6 +30,16 @@ export default async function ProjectSettingsPage({ params }: { params: { id: st
 
   const project = await loadProjectForSettings(supabase, orgId, params.id)
   if (!project) notFound()
+
+  const canManageSettings = await userCanManageProjectSettings(supabase, {
+    organizationId: orgId,
+    userId: user.id,
+    projectId: project.id,
+  })
+
+  if (!canManageSettings) {
+    redirect(`/dashboard/projects/${project.id}`)
+  }
 
   return (
     <ProjectSettingsForm

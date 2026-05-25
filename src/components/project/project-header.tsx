@@ -8,6 +8,7 @@ import Link from 'next/link'
 interface ProjectHeaderProps {
   organizationId?: string
   canManageProjectTeam?: boolean
+  canManageProjectSettings?: boolean
   project: {
     id: string
     name: string
@@ -28,7 +29,13 @@ const statusColors = {
   completed: 'bg-blue-100 text-blue-800',
 }
 
-export function ProjectHeader({ organizationId, canManageProjectTeam, project }: ProjectHeaderProps) {
+export function ProjectHeader({
+  organizationId,
+  canManageProjectTeam,
+  canManageProjectSettings,
+  project,
+}: ProjectHeaderProps) {
+  const showProjectSettings = canManageProjectSettings
   return (
     <div className="bg-card text-card-foreground overflow-hidden shadow rounded-lg border border-border">
       <div className="px-4 py-5 sm:p-6">
@@ -63,12 +70,14 @@ export function ProjectHeader({ organizationId, canManageProjectTeam, project }:
                 projectName={project.name}
               />
             ) : null}
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/dashboard/projects/${project.id}/settings`}>
-                <Settings className="h-4 w-4 mr-2" />
-                Settings
-              </Link>
-            </Button>
+            {showProjectSettings ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/dashboard/projects/${project.id}/settings`}>
+                  <Settings className="h-4 w-4 mr-2" />
+                  Settings
+                </Link>
+              </Button>
+            ) : null}
           </div>
         </div>
       </div>

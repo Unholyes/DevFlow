@@ -5,7 +5,7 @@
  *
  * Delivery actions (sprints, gates, backlog, etc.) use project access templates.
  * Some `pm.*` ids also exist on templates for per-project delegation; account
- * copies apply workspace-wide (e.g. manage any project team).
+ * copies apply workspace-wide (e.g. manage any project team or project settings).
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -16,6 +16,7 @@ export const GLOBAL_ACCOUNT_PERMISSION_IDS = [
   'account.users.remove',
   'pm.projects.create',
   'pm.project_members.manage',
+  'pm.project_settings.manage',
   'projects.archive',
   'system.api_tokens.generate',
   'system.integrations.manage',
