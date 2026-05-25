@@ -1,10 +1,18 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { CheckCircle2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { SPRINT_CARRYOVER_PLAN_NEW } from '@/lib/sprints/sprint-carryover';
 
 interface SprintCompletionModalProps {
   isOpen: boolean;
@@ -12,7 +20,11 @@ interface SprintCompletionModalProps {
   onComplete: (data: {
     retrospective: { wentWell: string; improve: string; actionItems: string };
     unfinishedAction: 'backlog' | 'next_sprint';
-  }) => void;
+    carryoverTargetSprintId?: string | null;
+    deferCarryoverToPlan?: boolean;
+  }) => void | Promise<void>;
+  carryoverDraftSprints?: Array<{ id: string; name: string; story_points_total: number }>;
+  sprintCapacityPoints?: number;
   sprintData: {
     name: string;
     totalPoints: number;
@@ -25,31 +37,93 @@ interface SprintCompletionModalProps {
   };
 }
 
-export function SprintCompletionModal({ isOpen, onClose, onComplete, sprintData }: SprintCompletionModalProps) {
+export function SprintCompletionModal({
+  isOpen,
+  onClose,
+  onComplete,
+  sprintData,
+  carryoverDraftSprints = [],
+  sprintCapacityPoints,
+}: SprintCompletionModalProps) {
   const [wentWell, setWentWell] = useState('');
   const [improve, setImprove] = useState('');
   const [actionItems, setActionItems] = useState('');
   const [unfinishedAction, setUnfinishedAction] = useState<'backlog' | 'next_sprint'>('backlog');
+  const [carryoverTarget, setCarryoverTarget] = useState('');
   const [step, setStep] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
 
-  const completionRate = Math.round((sprintData.completedPoints / sprintData.totalPoints) * 100);
+  const completionRate =
+    sprintData.totalPoints > 0
+      ? Math.round((sprintData.completedPoints / sprintData.totalPoints) * 100)
+      : sprintData.completedPoints > 0
+        ? 100
+        : 0;
   const unfinishedCount = sprintData.unfinishedTasks.length;
   const unfinishedPoints = sprintData.unfinishedTasks.reduce((sum, t) => sum + t.storyPoints, 0);
 
-  const handleComplete = () => {
-    onComplete({
-      retrospective: { wentWell, improve, actionItems },
-      unfinishedAction,
-    });
+  const selectedDraft = carryoverDraftSprints.find((s) => s.id === carryoverTarget);
+  const capacity = sprintCapacityPoints && sprintCapacityPoints > 0 ? sprintCapacityPoints : null;
+  const projectedPoints =
+    carryoverTarget && carryoverTarget !== SPRINT_CARRYOVER_PLAN_NEW && selectedDraft
+      ? (selectedDraft.story_points_total || 0) + unfinishedPoints
+      : null;
+  const overCapacity =
+    capacity != null && projectedPoints != null && projectedPoints > capacity;
+
+  const carryoverTargetLabel = useMemo(() => {
+    if (unfinishedAction !== 'next_sprint') return null;
+    if (carryoverTarget === SPRINT_CARRYOVER_PLAN_NEW) return 'Plan a new sprint (Create Sprint)';
+    if (selectedDraft) {
+      return `${selectedDraft.name} (draft, ${selectedDraft.story_points_total} pts planned)`;
+    }
+    return null;
+  }, [unfinishedAction, carryoverTarget, selectedDraft]);
+
+  const carryoverSelectionError =
+    unfinishedAction === 'next_sprint' && unfinishedCount > 0 && !carryoverTarget.trim()
+      ? 'Select a sprint draft or "Plan a new sprint"'
+      : null;
+
+  const resetForm = () => {
     setStep(1);
     setWentWell('');
     setImprove('');
     setActionItems('');
     setUnfinishedAction('backlog');
+    setCarryoverTarget('');
+  };
+
+  const handleComplete = async () => {
+    if (carryoverSelectionError) return;
+    setSubmitting(true);
+    try {
+      const deferCarryoverToPlan =
+        unfinishedAction === 'next_sprint' && carryoverTarget === SPRINT_CARRYOVER_PLAN_NEW;
+      const targetSprintId =
+        unfinishedAction === 'next_sprint' && carryoverTarget && !deferCarryoverToPlan
+          ? carryoverTarget
+          : null;
+
+      await onComplete({
+        retrospective: { wentWell, improve, actionItems },
+        unfinishedAction,
+        carryoverTargetSprintId: targetSprintId,
+        deferCarryoverToPlan,
+      });
+      resetForm();
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open && !submitting) onClose();
+      }}
+    >
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl">
@@ -122,17 +196,62 @@ export function SprintCompletionModal({ isOpen, onClose, onComplete, sprintData 
                         <div className="text-xs text-gray-600 mt-1">Tasks go back to product backlog</div>
                       </button>
                       <button
-                        onClick={() => setUnfinishedAction('next_sprint')}
+                        onClick={() => {
+                          setUnfinishedAction('next_sprint');
+                          if (!carryoverTarget) {
+                            setCarryoverTarget(SPRINT_CARRYOVER_PLAN_NEW);
+                          }
+                        }}
                         className={`flex-1 p-3 rounded-lg border-2 text-left transition-colors ${
                           unfinishedAction === 'next_sprint'
                             ? 'border-blue-500 bg-blue-50'
                             : 'border-gray-200 hover:border-gray-300'
                         }`}
                       >
-                        <div className="font-medium text-gray-900">Add to Next Sprint</div>
-                        <div className="text-xs text-gray-600 mt-1">Tasks included in next sprint</div>
+                        <div className="font-medium text-gray-900">Add to next sprint</div>
+                        <div className="text-xs text-gray-600 mt-1">
+                          Choose a Create Sprint draft or plan a new sprint — not the upcoming
+                          scheduled sprint
+                        </div>
                       </button>
                     </div>
+                    {unfinishedAction === 'next_sprint' ? (
+                      <div className="mt-4 space-y-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Target sprint
+                        </label>
+                        <Select value={carryoverTarget} onValueChange={setCarryoverTarget}>
+                          <SelectTrigger className="bg-white">
+                            <SelectValue placeholder="Select sprint…" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={SPRINT_CARRYOVER_PLAN_NEW}>
+                              Plan a new sprint (Create Sprint) — recommended
+                            </SelectItem>
+                            {carryoverDraftSprints.map((s) => (
+                              <SelectItem key={s.id} value={s.id}>
+                                {s.name} (draft · {s.story_points_total} pts)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {carryoverSelectionError ? (
+                          <p className="text-xs text-red-600">{carryoverSelectionError}</p>
+                        ) : null}
+                        {overCapacity ? (
+                          <p className="text-xs text-amber-700">
+                            Adding {unfinishedPoints} pts would bring this draft to {projectedPoints}{' '}
+                            pts (capacity {capacity}). Adjust tasks on the plan page after carryover.
+                          </p>
+                        ) : null}
+                        {carryoverDraftSprints.length === 0 ? (
+                          <p className="text-xs text-gray-600">
+                            No saved sprint drafts yet. Use &quot;Plan a new sprint&quot; to open Create
+                            Sprint with these tasks pre-selected.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>
@@ -189,9 +308,9 @@ export function SprintCompletionModal({ isOpen, onClose, onComplete, sprintData 
               <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
                 <CheckCircle2 className="h-8 w-8 text-green-600" />
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Sprint Completed!</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Ready to complete</h3>
               <p className="text-gray-600">
-                {sprintData.name} has been archived
+                Confirm to close {sprintData.name} and apply your choices for unfinished work.
               </p>
             </div>
 
@@ -215,9 +334,15 @@ export function SprintCompletionModal({ isOpen, onClose, onComplete, sprintData 
                 <div className="flex justify-between">
                   <span className="text-gray-600">Unfinished Action</span>
                   <span className="font-semibold text-gray-900">
-                    {unfinishedAction === 'backlog' ? 'Return to Backlog' : 'Add to Next Sprint'}
+                    {unfinishedAction === 'backlog' ? 'Return to Backlog' : 'Add to next sprint'}
                   </span>
                 </div>
+                {carryoverTargetLabel ? (
+                  <div className="flex justify-between gap-4">
+                    <span className="text-gray-600 shrink-0">Target</span>
+                    <span className="font-semibold text-gray-900 text-right">{carryoverTargetLabel}</span>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
 
@@ -234,22 +359,26 @@ export function SprintCompletionModal({ isOpen, onClose, onComplete, sprintData 
         <DialogFooter className="gap-2">
           {step === 1 ? (
             <>
-              <Button variant="outline" onClick={onClose}>
+              <Button variant="outline" onClick={onClose} disabled={submitting}>
                 Cancel
               </Button>
-              <Button onClick={() => setStep(2)}>
+              <Button onClick={() => setStep(2)} disabled={Boolean(carryoverSelectionError)}>
                 Review Summary
               </Button>
             </>
           ) : (
             <>
-              <Button variant="outline" onClick={() => setStep(1)}>
+              <Button variant="outline" onClick={() => setStep(1)} disabled={submitting}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Back
               </Button>
-              <Button onClick={handleComplete} className="bg-green-600 hover:bg-green-700">
+              <Button
+                onClick={() => void handleComplete()}
+                className="bg-green-600 hover:bg-green-700"
+                disabled={submitting || Boolean(carryoverSelectionError)}
+              >
                 <CheckCircle2 className="h-4 w-4 mr-2" />
-                Complete Sprint
+                {submitting ? 'Completing…' : 'Complete Sprint'}
               </Button>
             </>
           )}

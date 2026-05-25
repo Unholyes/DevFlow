@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { KanbanTaskDetailModal, type TaskRowLite } from '@/components/project/KanbanTaskDetailModal'
+import { isSprintActiveForBoard } from '@/lib/sprints/sprint-board-eligibility'
 import {
   DndContext,
   DragOverlay,
@@ -334,6 +335,14 @@ export default function ScrumView(props: {
     [tasks, teamFilterActive, teamFilterId]
   )
 
+  const sprintLiveOnBoard =
+    props.sprint != null &&
+    props.sprint.status === 'active' &&
+    isSprintActiveForBoard({
+      status: props.sprint.status,
+      start_date: props.sprint.start_date,
+    })
+
   const metricsTasks = teamFilterActive ? tasksForBoard : tasks
   const totalPoints = metricsTasks.reduce((sum, t) => sum + (t.story_points || 0), 0)
   const donePoints = metricsTasks.reduce(
@@ -637,7 +646,7 @@ export default function ScrumView(props: {
             >
               Sprint Details
             </Button>
-            {props.sprint.status !== 'closed' ? (
+            {props.sprint.status !== 'closed' && sprintLiveOnBoard ? (
               <Button
                 className="bg-green-600 hover:bg-green-700"
                 onClick={() =>

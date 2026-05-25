@@ -59,11 +59,21 @@ export default async function SprintDetailsPage({
 
   const { data: tasks } = await supabase
     .from('tasks')
-    .select('id,title,description,priority,story_points,completed_at,position')
+    .select('id,title,description,priority,story_points,completed_at,workflow_stage_id,position')
     .eq('project_id', project.id)
     .eq('organization_id', orgId)
     .eq('sprint_id', sprint.id)
     .order('position', { ascending: true })
+
+  const { data: workflowStages } = await supabase
+    .from('workflow_stages')
+    .select('id,is_done')
+    .eq('phase_id', phase.id)
+    .eq('organization_id', orgId)
+
+  const stageIsDoneById = Object.fromEntries(
+    (workflowStages ?? []).map((s) => [String(s.id), Boolean((s as { is_done?: boolean }).is_done)]),
+  )
 
   return (
     <SprintDetailsPageClient
@@ -71,6 +81,7 @@ export default async function SprintDetailsPage({
       phaseId={phase.id}
       sprint={sprint as any}
       tasks={(tasks ?? []) as any}
+      stageIsDoneById={stageIsDoneById}
     />
   )
 }

@@ -117,10 +117,19 @@ export function SprintPlanningPageClient(props: {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [createErrorDialog, setCreateErrorDialog] = useState<{ title: string; message: string } | null>(null)
 
+  const carryoverFromComplete = searchParams.get('fromComplete') === '1'
+
   useEffect(() => {
     const tasksParam = searchParams.get('tasks')
-    if (tasksParam) setSelectedTasks(new Set(tasksParam.split(',')))
-  }, [searchParams])
+    if (!tasksParam) return
+    const idSet = new Set(tasksParam.split(',').filter(Boolean))
+    if (idSet.size === 0) return
+    setSelectedTasks(idSet)
+    const picked = allInitialTasks.filter((t) => idSet.has(t.id))
+    if (picked.length > 0) {
+      setSprintTasks((prev) => uniqueById([...picked, ...prev]))
+    }
+  }, [searchParams, allInitialTasks])
 
   useEffect(() => {
     if (!props.draftSprint) return
@@ -635,6 +644,13 @@ export function SprintPlanningPageClient(props: {
           Back to Sprints
         </Link>
       </div>
+
+      {carryoverFromComplete ? (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          Unfinished tasks from your completed sprint are pre-selected below. Save or start this sprint
+          when you are ready — they will not be added to your upcoming scheduled sprint automatically.
+        </div>
+      ) : null}
 
       <div className="flex justify-between items-center">
         <div>

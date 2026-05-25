@@ -13,6 +13,7 @@ import {
 } from '@/lib/sprints/sprint-date-validation'
 import { isSprintActiveForBoard } from '@/lib/sprints/sprint-board-eligibility'
 import { releaseSprintTasksToProductBacklog } from '@/lib/sprints/release-sprint-tasks-to-backlog'
+import { applyUnfinishedTasksAfterSprintClose } from '@/lib/sprints/apply-sprint-close-unfinished'
 
 function isUniqueViolation(error: unknown) {
   return typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
@@ -276,12 +277,29 @@ export async function PATCH(request: Request) {
     }
 
     const body = await request.json()
-    const { id, action, start_date, end_date, sprint_start_stage_id, ...updates } = body as {
+    const {
+      id,
+      action,
+      start_date,
+      end_date,
+      sprint_start_stage_id,
+      unfinished_action,
+      target_sprint_id,
+      defer_carryover_to_plan,
+      summary,
+      retrospective,
+      ...updates
+    } = body as {
       id?: string
-      action?: 'approve' | 'reject'
+      action?: 'approve' | 'reject' | 'close'
       start_date?: string
       end_date?: string
       sprint_start_stage_id?: string
+      unfinished_action?: 'backlog' | 'next_sprint'
+      target_sprint_id?: string
+      defer_carryover_to_plan?: boolean
+      summary?: Record<string, unknown>
+      retrospective?: Record<string, unknown>
       status?: string
       name?: string
       [key: string]: unknown
@@ -309,6 +327,61 @@ export async function PATCH(request: Request) {
       userId,
       projectId,
     })
+
+    if (action === 'close') {
+      if (!canManage) {
+        return NextResponse.json({ error: 'You do not have permission to complete sprints' }, { status: 403 })
+      }
+
+      const existingStatus = String((existing as { status?: string }).status ?? '')
+      if (existingStatus !== 'active') {
+        return NextResponse.json({ error: 'Only active sprints can be completed' }, { status: 400 })
+      }
+
+      const phaseId = String((existing as { phase_id?: unknown }).phase_id ?? '')
+      const processIdRaw = (existing as { process_id?: unknown }).process_id
+      const processId = processIdRaw ? String(processIdRaw) : null
+      const unfinishedAction = unfinished_action === 'next_sprint' ? 'next_sprint' : 'backlog'
+
+      const closeTasksResult = phaseId
+        ? await applyUnfinishedTasksAfterSprintClose(supabase as any, {
+            organizationId: orgId,
+            sprintId: id,
+            phaseId,
+            projectId,
+            processId,
+            unfinishedAction,
+            targetSprintId:
+              unfinishedAction === 'next_sprint' ? (target_sprint_id ?? null) : null,
+            deferCarryoverToPlan:
+              unfinishedAction === 'next_sprint' && defer_carryover_to_plan === true,
+            sprintStartStageId: sprint_start_stage_id ?? null,
+          })
+        : {
+            unfinishedMoved: 0,
+            unfinishedLeftOnSprint: 0,
+            targetSprintId: null,
+            deferredToPlan: false,
+            carryoverTaskIds: [],
+          }
+
+      const { data, error } = await supabase
+        .from('sprints')
+        .update({
+          status: 'closed',
+          unfinished_action: unfinishedAction,
+          ...(summary != null ? { summary } : {}),
+          ...(retrospective != null ? { retrospective } : {}),
+        })
+        .eq('id', id)
+        .eq('organization_id', orgId)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      return NextResponse.json({ data, closeTasksResult })
+    }
 
     if (action === 'reject') {
       if (!canManage) {
@@ -467,6 +540,13 @@ export async function PATCH(request: Request) {
     }
 
     const nextStatus = updates.status != null ? parseSprintStatus(updates.status) : existingStatus
+
+    if (nextStatus === 'closed' && action !== 'close') {
+      return NextResponse.json(
+        { error: 'Use action "close" to complete a sprint' },
+        { status: 400 },
+      )
+    }
     const startToValidate =
       typeof start_date === 'string'
         ? start_date

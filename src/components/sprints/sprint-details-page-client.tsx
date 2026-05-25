@@ -14,6 +14,10 @@ import { processBoardPath } from '@/lib/processes/process-workspace-routes'
 import { isSprintActiveForBoard } from '@/lib/sprints/sprint-board-eligibility'
 import { sprintBoardOpensOnStartDate, validateSprintScheduledDates } from '@/lib/sprints/sprint-activation-dates'
 import { activateSprintWithScheduledDates } from '@/lib/sprints/activate-sprint'
+import {
+  formatUnfinishedActionLabel,
+  isTaskDoneForSprintClose,
+} from '@/lib/sprints/sprint-task-completion'
 
 type Sprint = {
   id: string
@@ -34,6 +38,7 @@ type Task = {
   priority: 'low' | 'medium' | 'high' | 'critical'
   story_points: number | null
   completed_at: string | null
+  workflow_stage_id: string | null
   position: number | null
 }
 
@@ -45,6 +50,10 @@ export function SprintDetailsPageClient(props: {
   sprintStartStageId?: string
   sprint: Sprint
   tasks: Task[]
+  stageIsDoneById?: Record<string, boolean>
+  carryoverDraftSprints?: Array<{ id: string; name: string; story_points_total: number }>
+  planHref?: string
+  sprintCapacityPoints?: number
   canManageSprints?: boolean
   hasActiveSprint?: boolean
   sprintActiveForBoard?: boolean
@@ -52,8 +61,19 @@ export function SprintDetailsPageClient(props: {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [isCompleteOpen, setIsCompleteOpen] = useState(false)
+  const [closeNotice, setCloseNotice] = useState<string | null>(null)
   const [upcomingBusy, setUpcomingBusy] = useState<'start' | 'reject' | null>(null)
   const [upcomingError, setUpcomingError] = useState<string | null>(null)
+
+  const stageIsDoneMap = useMemo(() => {
+    const map = new Map<string, boolean>()
+    if (props.stageIsDoneById) {
+      for (const [id, done] of Object.entries(props.stageIsDoneById)) {
+        map.set(id, done)
+      }
+    }
+    return map
+  }, [props.stageIsDoneById])
 
   const sprintActiveForBoard =
     props.sprintActiveForBoard ??
@@ -68,19 +88,29 @@ export function SprintDetailsPageClient(props: {
 
   useEffect(() => {
     const shouldOpen = searchParams.get('complete') === '1'
-    if (shouldOpen && canCompleteSprint) setIsCompleteOpen(true)
-  }, [searchParams, canCompleteSprint])
+    if (shouldOpen && canCompleteSprint && props.canManageSprints) setIsCompleteOpen(true)
+  }, [searchParams, canCompleteSprint, props.canManageSprints])
+
+  useEffect(() => {
+    if (searchParams.get('review') !== '1') return
+    const targetName = searchParams.get('carryoverTarget')
+    if (targetName) {
+      setCloseNotice(`Unfinished tasks were added to sprint draft "${targetName}".`)
+    }
+  }, [searchParams])
   const [isCompleting, setIsCompleting] = useState(false)
   const [tasks, setTasks] = useState<Task[]>(props.tasks)
 
   const totalTasks = tasks.length
-  const completedTasks = tasks.filter((t) => !!t.completed_at).length
-  const completedPoints = tasks.reduce((sum, t) => sum + (t.completed_at ? t.story_points || 0 : 0), 0)
+  const isTaskDone = (t: Task) => isTaskDoneForSprintClose(t, stageIsDoneMap)
 
-  const unfinishedTasks = useMemo(
-    () => tasks.filter((t) => !t.completed_at),
-    [tasks]
+  const completedTasks = tasks.filter((t) => isTaskDone(t)).length
+  const completedPoints = tasks.reduce(
+    (sum, t) => sum + (isTaskDone(t) ? t.story_points || 0 : 0),
+    0,
   )
+
+  const unfinishedTasks = useMemo(() => tasks.filter((t) => !isTaskDone(t)), [tasks, stageIsDoneMap])
 
   const sprintData = useMemo(() => {
     return {
@@ -143,6 +173,8 @@ export function SprintDetailsPageClient(props: {
   const handleCompleteSprint = async (data: {
     retrospective: { wentWell: string; improve: string; actionItems: string }
     unfinishedAction: 'backlog' | 'next_sprint'
+    carryoverTargetSprintId?: string | null
+    deferCarryoverToPlan?: boolean
   }) => {
     setIsCompleting(true)
     try {
@@ -151,14 +183,23 @@ export function SprintDetailsPageClient(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: props.sprint.id,
-          status: 'closed',
+          action: 'close',
           unfinished_action: data.unfinishedAction,
+          ...(data.unfinishedAction === 'next_sprint' && data.deferCarryoverToPlan
+            ? { defer_carryover_to_plan: true }
+            : {}),
+          ...(data.unfinishedAction === 'next_sprint' && data.carryoverTargetSprintId
+            ? { target_sprint_id: data.carryoverTargetSprintId }
+            : {}),
+          sprint_start_stage_id: props.sprintStartStageId,
           summary: {
             completedPoints,
             totalPoints: props.sprint.story_points_total,
             completionRate: props.sprint.story_points_total
               ? Math.round((completedPoints / props.sprint.story_points_total) * 100)
-              : 0,
+              : completedPoints > 0
+                ? 100
+                : 0,
             unfinishedCount: unfinishedTasks.length,
             closedAt: new Date().toISOString(),
           },
@@ -173,21 +214,38 @@ export function SprintDetailsPageClient(props: {
       const sprintJson = await sprintRes.json()
       if (!sprintRes.ok) throw new Error(sprintJson?.error || 'Failed to complete sprint')
 
-      // Important: keep tasks in-place when a sprint is closed so the completed sprint
-      // remains an accurate snapshot of where work was left (columns/statuses included).
-      // (We intentionally do NOT move unfinished tasks out of the sprint here.)
-      void data
+      const closeResult = sprintJson?.closeTasksResult as
+        | {
+            deferredToPlan?: boolean
+            carryoverTaskIds?: string[]
+            targetSprintId?: string | null
+          }
+        | undefined
 
       setIsCompleteOpen(false)
-      router.push(
-        props.processId
-          ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints/${props.sprint.id}?review=1`
-          : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${props.sprint.id}?review=1`
-      )
+
+      if (closeResult?.deferredToPlan && props.planHref && closeResult.carryoverTaskIds?.length) {
+        const taskQuery = closeResult.carryoverTaskIds.map(encodeURIComponent).join(',')
+        router.push(`${props.planHref}?tasks=${taskQuery}&fromComplete=1`)
+        router.refresh()
+        return
+      }
+
+      const reviewBase = props.processId
+        ? `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/processes/${props.processId}/sprints/${props.sprint.id}`
+        : `/dashboard/projects/${props.projectId}/phases/${props.phaseId}/sprints/${props.sprint.id}`
+
+      const targetDraft = props.carryoverDraftSprints?.find((s) => s.id === closeResult?.targetSprintId)
+      const carryoverQuery = targetDraft
+        ? `&carryoverTarget=${encodeURIComponent(targetDraft.name)}`
+        : ''
+
+      router.push(`${reviewBase}?review=1${carryoverQuery}`)
       router.refresh()
     } catch (e) {
       console.error(e)
       alert(e instanceof Error ? e.message : 'Failed to complete sprint')
+      throw e
     } finally {
       setIsCompleting(false)
     }
@@ -234,7 +292,7 @@ export function SprintDetailsPageClient(props: {
               </Link>
             </Button>
           ) : null}
-          {canCompleteSprint ? (
+          {canCompleteSprint && props.canManageSprints ? (
             <Button
               className="bg-green-600 hover:bg-green-700"
               onClick={() => setIsCompleteOpen(true)}
@@ -287,6 +345,19 @@ export function SprintDetailsPageClient(props: {
       ) : null}
 
       {upcomingError ? <p className="text-sm text-red-600">{upcomingError}</p> : null}
+
+      {closeNotice ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {closeNotice}
+        </div>
+      ) : null}
+
+      {searchParams.get('review') === '1' && props.sprint.status === 'closed' ? (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-900">
+          Sprint completed. Completed tasks remain on this sprint for history; unfinished work was
+          handled per your selection below.
+        </div>
+      ) : null}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="border-gray-200 shadow-sm">
@@ -360,7 +431,7 @@ export function SprintDetailsPageClient(props: {
                     showActions={false}
                   />
                   <div className="absolute right-4 top-4 flex items-center gap-2">
-                    {task.completed_at ? (
+                    {isTaskDone(task) ? (
                       <div className="pointer-events-none inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-2 py-1">
                         <CheckCircle2 className="h-3 w-3" />
                         Done
@@ -394,7 +465,7 @@ export function SprintDetailsPageClient(props: {
                   <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
                     <p className="text-xs text-gray-500">Unfinished action</p>
                     <p className="mt-1 text-lg font-semibold text-gray-900">
-                      {props.sprint.unfinished_action ?? '—'}
+                      {formatUnfinishedActionLabel(props.sprint.unfinished_action)}
                     </p>
                   </div>
                 </div>
@@ -430,12 +501,16 @@ export function SprintDetailsPageClient(props: {
         </Card>
       ) : null}
 
-      <SprintCompletionModal
-        isOpen={isCompleteOpen}
-        onClose={() => setIsCompleteOpen(false)}
-        onComplete={handleCompleteSprint}
-        sprintData={sprintData}
-      />
+      {props.canManageSprints ? (
+        <SprintCompletionModal
+          isOpen={isCompleteOpen}
+          onClose={() => setIsCompleteOpen(false)}
+          onComplete={handleCompleteSprint}
+          sprintData={sprintData}
+          carryoverDraftSprints={props.carryoverDraftSprints}
+          sprintCapacityPoints={props.sprintCapacityPoints}
+        />
+      ) : null}
     </div>
   )
 }

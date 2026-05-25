@@ -169,7 +169,7 @@ export default async function ProcessSprintDetailsPage({
 
   const { data: process } = await supabase
     .from('phase_processes')
-    .select('id,name,methodology')
+    .select('id,name,methodology,sprint_capacity_points')
     .eq('id', params.processId)
     .eq('phase_id', phase.id)
     .eq('organization_id', orgId)
@@ -223,15 +223,36 @@ export default async function ProcessSprintDetailsPage({
 
   const { data: tasks } = await supabase
     .from('tasks')
-    .select('id,title,description,priority,story_points,completed_at,position')
+    .select('id,title,description,priority,story_points,completed_at,workflow_stage_id,position')
     .eq('project_id', project.id)
     .eq('organization_id', orgId)
     .eq('process_id', process.id)
     .eq('sprint_id', sprint.id)
     .order('position', { ascending: true })
 
+  const { data: workflowStages } = await supabase
+    .from('workflow_stages')
+    .select('id,is_done')
+    .eq('phase_id', phase.id)
+    .eq('organization_id', orgId)
+
+  const stageIsDoneById = Object.fromEntries(
+    (workflowStages ?? []).map((s) => [String(s.id), Boolean((s as { is_done?: boolean }).is_done)]),
+  )
+
   const backlogStageId = await ensureBacklogStageId(supabase as any, orgId, phase.id)
   const sprintStartStageId = await ensureSprintStartStageId(supabase as any, orgId, phase.id)
+
+  const { data: carryoverDrafts } = await supabase
+    .from('sprints')
+    .select('id,name,story_points_total')
+    .eq('project_id', project.id)
+    .eq('phase_id', phase.id)
+    .eq('organization_id', orgId)
+    .eq('process_id', process.id)
+    .eq('status', 'draft')
+    .neq('id', sprint.id)
+    .order('name', { ascending: true })
 
   return (
     <SprintDetailsPageClient
@@ -242,9 +263,13 @@ export default async function ProcessSprintDetailsPage({
       sprintStartStageId={sprintStartStageId ?? undefined}
       sprint={sprint as any}
       tasks={(tasks ?? []) as any}
+      stageIsDoneById={stageIsDoneById}
       canManageSprints={canManageSprints}
       hasActiveSprint={hasActiveSprint}
       sprintActiveForBoard={sprintActiveForBoard}
+      planHref={processSprintPlanPath(project.id, phase.id, process.id)}
+      carryoverDraftSprints={(carryoverDrafts ?? []) as { id: string; name: string; story_points_total: number }[]}
+      sprintCapacityPoints={(process as { sprint_capacity_points?: number | null }).sprint_capacity_points ?? undefined}
     />
   )
 }
