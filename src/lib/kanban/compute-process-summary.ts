@@ -89,10 +89,13 @@ export function computeKanbanProcessSummary(
   options?: {
     assigneeNames?: Record<string, string>
     blockedWithTitles?: { id: string; title: string; blocked_reason: string | null }[]
+    /** Completed items soft-archived off the board (still count toward delivery progress). */
+    archivedCompletedCount?: number
   }
 ): KanbanProcessSummaryData {
   const stageById = new Map(stages.map((s) => [s.id, s]))
-  const totalWorkItems = tasks.length
+  const archivedCompleted = Math.max(0, options?.archivedCompletedCount ?? 0)
+  const totalWorkItems = tasks.length + archivedCompleted
 
   const activity7d = {
     completed: tasks.filter((t) => isWithinDays(t.completed_at, 7)).length,
@@ -186,7 +189,7 @@ export function computeKanbanProcessSummary(
     leadSamples.length > 0 ? leadSamples.reduce((a, b) => a + b, 0) / leadSamples.length : null
 
   let openNotDone = 0
-  let doneCount = 0
+  let doneCount = archivedCompleted
   for (const t of tasks) {
     const stage = t.workflow_stage_id ? stageById.get(t.workflow_stage_id) : null
     const isDone = !!t.completed_at || !!stage?.is_done

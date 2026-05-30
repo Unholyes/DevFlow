@@ -947,8 +947,9 @@ export default function KanbanView(props: {
     }
     persistInFlightRef.current = true
     setPersisting(true)
+    const snapshotBeforePersist = lastPersistedRef.current
     try {
-      const prev = lastPersistedRef.current
+      const prev = snapshotBeforePersist
       const next = tasksRef.current
 
       const prevMap: Record<string, string[]> = {}
@@ -964,48 +965,39 @@ export default function KanbanView(props: {
         nextBacklog = stageTaskIds(next, backlogStageId).join(',')
       }
 
-      const moved = next.find((t) => {
+      const movedTasks = next.filter((t) => {
         const p = prev.find((x) => x.id === t.id)
         return p && p.workflow_stage_id !== t.workflow_stage_id
       })
 
-      if (moved) {
-        const fromStageId = prev.find((t) => t.id === moved.id)!.workflow_stage_id
-        const targetStage = stageById[moved.workflow_stage_id]
-        const nextCompletedAt = targetStage?.is_done ? new Date().toISOString() : null
+      if (movedTasks.length > 0) {
+        await Promise.all(
+          movedTasks.map((t) => {
+            const targetStage = stageById[t.workflow_stage_id]
+            const nextCompletedAt = targetStage?.is_done ? new Date().toISOString() : null
+            return patchTask({
+              id: t.id,
+              workflow_stage_id: t.workflow_stage_id,
+              completed_at: nextCompletedAt,
+            })
+          })
+        )
+      }
 
-        await patchTask({
-          id: moved.id,
-          workflow_stage_id: moved.workflow_stage_id,
-          completed_at: nextCompletedAt,
-        })
-
-        const sourceOrder = nextMap[fromStageId] ?? []
-        const targetOrder = nextMap[moved.workflow_stage_id] ?? []
-        const reorderPromises: Promise<unknown>[] = []
-        if (sourceOrder.length > 0) {
-          reorderPromises.push(reorderStage(props.projectId, props.processId, fromStageId, sourceOrder))
+      const reorderPromises: Promise<unknown>[] = []
+      for (const s of boardStages) {
+        const a = prevMap[s.id].join(',')
+        const b = nextMap[s.id].join(',')
+        if (a !== b && nextMap[s.id].length > 0) {
+          reorderPromises.push(reorderStage(props.projectId, props.processId, s.id, nextMap[s.id]))
         }
-        if (targetOrder.length > 0) {
-          reorderPromises.push(
-            reorderStage(props.projectId, props.processId, moved.workflow_stage_id, targetOrder)
-          )
-        }
-        await Promise.all(reorderPromises)
-      } else {
-        const reorderPromises: Promise<unknown>[] = []
-        for (const s of boardStages) {
-          const a = prevMap[s.id].join(',')
-          const b = nextMap[s.id].join(',')
-          if (a !== b && nextMap[s.id].length > 0) {
-            reorderPromises.push(reorderStage(props.projectId, props.processId, s.id, nextMap[s.id]))
-          }
-        }
-        if (backlogStageId && prevBacklog !== nextBacklog && nextBacklog.length > 0) {
-          reorderPromises.push(
-            reorderStage(props.projectId, props.processId, backlogStageId, stageTaskIds(next, backlogStageId))
-          )
-        }
+      }
+      if (backlogStageId && prevBacklog !== nextBacklog && nextBacklog.length > 0) {
+        reorderPromises.push(
+          reorderStage(props.projectId, props.processId, backlogStageId, stageTaskIds(next, backlogStageId))
+        )
+      }
+      if (reorderPromises.length > 0) {
         await Promise.all(reorderPromises)
       }
 
@@ -1017,9 +1009,11 @@ export default function KanbanView(props: {
       if (wip) setWipBlockedInfo(wip)
       else alert(msg)
 
-      // Prefer server truth after an error rather than trying to rewind multiple rapid drags.
+      // Revert optimistic board state, then revalidate from the server.
+      setTasks(snapshotBeforePersist)
+      tasksRef.current = snapshotBeforePersist
+      lastPersistedRef.current = snapshotBeforePersist
       router.refresh()
-      lastPersistedRef.current = tasksRef.current
     } finally {
       setPersisting(false)
       persistInFlightRef.current = false
@@ -1097,7 +1091,7 @@ export default function KanbanView(props: {
       if (!activeContainer || !overContainer) return
 
       const activeTaskId = String(active.id)
-      const prev = tasks
+      const prev = tasksRef.current
 
       const overIsColumn =
         boardStages.some((s) => s.id === overStr) || overColFromSortable !== null
@@ -1111,13 +1105,13 @@ export default function KanbanView(props: {
 
         const nextOrder = arrayMove(items, oldIndex, newIndex)
         const nextColumns = { ...columns, [activeContainer]: nextOrder }
-        const next = applyColumnOrders(tasks, nextColumns, stageById)
+        const next = applyColumnOrders(prev, nextColumns, stageById)
         setTasks(next)
         schedulePersistBoardChange()
         return
       }
 
-      if (isMoveBlockedByWip(tasks, overContainer, activeTaskId, stageById, wipExcludeBlocked)) {
+      if (isMoveBlockedByWip(prev, overContainer, activeTaskId, stageById, wipExcludeBlocked)) {
         const st = stageById[overContainer]
         if (st && st.wip_limit != null) {
           setWipBlockedInfo({
@@ -1150,7 +1144,7 @@ export default function KanbanView(props: {
         [activeContainer]: sourceIds,
         [overContainer]: targetIds,
       }
-      const next = applyColumnOrders(tasks, nextColumns, stageById)
+      const next = applyColumnOrders(prev, nextColumns, stageById)
       setTasks(next)
       schedulePersistBoardChange()
     },
@@ -1161,7 +1155,6 @@ export default function KanbanView(props: {
       schedulePersistBoardChange,
       persistColumnOrder,
       stageById,
-      tasks,
     ]
   )
 

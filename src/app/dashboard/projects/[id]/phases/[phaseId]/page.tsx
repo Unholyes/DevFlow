@@ -130,7 +130,7 @@ export default async function PhasePage({ params }: { params: { id: string; phas
     stageIds.length > 0
       ? await supabase
           .from('tasks')
-          .select('id,process_id,workflow_stage_id,completed_at,story_points,sprint_id')
+          .select('id,process_id,workflow_stage_id,completed_at,story_points,sprint_id,archived_at')
           .eq('project_id', project.id)
           .eq('organization_id', orgId)
           .in('workflow_stage_id', stageIds)
@@ -140,7 +140,10 @@ export default async function PhasePage({ params }: { params: { id: string; phas
   const hasAnyOpenSprint = openSprints.length > 0
 
   const allPhaseTasksDone = (tasks ?? []).every(
-    (t) => !!t.completed_at || doneStageIds.has(t.workflow_stage_id)
+    (t) =>
+      !!t.completed_at ||
+      doneStageIds.has(t.workflow_stage_id) ||
+      (t.archived_at != null && t.archived_at !== '')
   )
   const canCompletePhase = !hasAnyOpenSprint && allPhaseTasksDone && phase.status !== 'completed'
 
@@ -153,7 +156,12 @@ export default async function PhasePage({ params }: { params: { id: string; phas
   const processesWithStats = (processes ?? []).map((p) => {
     const processTasks = (tasks ?? []).filter((t) => t.process_id === p.id)
     const total = processTasks.length
-    const done = processTasks.filter((t) => !!t.completed_at || doneStageIds.has(t.workflow_stage_id)).length
+    const done = processTasks.filter(
+      (t) =>
+        !!t.completed_at ||
+        doneStageIds.has(t.workflow_stage_id) ||
+        (t.archived_at != null && t.archived_at !== '')
+    ).length
     const percent = total ? Math.round((done / total) * 100) : 0
 
     const processOpenSprint = openSprints.find((s) => s.process_id === p.id) ?? null

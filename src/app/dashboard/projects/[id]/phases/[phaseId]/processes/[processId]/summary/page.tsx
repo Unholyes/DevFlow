@@ -13,12 +13,12 @@ import { ScrumSummaryPageClient } from '@/components/scrum/scrum-summary-page-cl
 import { computeScrumProcessSummary } from '@/lib/scrum/compute-process-summary'
 import { computeSprintBurndown } from '@/lib/scrum/compute-sprint-burndown'
 import { processWorkspacePath } from '@/lib/processes/process-workspace-routes'
-import { filterActiveTasks } from '@/lib/tasks/task-archive'
+import { filterActiveTasks, isTaskArchived } from '@/lib/tasks/task-archive'
 import { loadProjectPhasesGatingContext } from '@/lib/projects/load-project-phases-gating'
 import { isPhaseLockedForProject } from '@/lib/projects/phase-gating'
 
 const SUMMARY_TASK_COLUMNS =
-  'id,title,workflow_stage_id,completed_at,priority,task_type,blocked,blocked_reason,assignee_id,team_id,created_at,updated_at,due_date,current_stage_entered_at'
+  'id,title,workflow_stage_id,completed_at,priority,task_type,blocked,blocked_reason,assignee_id,team_id,created_at,updated_at,due_date,current_stage_entered_at,archived_at'
 
 const SUMMARY_TASK_COLUMNS_NO_TYPE =
   'id,title,workflow_stage_id,completed_at,priority,blocked,blocked_reason,assignee_id,team_id,created_at,updated_at,due_date,current_stage_entered_at'
@@ -287,7 +287,9 @@ export default async function KanbanProcessSummaryPage({
     if (!res.error) tasks = (res.data ?? []) as unknown as Record<string, unknown>[]
   }
 
-  tasks = filterActiveTasks(tasks as { archived_at?: string | null }[]) as Record<string, unknown>[]
+  const allTasksForSummary = tasks as { archived_at?: string | null }[]
+  const archivedCompletedCount = allTasksForSummary.filter((t) => isTaskArchived(t)).length
+  tasks = filterActiveTasks(allTasksForSummary) as Record<string, unknown>[]
 
   const wipExcludeBlocked = (process as { wip_exclude_blocked?: boolean }).wip_exclude_blocked === true
 
@@ -354,6 +356,7 @@ export default async function KanbanProcessSummaryPage({
     })),
     {
       assigneeNames,
+      archivedCompletedCount,
       blockedWithTitles: tasks
         .filter((t) => t.blocked)
         .map((t) => ({

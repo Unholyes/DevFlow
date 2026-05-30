@@ -24,6 +24,11 @@
 .DS_Store
 *.pem
 
+# demo recording (credentials — copy from demo-credentials.example.txt)
+demo-credentials.txt
+demo
+README-DEMO.md
+
 # debug
 npm-debug.log*
 yarn-debug.log*

@@ -145,6 +145,19 @@ export async function POST(request: Request) {
         .in('id', idsToUpdate)
         .is('archived_at', null)
 
+      if (!updateErr) {
+        const { error: completeErr } = await supabase
+          .from('tasks')
+          .update({ completed_at: now, completed_by_id: user.id })
+          .eq('organization_id', orgId)
+          .eq('project_id', projectId)
+          .eq('process_id', processId)
+          .in('id', idsToUpdate)
+          .is('completed_at', null)
+
+        if (completeErr) throw completeErr
+      }
+
       if (updateErr) {
         if (isMissingArchivedAtColumnError(String(updateErr.message ?? ''), updateErr.code)) {
           return NextResponse.json(
